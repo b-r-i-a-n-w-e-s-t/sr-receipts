@@ -257,6 +257,130 @@
     </div>
   </div>
 
+  <h2 id="q4f-title">Variant F, populated overflow header, named</h2>
+  <p>Utility columns named by <code>hidden text in an overflow header that also holds the reveal-columns control</code> — the shape the component actually has. Variants A to E gave the overflow header no content, but ColumnList puts the reveal-columns ActionSet in it, so its name is composed the same way the select-all header’s is.</p>
+  <div class="column-list">
+    <div class="column-list-table-wrapper" role="table" aria-labelledby="q4f-title">
+      <div class="column-list-head" role="row">
+        <div class="column-list-colhead select-all" role="columnheader"><span class="sro">Select</span><input type="checkbox" id="q4f-select-all"><label for="q4f-select-all"><span class="offscreen">select all</span></label></div>
+        <div class="column-list-colhead expand" role="columnheader"><span class="sro">Expand</span></div>
+        <div id="q4f-survey" class="column-list-colhead" role="columnheader">Last Survey</div>
+        <div id="q4f-style" class="column-list-colhead" role="columnheader">Style</div>
+        <div class="column-list-colhead actions" role="columnheader">Actions</div>
+        <div class="column-list-colhead overflow" role="columnheader"><span class="sro">Columns</span><div role="menu"><button type="button" role="menuitem" aria-expanded="false" aria-haspopup="menu"><span class="sro">Show Actions</span></button></div></div>
+        <div class="column-list-colhead detail" role="columnheader"><span class="sro">Details</span></div>
+      </div>
+      <div class="column-list-rows" role="presentation">
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4f-select-1"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4f-detail-1">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4f-survey-1" class="column-list-col regular" role="cell">8/15/2024</div>
+          <div id="q4f-style-1" class="column-list-col regular" role="cell">Norman</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4f-detail-1"></div>
+        </div>
+        </div>
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4f-select-2"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4f-detail-2">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4f-survey-2" class="column-list-col regular" role="cell">9/12/2024</div>
+          <div id="q4f-style-2" class="column-list-col regular" role="cell">Romanesque</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4f-detail-2"></div>
+        </div>
+        </div>
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4f-select-3"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4f-detail-3">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4f-survey-3" class="column-list-col regular" role="cell">10/5/2024</div>
+          <div id="q4f-style-3" class="column-list-col regular" role="cell">Tudor</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4f-detail-3"></div>
+        </div>
+        </div>
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4f-select-4"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4f-detail-4">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4f-survey-4" class="column-list-col regular" role="cell">10/18/2024</div>
+          <div id="q4f-style-4" class="column-list-col regular" role="cell">Early English</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4f-detail-4"></div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="q4g-title">Variant G, populated overflow header, unnamed</h2>
+  <p>Utility columns named by <code>the same overflow header with no hidden name at all</code> — what simply deleting the aria-label would leave. F against G is the overflow column’s version of the select-all question: is the control’s own name a good enough column name, or is a doubled name better than that?</p>
+  <div class="column-list">
+    <div class="column-list-table-wrapper" role="table" aria-labelledby="q4g-title">
+      <div class="column-list-head" role="row">
+        <div class="column-list-colhead select-all" role="columnheader"><span class="sro">Select</span><input type="checkbox" id="q4g-select-all"><label for="q4g-select-all"><span class="offscreen">select all</span></label></div>
+        <div class="column-list-colhead expand" role="columnheader"><span class="sro">Expand</span></div>
+        <div id="q4g-survey" class="column-list-colhead" role="columnheader">Last Survey</div>
+        <div id="q4g-style" class="column-list-colhead" role="columnheader">Style</div>
+        <div class="column-list-colhead actions" role="columnheader">Actions</div>
+        <div class="column-list-colhead overflow" role="columnheader"><div role="menu"><button type="button" role="menuitem" aria-expanded="false" aria-haspopup="menu"><span class="sro">Show Actions</span></button></div></div>
+        <div class="column-list-colhead detail" role="columnheader"><span class="sro">Details</span></div>
+      </div>
+      <div class="column-list-rows" role="presentation">
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4g-select-1"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4g-detail-1">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4g-survey-1" class="column-list-col regular" role="cell">8/15/2024</div>
+          <div id="q4g-style-1" class="column-list-col regular" role="cell">Norman</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4g-detail-1"></div>
+        </div>
+        </div>
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4g-select-2"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4g-detail-2">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4g-survey-2" class="column-list-col regular" role="cell">9/12/2024</div>
+          <div id="q4g-style-2" class="column-list-col regular" role="cell">Romanesque</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4g-detail-2"></div>
+        </div>
+        </div>
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4g-select-3"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4g-detail-3">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4g-survey-3" class="column-list-col regular" role="cell">10/5/2024</div>
+          <div id="q4g-style-3" class="column-list-col regular" role="cell">Tudor</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4g-detail-3"></div>
+        </div>
+        </div>
+        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4g-select-4"></div>
+          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4g-detail-4">&#9660;<span class="offscreen">Expand Row</span></button></div>
+          <div id="q4g-survey-4" class="column-list-col regular" role="cell">10/18/2024</div>
+          <div id="q4g-style-4" class="column-list-col regular" role="cell">Early English</div>
+          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>
+          <div class="column-list-col overflow" role="cell">&nbsp;</div>
+          <div class="column-list-col detail" role="cell" id="q4g-detail-4"></div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <h2 id="q4e-title">Variant E, ScreenReaderOnly text</h2>
   <p>Utility columns named by <code>a <span class="sro"> text node, the exact rule from svelte-components ScreenReaderOnly</code> — what ColumnList would actually use. Differs from B only in the hiding CSS, so B against E isolates the rule and E against D isolates the checkbox change.</p>
   <div class="column-list">

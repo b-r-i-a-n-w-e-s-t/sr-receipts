@@ -261,4 +261,178 @@ writeFileSync(join(here, 'shape-G-cell.html'), page({
   extraStyles: shapeGStyles
 }))
 
-console.log('wrote control.html, shape-05-group.html, shape-G-cell.html')
+// ------------------------------------------- Q4: how utility columns are named
+// Answers Q4 of the verification protocol: `aria-label` on a columnhead div is
+// never spoken by NVDA, so Select / Expand / Columns / Details are all silent
+// both in the header row and in the header-on-cell-entry announcement. The
+// untested alternative is a visually hidden text node inside the header cell.
+//
+// Three tables in ONE document, identical but for the naming mechanism, so the
+// A/B is one caret walk in one NVDA session and version drift cannot enter.
+// Variant A reproduces the known failure and is the control: if A announces the
+// names, the run is not measuring what it thinks it is.
+//
+// `.sr-only` is Tailwind's exact rule, which is the class ColumnList already
+// uses (`ColumnList.svelte:591`), so variant B tests the mechanism we would
+// actually ship rather than a fixture-only approximation. `.offscreen` is the
+// `left:-9999px` technique the other fixtures use for their hidden labels, kept
+// as a separate variant because NVDA appends "off screen" to some such nodes
+// and that noise would land in every header announcement.
+
+const q4Styles = `
+    /* Q4 ONLY */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+    .offscreen { position: absolute; left: -9999px; }
+    /* The exact rule from @txstate-mws/svelte-components ScreenReaderOnly, which
+       is the hiding mechanism ColumnList actually has in hand. Not identical to
+       Tailwind's sr-only: clip-path inset(50%) rather than clip rect(0,0,0,0),
+       plus font-size and colour overrides. Tested separately so that adopting B
+       cannot turn out to have measured a rule we do not ship. */
+    .sro { border: 0 !important; clip: rect(1px, 1px, 1px, 1px) !important; -webkit-clip-path: inset(50%) !important; clip-path: inset(50%) !important; height: 1px !important; margin: -1px !important; overflow: hidden !important; padding: 0 !important; position: absolute !important; width: 1px !important; white-space: nowrap !important; font-size: 20px !important; background: white !important; color: black !important; }
+    .column-list-colhead.detail, .column-list-col.detail { flex: 0 0 0; padding: 0; }`
+
+const q4Columns = [
+  { id: 'survey', label: 'Last Survey' },
+  { id: 'style', label: 'Style' }
+]
+const q4Rows = rows.slice(0, 4)
+
+// Each variant names the four text-less utility headers its own way. `attr` and
+// `hidden` are the only things that vary; every other byte of the table is
+// shared, which is what makes a difference in the transcript attributable.
+const q4Variants = [
+  {
+    key: 'a',
+    name: 'Variant A, aria-label',
+    mechanism: 'aria-label="..." on the columnhead div',
+    note: 'what 06 decision 2 specified and what ships in the spec today. Known to be silent on NVDA; present here as the control.',
+    named: label => ({ attr: ` aria-label="${label}"`, hidden: '' })
+  },
+  {
+    key: 'b',
+    name: 'Variant B, hidden clip text',
+    mechanism: 'a <span class="sr-only"> text node inside the columnhead div',
+    note: 'Tailwind’s clip-rect technique, the same `sr-only` class ColumnList already uses. This is the candidate.',
+    named: label => ({ attr: '', hidden: `<span class="sr-only">${label}</span>` })
+  },
+  {
+    key: 'd',
+    name: 'Variant D, ScreenReaderOnly text, checkbox named by aria-label',
+    mechanism: 'the same hidden span as E, but the select-all checkbox is named by aria-label on the input instead of by a hidden text node inside its label',
+    note: 'the one change that could remove the "Select select all" doubling, by leaving the header cell with no text content but its own name.',
+    named: label => ({ attr: '', hidden: `<span class="sro">${label}</span>` }),
+    checkboxLabel: 'aria-label'
+  },
+  {
+    key: 'f',
+    name: 'Variant F, populated overflow header, named',
+    mechanism: 'hidden text in an overflow header that also holds the reveal-columns control',
+    note: 'the shape the component actually has. Variants A to E gave the overflow header no content, but ColumnList puts the reveal-columns ActionSet in it, so its name is composed the same way the select-all header\u2019s is.',
+    named: label => ({ attr: '', hidden: `<span class="sro">${label}</span>` }),
+    overflowControl: true
+  },
+  {
+    key: 'g',
+    name: 'Variant G, populated overflow header, unnamed',
+    mechanism: 'the same overflow header with no hidden name at all',
+    note: 'what simply deleting the aria-label would leave. F against G is the overflow column\u2019s version of the select-all question: is the control\u2019s own name a good enough column name, or is a doubled name better than that?',
+    named: label => ({ attr: '', hidden: `<span class="sro">${label}</span>` }),
+    overflowControl: true,
+    overflowUnnamed: true
+  },
+  {
+    key: 'e',
+    name: 'Variant E, ScreenReaderOnly text',
+    mechanism: 'a <span class="sro"> text node, the exact rule from svelte-components ScreenReaderOnly',
+    note: 'what ColumnList would actually use. Differs from B only in the hiding CSS, so B against E isolates the rule and E against D isolates the checkbox change.',
+    named: label => ({ attr: '', hidden: `<span class="sro">${label}</span>` })
+  },
+  {
+    key: 'c',
+    name: 'Variant C, hidden off-screen text',
+    mechanism: 'a <span class="offscreen"> text node (left:-9999px) inside the columnhead div',
+    note: 'the technique the other fixtures use for hidden button labels. Separated from B because NVDA can append "off screen" to a node positioned this way.',
+    named: label => ({ attr: '', hidden: `<span class="offscreen">${label}</span>` })
+  }
+]
+
+const q4Head = v => {
+  const select = v.named('Select')
+  const expand = v.named('Expand')
+  const overflow = v.named('Columns')
+  const detail = v.named('Details')
+  const cells = [
+    // The select-all header is the one that made 06 reject hidden text: it holds
+    // a checkbox whose own label could leak into a contents-derived name. Both
+    // the hidden name and the checkbox are present here, so the leak either
+    // happens or it does not.
+    v.checkboxLabel === 'aria-label'
+      ? `        <div class="column-list-colhead select-all" role="columnheader"${select.attr}>${select.hidden}<input type="checkbox" id="q4${v.key}-select-all" aria-label="select all"></div>`
+      : `        <div class="column-list-colhead select-all" role="columnheader"${select.attr}>${select.hidden}<input type="checkbox" id="q4${v.key}-select-all"><label for="q4${v.key}-select-all"><span class="offscreen">select all</span></label></div>`,
+    `        <div class="column-list-colhead expand" role="columnheader"${expand.attr}>${expand.hidden || '&nbsp;'}</div>`,
+    ...q4Columns.map(c => `        <div id="q4${v.key}-${c.id}" class="column-list-colhead" role="columnheader">${c.label}</div>`),
+    `        <div class="column-list-colhead actions" role="columnheader">Actions</div>`,
+    // Mirrors ActionSet: a role="menu" wrapper whose trigger is a role="menuitem"
+    // button named by hidden text (`ActionSet.svelte:200-210`). The point is that
+    // the header cell has a control in it, so its contents-derived name is not
+    // just the hidden label.
+    v.overflowControl
+      ? `        <div class="column-list-colhead overflow" role="columnheader">${v.overflowUnnamed ? '' : overflow.hidden}<div role="menu"><button type="button" role="menuitem" aria-expanded="false" aria-haspopup="menu"><span class="sro">Show Actions</span></button></div></div>`
+      : `        <div class="column-list-colhead overflow" role="columnheader"${overflow.attr}>${overflow.hidden || '&nbsp;'}</div>`,
+    `        <div class="column-list-colhead detail" role="columnheader"${detail.attr}>${detail.hidden}</div>`
+  ]
+  return `      <div class="column-list-head" role="row">\n${cells.join('\n')}\n      </div>`
+}
+
+const q4Row = (v, row) => {
+  const cells = [
+    `          <div class="column-list-col checkbox" role="cell"><input type="checkbox" id="q4${v.key}-select-${row.id}"></div>`,
+    `          <div class="column-list-col expand" role="cell"><button type="button" aria-expanded="false" aria-controls="q4${v.key}-detail-${row.id}">&#9660;<span class="offscreen">Expand Row</span></button></div>`,
+    ...q4Columns.map(c => `          <div id="q4${v.key}-${c.id}-${row.id}" class="column-list-col regular" role="cell">${row[c.id]}</div>`),
+    `          <div class="column-list-col actions" role="cell"><button type="button">Edit</button></div>`,
+    `          <div class="column-list-col overflow" role="cell">&nbsp;</div>`,
+    `          <div class="column-list-col detail" role="cell" id="q4${v.key}-detail-${row.id}"></div>`
+  ]
+  return `        <div class="column-list-row" role="rowgroup">
+        <div class="column-list-cols" role="row">
+${cells.join('\n')}
+        </div>
+        </div>`
+}
+
+const q4Table = v => `  <h2 id="q4${v.key}-title">${v.name}</h2>
+  <p>Utility columns named by <code>${v.mechanism}</code> — ${v.note}</p>
+  <div class="column-list">
+    <div class="column-list-table-wrapper" role="table" aria-labelledby="q4${v.key}-title">
+${q4Head(v)}
+      <div class="column-list-rows" role="presentation">
+${q4Rows.map(row => q4Row(v, row)).join('\n')}
+      </div>
+    </div>
+  </div>`
+
+writeFileSync(join(here, 'q4-utility-naming.html'), page({
+  file: 'q4-utility-naming.html',
+  h1: 'Q4: does visually hidden text name a utility column where aria-label does not?',
+  intro: `<p>Answers Q4 of
+    <code>.scratch/columnlist-table-roles/assets/09-verification-protocol.md</code> §8. The M1 pass found that
+    <code>aria-label</code> on a columnhead div is never spoken by NVDA, in the header row or in the
+    header-on-cell-entry announcement, leaving <code>Select</code>, <code>Expand</code>, <code>Columns</code>
+    and shape G’s mirrored <code>Details</code> silent.</p>
+    <p>Three tables, seven columns each, identical in every byte except how the four text-less utility headers
+    are named. <strong>Variant A is the control:</strong> it reproduces the known failure, so if A announces
+    the names then something about this run differs from M1 and no conclusion can be drawn from B or C.
+    <code>Last Survey</code>, <code>Style</code> and <code>Actions</code> are named by rendered text in all
+    three and should announce everywhere.</p>`,
+  listen: `in each table, two channels for the same four columns. <strong>Header row:</strong> walk it with
+    <code>Ctrl+Alt+Right</code> and hear whether column 2 says "Expand" or a bare "column 2".
+    <strong>Cell entry:</strong> walk a data row and hear whether the header prefixes the cell.
+    Then three specifics: whether the select-all header leaks the checkbox’s own "select all" label into a
+    doubled name (the concern that made 06 choose <code>aria-label</code> in the first place), whether variant C
+    appends "off screen" to every utility header it names, and whether the zero-width
+    <code>Details</code> column behaves like the others.`,
+  body: q4Variants.map(q4Table).join('\n\n'),
+  extraStyles: q4Styles
+}))
+
+console.log('wrote control.html, shape-05-group.html, shape-G-cell.html, q4-utility-naming.html')

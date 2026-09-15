@@ -114,6 +114,18 @@ test("SpeechLog names silence explicitly", async () => {
   assert.equal(await speech.heard(), "(silence)");
 });
 
+test("SpeechLog treats a blank phrase as silence, not as speech", async () => {
+  // NVDA emits empty phrases: observed in focus mode on a page whose focused
+  // object reports an object-replacement character. Before this was handled,
+  // heard() returned "" rather than SILENCE, the focus guard's
+  // `heard !== SILENCE` test read a silent mode probe as proof of browse mode,
+  // and a whole run proceeded in focus mode recording 60 blank steps.
+  const speech = new SpeechLog(fakeSpeechSource([""], ["  ", ""], ["real", ""]));
+  assert.equal(await speech.heard(), "(silence)");
+  assert.equal(await speech.heard(), "(silence)");
+  assert.equal(await speech.heard(), "real");
+});
+
 test("discard moves the cursor without reporting", async () => {
   const speech = new SpeechLog(fakeSpeechSource(["noise from launching firefox"], ["the answer"]));
   await speech.discard();

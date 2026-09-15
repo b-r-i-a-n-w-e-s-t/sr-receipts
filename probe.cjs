@@ -65,10 +65,15 @@ function readProbe(raw) {
         "",
       );
     } else {
-      await runSteps(nvda, speech, scenario.steps, {
-        lines: out,
+      const steps = await runSteps(nvda, speech, scenario.steps, {
         log: (line) => console.log(line),
       });
+      // The probe stays deliberately unjudged: it is for finding out what a
+      // target says, not for asserting it. Expectations and snapshots belong to
+      // the runner, once a sequence is worth keeping.
+      for (const step of steps) {
+        out.push(`### ${step.label} [${step.spec}]`, step.heard, "");
+      }
     }
   } catch (error) {
     out.push("### fatal", `${error?.message} / ${error?.cause?.message ?? ""}`);

@@ -1,10 +1,13 @@
 {
   "name": "nvda-rig",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Drives NVDA and Firefox to capture screen-reader transcripts for accessibility testing.",
+  "main": "lib/index.cjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.cjs",
+    "smoke": "node smoke.cjs",
+    "probe": "node probe.cjs",
+    "run-queue": "node runner.cjs"
   },
   "keywords": [],
   "author": "",

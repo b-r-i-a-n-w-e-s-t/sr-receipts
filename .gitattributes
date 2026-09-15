@@ -1,0 +1,10 @@
+# The repo is edited from both a Windows guest and a macOS host. Normalise to LF
+# in the object store so a line-ending flip never shows up as a diff.
+* text=auto eol=lf
+
+# Batch files are read by cmd.exe in the guest and want CRLF on disk.
+*.cmd text eol=crlf
+
+# Transcripts are evidence: never touch their bytes.
+runs/** -text
+*.txt -text

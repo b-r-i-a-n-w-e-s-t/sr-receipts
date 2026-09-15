@@ -1,0 +1,9 @@
+# One target per line. Either a file name resolved under fixtures\, or an
+# http/https URL passed through unchanged (that is how a Vite dev server on the
+# UTM host gets driven). Copy to queue.txt before running nvda-run.
+#
+# Blank lines are skipped. This file's comment lines are NOT: runner.cjs takes
+# every non-empty line as a target, so strip them when you copy.
+control.html
+shape-05-group.html
+shape-G-cell.html

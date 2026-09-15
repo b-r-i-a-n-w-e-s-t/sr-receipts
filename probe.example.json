@@ -1,0 +1,8 @@
+[
+  ["title bar", "perform:reportTitle"],
+  ["focus and mode", "perform:reportCurrentFocus"],
+  ["next table", "perform:moveToNextTable"],
+  ["enter the table", "press:ArrowDown"],
+  ["first data row", "perform:moveToNextRow"],
+  ["next column", "perform:moveToNextColumn"]
+]

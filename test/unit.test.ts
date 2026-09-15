@@ -8,17 +8,31 @@
  * `.at(-1)`. The guards and the session lifecycle can only be exercised against
  * a real NVDA on the interactive desktop; that is what `npm run smoke` is for.
  */
-const test = require("node:test");
-const assert = require("node:assert/strict");
+import test from "node:test";
+import assert from "node:assert/strict";
 
-const { existsSync, mkdirSync, readFileSync } = require("node:fs");
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 
-const { parseQueue, resolveTarget, SETTLE } = require("../lib/target.cjs");
-const { PROFILE, XULSTORE, writeWindowGeometry } = require("../lib/firefox.cjs");
-const { toAction } = require("../lib/steps.cjs");
-const { SpeechLog } = require("../lib/speech.cjs");
+import { parseQueue, resolveTarget, SETTLE } from "../lib/target.ts";
+import { PROFILE, XULSTORE, writeWindowGeometry } from "../lib/firefox.ts";
+import { toAction } from "../lib/steps.ts";
+import { SpeechLog } from "../lib/speech.ts";
+import type { SpeechSource } from "../lib/speech.ts";
+import type { NvdaCommand, NvdaDriver, RunRequest, StepSpec } from "../lib/types.ts";
 
-const targets = (requests) => requests.map((r) => r.target);
+/**
+ * Deliberately-invalid input, cast so it compiles.
+ *
+ * TypeScript now rejects most of these at author time, which is the point of
+ * Phase 3.5 — but the runtime validators still have to fire, because a scenario
+ * can arrive as `probe.json`, as a `.json` file under `scenarios/`, or from a
+ * consuming repo that never ran tsc. Every use of this helper marks a case the
+ * compiler catches for a TypeScript author and the validator catches for
+ * everyone else.
+ */
+const invalid = <T>(value: unknown): T => value as T;
+
+const targets = (requests: RunRequest[]): string[] => requests.map((r) => r.target);
 
 test("parseQueue skips blanks and comments", () => {
   const queue = parseQueue(
@@ -47,20 +61,37 @@ test("resolveTarget hashes a fixture's bytes the way git does", () => {
   assert.match(t.provenance, /^fixture git blob: [0-9a-f]{40}$/);
 });
 
-const fakeNvda = {
-  keyboardCommands: { reportTitle: Symbol("reportTitle") },
+/**
+ * A fake driver. Possible to write honestly only because `NvdaDriver` is the
+ * three members the rig actually uses, rather than guidepup NVDA class entire.
+ */
+interface FakeNvda extends NvdaDriver {
+  keyboardCommands: Record<NvdaCommand, unknown>;
+  performed: unknown[];
+  pressed: string[];
+  perform(command: unknown): void;
+  press(key: string): void;
+}
+
+const makeFakeNvda = (): FakeNvda => ({
+  keyboardCommands: { reportTitle: Symbol("reportTitle") } as unknown as Record<
+    NvdaCommand,
+    unknown
+  >,
   performed: [],
   pressed: [],
-  perform(c) {
-    this.performed.push(c);
+  perform(command: unknown) {
+    this.performed.push(command);
   },
-  press(k) {
-    this.pressed.push(k);
+  press(key: string) {
+    this.pressed.push(key);
   },
-};
+});
+
+const fakeNvda = makeFakeNvda();
 
 test("toAction resolves both spec forms", async () => {
-  const nvda = { ...fakeNvda, performed: [], pressed: [] };
+  const nvda = makeFakeNvda();
   await toAction(nvda, "perform:reportTitle")();
   await toAction(nvda, "press:Control+Home")();
   assert.deepEqual(nvda.performed, [nvda.keyboardCommands.reportTitle]);
@@ -70,8 +101,18 @@ test("toAction resolves both spec forms", async () => {
 test("toAction rejects a misspelled command instead of silently doing nothing", () => {
   // nvda.perform(undefined) is the failure mode this replaces: it produces a
   // silence that reads in a transcript exactly like a real one.
-  assert.throws(() => toAction(fakeNvda, "perform:moveToNextTabel"), /unknown NVDA keyboard command/);
-  assert.throws(() => toAction(fakeNvda, "moveToNextTable"), /bad step spec/);
+  //
+  // Both of these now fail to compile for a TypeScript author — tsc even
+  // suggests "moveToNextTable" for the typo — so they are cast past the type
+  // system here. The runtime check is what catches them in a JSON scenario.
+  assert.throws(
+    () => toAction(fakeNvda, invalid<StepSpec>("perform:moveToNextTabel")),
+    /unknown NVDA keyboard command/,
+  );
+  assert.throws(
+    () => toAction(fakeNvda, invalid<StepSpec>("moveToNextTable")),
+    /bad step spec/,
+  );
 });
 
 test("toAction passes a function through", async () => {
@@ -83,8 +124,8 @@ test("toAction passes a function through", async () => {
 });
 
 /** A fake whose log grows cumulatively, which is the behaviour that bit us. */
-function fakeSpeechSource(...batches) {
-  const log = [];
+function fakeSpeechSource(...batches: string[][]): SpeechSource {
+  const log: string[] = [];
   const queue = [...batches];
   return {
     async spokenPhraseLog() {

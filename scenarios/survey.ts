@@ -9,7 +9,10 @@
  * Because it assumes no tables, its `modeProbes` fall back through heading and
  * landmark, which is the case the Phase 1 guard change exists for.
  */
-module.exports = {
+
+import type { Scenario } from "../lib/types.ts";
+
+const scenario: Scenario = {
   name: "survey",
   description:
     "Structure and keyboard reachability on an unfamiliar target: headings, landmarks, then Tab order.",
@@ -52,3 +55,5 @@ module.exports = {
     },
   ],
 };
+
+export default scenario;

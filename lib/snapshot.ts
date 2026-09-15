@@ -26,15 +26,34 @@
  * recorded stamp both exist: compare them, decide, and accept with
  * `--update-snapshots` if the new wording is correct.
  */
-const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
-const { join } = require("node:path");
-const { slugify } = require("./target.cjs");
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { slugify } from "./target.ts";
+import type {
+  CompiledScenario,
+  Snapshot,
+  SnapshotComparison,
+  SnapshotDifference,
+  StepResult,
+} from "./types.ts";
 
-const SNAPSHOTS = join(__dirname, "..", "snapshots");
+export const SNAPSHOTS = join(import.meta.dirname, "..", "snapshots");
 
 /** One file per (target, scenario), named the way transcripts are. */
-function snapshotPath(targetSlug, scenarioName, dir = SNAPSHOTS) {
+export function snapshotPath(
+  targetSlug: string,
+  scenarioName: string,
+  dir: string = SNAPSHOTS,
+): string {
   return join(dir, `${targetSlug}--${slugify(scenarioName)}.json`);
+}
+
+export interface ToSnapshotInput {
+  target: string;
+  scenario: Pick<CompiledScenario, "name">;
+  steps: readonly Pick<StepResult, "label" | "heard" | "snapshot">[];
+  stamp: string[];
+  provenance: string;
 }
 
 /**
@@ -44,7 +63,13 @@ function snapshotPath(targetSlug, scenarioName, dir = SNAPSHOTS) {
  * too", which is the difference between "the component regressed" and "you
  * edited the fixture".
  */
-function toSnapshot({ target, scenario, steps, stamp, provenance }) {
+export function toSnapshot({
+  target,
+  scenario,
+  steps,
+  stamp,
+  provenance,
+}: ToSnapshotInput): Snapshot {
   return {
     target,
     scenario: scenario.name,
@@ -58,20 +83,20 @@ function toSnapshot({ target, scenario, steps, stamp, provenance }) {
   };
 }
 
-function readSnapshot(path) {
+export function readSnapshot(path: string): Snapshot | null {
   if (!existsSync(path)) return null;
   try {
     // Strip a UTF-8 BOM. The rig never writes one, but a snapshot reviewed and
     // re-saved in a Windows editor arrives with one — Windows PowerShell's
     // `Set-Content -Encoding utf8` adds it — and JSON.parse rejects it with an
     // error that says nothing useful about why.
-    return JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
+    return JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, "")) as Snapshot;
   } catch (error) {
-    throw new Error(`snapshot at ${path} is not readable JSON: ${error.message}`);
+    throw new Error(`snapshot at ${path} is not readable JSON: ${(error as Error).message}`);
   }
 }
 
-function writeSnapshot(path, snapshot) {
+export function writeSnapshot(path: string, snapshot: Snapshot): void {
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(path, JSON.stringify(snapshot, null, 2) + "\n", "utf8");
 }
@@ -84,23 +109,22 @@ function writeSnapshot(path, snapshot) {
  * reorders steps genuinely does invalidate the comparison and should look like
  * it.
  */
-function compareSnapshot(fresh, saved) {
+export function compareSnapshot(
+  fresh: Snapshot,
+  saved: Snapshot | null,
+): SnapshotComparison {
   if (!saved) return { status: "new", differences: [] };
 
   const savedByLabel = new Map(saved.steps.map((step) => [step.label, step.heard]));
   const freshByLabel = new Map(fresh.steps.map((step) => [step.label, step.heard]));
-  const differences = [];
+  const differences: SnapshotDifference[] = [];
 
   for (const step of fresh.steps) {
-    if (!savedByLabel.has(step.label)) {
+    const was = savedByLabel.get(step.label);
+    if (was === undefined) {
       differences.push({ kind: "added", label: step.label, now: step.heard });
-    } else if (savedByLabel.get(step.label) !== step.heard) {
-      differences.push({
-        kind: "changed",
-        label: step.label,
-        was: savedByLabel.get(step.label),
-        now: step.heard,
-      });
+    } else if (was !== step.heard) {
+      differences.push({ kind: "changed", label: step.label, was, now: step.heard });
     }
   }
   for (const step of saved.steps) {
@@ -123,12 +147,3 @@ function compareSnapshot(fresh, saved) {
     savedProvenance: saved.provenance,
   };
 }
-
-module.exports = {
-  SNAPSHOTS,
-  snapshotPath,
-  toSnapshot,
-  readSnapshot,
-  writeSnapshot,
-  compareSnapshot,
-};

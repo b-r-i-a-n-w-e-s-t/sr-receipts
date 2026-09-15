@@ -5,22 +5,41 @@
  * point: the layer that decides whether a build fails is the layer that must be
  * testable without a desktop.
  */
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { mkdtempSync, writeFileSync } = require("node:fs");
-const { tmpdir } = require("node:os");
-const { join } = require("node:path");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-const { evaluate, runCheck, validateCheck } = require("../lib/expect.cjs");
-const {
+import { evaluate, runCheck, validateCheck } from "../lib/expect.ts";
+import {
   toSnapshot,
   compareSnapshot,
   snapshotPath,
   readSnapshot,
   writeSnapshot,
-} = require("../lib/snapshot.cjs");
-const { judge, formatTranscript } = require("../lib/report.cjs");
-const { compileScenario, loadScenario } = require("../lib/scenario.cjs");
+} from "../lib/snapshot.ts";
+import { judge, formatTranscript } from "../lib/report.ts";
+import { compileScenario, loadScenario } from "../lib/scenario.ts";
+import type {
+  CompiledScenario,
+  OpenResult,
+  Snapshot,
+  SnapshotComparison,
+  StepResult,
+} from "../lib/types.ts";
+
+/**
+ * Deliberately-invalid input, cast so it compiles.
+ *
+ * TypeScript now rejects most of these at author time, which is the point of
+ * Phase 3.5 — but the runtime validators still have to fire, because a scenario
+ * can arrive as `probe.json`, as a `.json` file under `scenarios/`, or from a
+ * consuming repo that never ran tsc. Every use of this helper marks a case the
+ * compiler catches for a TypeScript author and the validator catches for
+ * everyone else.
+ */
+const invalid = <T>(value: unknown): T => value as T;
 
 const TABLE = "Historical Structures, table, with 16 rows and 5 columns";
 
@@ -41,20 +60,20 @@ test("the matchers hold and fail as stated", () => {
 });
 
 test("a failure quotes what was actually heard, which is what makes it readable", () => {
-  const [failure] = evaluate(TABLE, { includes: "list box" });
+  const [failure = ""] = evaluate(TABLE, { includes: "list box" });
   assert.match(failure, /expected to include "list box"/);
   assert.match(failure, /heard Historical Structures/);
 });
 
 test("a very long announcement is truncated in the failure message", () => {
   const long = "x".repeat(500);
-  const [failure] = evaluate(long, { includes: "nope" });
+  const [failure = ""] = evaluate(long, { includes: "nope" });
   assert.ok(failure.length < 200, `failure message was ${failure.length} chars`);
   assert.match(failure, /\.\.\.$/);
 });
 
 test("multi-phrase speech is quoted on one line", () => {
-  const [failure] = evaluate("Description\ncolumn 2\nNorman keep", { includes: "nope" });
+  const [failure = ""] = evaluate("Description\ncolumn 2\nNorman keep", { includes: "nope" });
   assert.match(failure, /Description \/ column 2 \/ Norman keep/);
 });
 
@@ -80,10 +99,11 @@ test("no expectation is not a failing expectation", () => {
 });
 
 test("an unknown matcher is an error, not a silently passing assertion", () => {
-  assert.throws(() => evaluate(TABLE, { contains: "table" }), /unknown matcher "contains"/);
+  assert.throws(() => evaluate(TABLE, invalid({ contains: "table" })), /unknown matcher "contains"/);
 });
 
-const steps = (pairs) => pairs.map(([label, heard]) => ({ label, heard }));
+const steps = (pairs: [string, string][]): StepResult[] =>
+  pairs.map(([label, heard]) => ({ label, spec: "press:Tab", heard }));
 
 test("a check counts the steps whose speech matches", () => {
   const result = runCheck(
@@ -123,7 +143,7 @@ test("equals, atLeast and atMost combine", () => {
 });
 
 test("a malformed check is rejected at compile time", () => {
-  const cases = [
+  const cases: [unknown, RegExp][] = [
     [{ matches: "x", equals: 1 }, /needs a "name"/],
     [{ name: "n", equals: 1 }, /needs "matches"/],
     [{ name: "n", matches: "x" }, /needs one of equals, atLeast, atMost/],
@@ -160,11 +180,20 @@ test("an expectation applies to each step a repeat expands to", () => {
 
 const RECORDED = ["firefox: 155.0.1", "nvda asset: 0.2.1-2026.2"];
 
-const snapshotOf = (pairs, { stamp = RECORDED, provenance = "blob: abc" } = {}) =>
+type SnapshotPair = [label: string, heard: string, snapshot?: boolean];
+
+const snapshotOf = (
+  pairs: SnapshotPair[],
+  { stamp = RECORDED, provenance = "blob: abc" }: { stamp?: string[]; provenance?: string } = {},
+): Snapshot =>
   toSnapshot({
     target: "control.html",
     scenario: { name: "s" },
-    steps: pairs.map(([label, heard, snapshot]) => ({ label, heard, snapshot })),
+    steps: pairs.map(([label, heard, snapshot]) => ({
+      label,
+      heard,
+      ...(snapshot !== undefined && { snapshot }),
+    })),
     stamp,
     provenance,
   });
@@ -241,14 +270,14 @@ test("snapshots round-trip through disk", () => {
   assert.equal(readSnapshot(path), null);
   const snapshot = snapshotOf([["a", "said a"]]);
   writeSnapshot(path, snapshot);
-  assert.deepEqual(readSnapshot(path).steps, snapshot.steps);
+  assert.deepEqual((readSnapshot(path) as Snapshot).steps, snapshot.steps);
 });
 
 test("a snapshot re-saved by a Windows editor, BOM and all, still reads", () => {
   const dir = mkdtempSync(join(tmpdir(), "nvda-rig-snap-"));
   const path = join(dir, "bom.json");
   writeFileSync(path, "﻿" + JSON.stringify(snapshotOf([["a", "said a"]])), "utf8");
-  assert.deepEqual(readSnapshot(path).steps, [{ label: "a", heard: "said a" }]);
+  assert.deepEqual((readSnapshot(path) as Snapshot).steps, [{ label: "a", heard: "said a" }]);
 });
 
 test("an unreadable snapshot says so rather than being treated as absent", () => {
@@ -260,14 +289,31 @@ test("an unreadable snapshot says so rather than being treated as absent", () =>
 
 /* ------------------------------------------------------------------ verdict */
 
-const OPENED_OK = { ok: true, lines: [], target: { slug: "control.html", provenance: "blob: abc" } };
-const EMPTY_SCENARIO = { name: "s", description: "", checks: [] };
+// Complete rather than partial: a half-built OpenResult in a test asserts
+// against a shape the rig never actually produces.
+const OPENED_OK: OpenResult = {
+  ok: true,
+  lines: [],
+  target: {
+    slug: "control.html",
+    provenance: "blob: abc",
+    url: "file:///fixtures/control.html",
+    settle: 14000,
+  },
+};
+
+const EMPTY_SCENARIO: CompiledScenario = {
+  name: "s",
+  description: "",
+  steps: [],
+  checks: [],
+};
 
 test("a clean run passes", () => {
   const verdict = judge({
     opened: OPENED_OK,
     scenario: EMPTY_SCENARIO,
-    steps: [{ label: "a", spec: "press:Tab", heard: "said a", expect: { silent: false } }],
+    steps: [{ label: "a", spec: "press:Tab", heard: "said a", expect: { silent: false } } satisfies StepResult],
     comparison: { status: "match", differences: [] },
   });
   assert.equal(verdict.ok, true);
@@ -278,7 +324,9 @@ test("a failed expectation fails the run and names the step", () => {
   const verdict = judge({
     opened: OPENED_OK,
     scenario: EMPTY_SCENARIO,
-    steps: [{ label: "a", spec: "press:Tab", heard: "(silence)", expect: { silent: false } }],
+    steps: [
+      { label: "a", spec: "press:Tab", heard: "(silence)", expect: { silent: false } } satisfies StepResult,
+    ],
     comparison: { status: "match", differences: [] },
   });
   assert.equal(verdict.ok, false);
@@ -290,8 +338,11 @@ test("a snapshot difference fails the run", () => {
   const verdict = judge({
     opened: OPENED_OK,
     scenario: EMPTY_SCENARIO,
-    steps: [{ label: "a", spec: "press:Tab", heard: "x" }],
-    comparison: { status: "differs", differences: [{ kind: "changed", label: "a" }] },
+    steps: [{ label: "a", spec: "press:Tab", heard: "x" } satisfies StepResult],
+    comparison: {
+      status: "differs",
+      differences: [{ kind: "changed", label: "a", was: "x", now: "y" }],
+    },
   });
   assert.equal(verdict.ok, false);
   assert.match(verdict.reasons.join(" "), /snapshot differs in 1 step/);
@@ -301,7 +352,7 @@ test("a new snapshot does not fail the run", () => {
   const verdict = judge({
     opened: OPENED_OK,
     scenario: EMPTY_SCENARIO,
-    steps: [{ label: "a", spec: "press:Tab", heard: "x" }],
+    steps: [{ label: "a", spec: "press:Tab", heard: "x" } satisfies StepResult],
     comparison: { status: "new", differences: [] },
   });
   assert.equal(verdict.ok, true);
@@ -309,7 +360,7 @@ test("a new snapshot does not fail the run", () => {
 
 test("never reaching the page fails the run, whatever else is true", () => {
   const verdict = judge({
-    opened: { ok: false, lines: [], target: { slug: "x", provenance: "p" } },
+    opened: { ...OPENED_OK, ok: false },
     scenario: EMPTY_SCENARIO,
     steps: [],
     comparison: null,
@@ -334,7 +385,7 @@ test("a failed scenario check fails the run", () => {
 
 test("the verdict is the first thing in the transcript, and says why", () => {
   const scenario = { ...EMPTY_SCENARIO, name: "s" };
-  const runSteps = [
+  const runSteps: StepResult[] = [
     { label: "a", spec: "press:Tab", heard: "(silence)", expect: { silent: false } },
   ];
   const verdict = judge({ opened: OPENED_OK, scenario, steps: runSteps, comparison: null });
@@ -357,7 +408,7 @@ test("the verdict is the first thing in the transcript, and says why", () => {
 
 test("a passing transcript says PASS and carries no failure noise", () => {
   const scenario = EMPTY_SCENARIO;
-  const runSteps = [{ label: "a", spec: "press:Tab", heard: "said a" }];
+  const runSteps: StepResult[] = [{ label: "a", spec: "press:Tab", heard: "said a" }];
   const verdict = judge({ opened: OPENED_OK, scenario, steps: runSteps, comparison: null });
   const transcript = formatTranscript({
     request: { target: "control.html" },

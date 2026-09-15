@@ -25,7 +25,10 @@
  * This also sidesteps the iframe on `/component/ColumnList`, whose SvelteKit
  * client steals focus about 1.2s after load (ticket 16).
  */
-module.exports = {
+
+import type { Scenario } from "../lib/types.ts";
+
+const scenario: Scenario = {
   name: "column-list-overflow-header",
   description:
     "The reveal-columns header announces its own name as well as its control's.",
@@ -134,3 +137,5 @@ module.exports = {
     },
   ],
 };
+
+export default scenario;

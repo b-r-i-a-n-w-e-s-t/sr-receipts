@@ -1,2 +1,2 @@
 cd /d %USERPROFILE%\nvda-rig
-node runner.cjs > runner.out 2>&1
+node runner.ts > runner.out 2>&1

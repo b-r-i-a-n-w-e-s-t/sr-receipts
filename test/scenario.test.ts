@@ -6,18 +6,34 @@
  * validated by `npm test` on the host rather than three minutes into a run on
  * the guest desktop.
  */
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { join } = require("node:path");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { nvda } from "@guidepup/guidepup";
+import { join } from "node:path";
 
-const { readdirSync } = require("node:fs");
+import { readdirSync } from "node:fs";
 
-const { SCENARIOS, compileScenario, loadScenario } = require("../lib/scenario.cjs");
-const { validateSteps, normalize } = require("../lib/steps.cjs");
-const { parseQueue, slugify, DEFAULT_SCENARIO } = require("../lib/target.cjs");
+import { SCENARIOS, compileScenario, loadScenario } from "../lib/scenario.ts";
+import { validateSteps, normalize } from "../lib/steps.ts";
+import { parseQueue, slugify, DEFAULT_SCENARIO } from "../lib/target.ts";
+import type { CompiledScenario, NvdaCommand, NvdaDriver, StepSpec } from "../lib/types.ts";
 
-const labels = (compiled) => compiled.steps.map((s) => s.label);
-const specs = (compiled) => compiled.steps.map((s) => s.spec);
+/**
+ * Deliberately-invalid input, cast so it compiles.
+ *
+ * TypeScript now rejects most of these at author time, which is the point of
+ * Phase 3.5 — but the runtime validators still have to fire, because a scenario
+ * can arrive as `probe.json`, as a `.json` file under `scenarios/`, or from a
+ * consuming repo that never ran tsc. Every use of this helper marks a case the
+ * compiler catches for a TypeScript author and the validator catches for
+ * everyone else.
+ */
+const invalid = <T>(value: unknown): T => value as T;
+
+const labels = (compiled: CompiledScenario): string[] =>
+  compiled.steps.map((s) => s.label);
+const specs = (compiled: CompiledScenario): string[] =>
+  compiled.steps.map((s) => String(s.spec));
 
 test("the three authoring forms compile to the same step", () => {
   const forms = [
@@ -65,7 +81,7 @@ test("settle rides along on every expanded step", () => {
 });
 
 test("a malformed scenario is rejected, naming the step", () => {
-  const cases = [
+  const cases: [unknown, RegExp][] = [
     [{ steps: [] }, /non-empty "steps"/],
     [{ steps: [{ label: "x" }] }, /exactly one of "perform" or "press"/],
     [{ steps: [{ perform: "a", press: "b" }] }, /exactly one of "perform" or "press"/],
@@ -95,20 +111,20 @@ test("loadScenario resolves a bare name against scenarios/", async () => {
 });
 
 test("loadScenario resolves a path, which is how a consuming repo brings its own", async () => {
-  const path = join(__dirname, "..", "scenarios", "column-list-table.cjs");
+  const path = join(import.meta.dirname, "..", "scenarios", "column-list-table.ts");
   const compiled = await loadScenario(path);
   assert.equal(compiled.name, "column-list-table");
 });
 
 test("loadScenario explains itself when the file is not there", async () => {
   await assert.rejects(
-    loadScenario("./nope/missing.cjs"),
-    /could not load scenario "\.\/nope\/missing\.cjs"/,
+    loadScenario("./nope/missing.ts"),
+    /could not load scenario "\.\/nope\/missing.ts"/,
   );
 });
 
 /**
- * The exact sequence runner.cjs ran before Phase 2, transcribed from the last
+ * The exact sequence runner.ts ran before Phase 2, transcribed from the last
  * pre-Phase-2 transcript. If the extracted scenario ever stops producing this,
  * transcripts stop being comparable across the refactor.
  */
@@ -129,7 +145,7 @@ const PRE_PHASE_2_LABELS = [
   ...Array.from({ length: 8 }, (_, i) => `tab ${i + 1}`),
 ];
 
-test("column-list-table still compiles to the sequence runner.cjs used to hold", async () => {
+test("column-list-table still compiles to the sequence runner.ts used to hold", async () => {
   const compiled = await loadScenario("column-list-table");
   assert.deepEqual(labels(compiled), PRE_PHASE_2_LABELS);
   assert.equal(compiled.steps.length, 62);
@@ -141,10 +157,9 @@ test("every shipped scenario is runnable against the real command list", async (
   //
   // Read from the directory rather than a list, so a scenario added tomorrow is
   // covered without anyone remembering to add it here.
-  const { nvda } = require("@guidepup/guidepup");
   const shipped = readdirSync(SCENARIOS)
-    .filter((file) => file.endsWith(".cjs"))
-    .map((file) => file.replace(/\.cjs$/, ""));
+    .filter((file) => file.endsWith(".ts"))
+    .map((file) => file.replace(/.ts$/, ""));
   assert.ok(shipped.length >= 2, "expected the shipped scenarios to be found");
   for (const name of shipped) {
     const compiled = await loadScenario(name);
@@ -156,16 +171,23 @@ test("every shipped scenario is runnable against the real command list", async (
 });
 
 test("validateSteps reports every bad step at once, not just the first", () => {
-  const nvda = { keyboardCommands: { reportTitle: Symbol("t") } };
+  const nvda: NvdaDriver = {
+    keyboardCommands: { reportTitle: Symbol("t") } as unknown as Record<NvdaCommand, unknown>,
+    perform: () => {},
+    press: () => {},
+  };
   assert.throws(
     () =>
       validateSteps(nvda, [
         { label: "fine", spec: "perform:reportTitle" },
-        { label: "typo", spec: "perform:moveToNextTabel" },
-        { label: "nonsense", spec: "moveToNextTable" },
+        // Cast past the compiler: both now fail to compile for a TypeScript
+        // author, and the runtime check is what catches them in JSON.
+        { label: "typo", spec: invalid<StepSpec>("perform:moveToNextTabel") },
+        { label: "nonsense", spec: invalid<StepSpec>("moveToNextTable") },
       ]),
     (error) =>
-      /step 2 \(typo\)/.test(error.message) && /step 3 \(nonsense\)/.test(error.message),
+      /step 2 \(typo\)/.test((error as Error).message) &&
+      /step 3 \(nonsense\)/.test((error as Error).message),
   );
 });
 
@@ -230,7 +252,7 @@ test("a window size is optional, and survives compilation when given", async () 
 });
 
 test("a malformed window size is rejected before NVDA starts", () => {
-  const bad = [
+  const bad: [unknown, RegExp][] = [
     [{ width: 1120 }, /"window.height" must be a positive integer/],
     [{ width: 0, height: 1000 }, /"window.width" must be a positive integer/],
     [{ width: 1120.5, height: 1000 }, /"window.width" must be a positive integer/],

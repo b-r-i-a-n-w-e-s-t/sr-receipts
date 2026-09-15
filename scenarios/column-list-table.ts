@@ -7,7 +7,10 @@
  * current question, not the rig — which is exactly why it belongs in a file the
  * harness knows nothing about.
  */
-module.exports = {
+
+import type { Scenario } from "../lib/types.ts";
+
+const scenario: Scenario = {
   name: "column-list-table",
   description:
     "Table framing, cell navigation, read-through for double announcement, and Tab reachability inside the expanded detail.",
@@ -98,3 +101,5 @@ module.exports = {
     },
   ],
 };
+
+export default scenario;

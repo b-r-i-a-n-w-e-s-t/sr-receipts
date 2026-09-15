@@ -2,18 +2,23 @@
   "name": "nvda-rig",
   "version": "1.0.0",
   "description": "Drives NVDA and Firefox to capture screen-reader transcripts for accessibility testing.",
-  "main": "lib/index.cjs",
+  "main": "lib/index.ts",
   "scripts": {
-    "test": "node --test test/*.test.cjs",
-    "smoke": "node smoke.cjs",
-    "probe": "node probe.cjs",
-    "run-queue": "node runner.cjs"
+    "test": "node --test test/*.test.ts && npm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node smoke.ts",
+    "probe": "node probe.ts",
+    "run-queue": "node runner.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@guidepup/guidepup": "^0.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.0",
+    "typescript": "^7.0.2"
   }
 }

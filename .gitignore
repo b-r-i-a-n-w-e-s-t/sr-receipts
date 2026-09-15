@@ -32,3 +32,6 @@ smoke-log.txt
 # Full-desktop screenshot written by shot.ps1. Captures whatever else was on the
 # guest desktop at the time, including editor windows and terminals.
 screen.png
+
+# Throwaway tsc projects written by test/types.test.ts.
+.type-case-*/

@@ -2,12 +2,29 @@
  * Turning a run into something a person reads and something a build can fail on.
  *
  * The transcript stays the primary artefact — it is the evidence, and it is
- * meant to be read. What Phase 3 adds is a verdict at the top of it, so the
- * answer is the first thing you see rather than something you reconstruct from
- * sixty announcements, and a `results.json` beside it so CI does not have to
- * parse prose.
+ * meant to be read. What the verdict at the top of it adds is that the answer
+ * is the first thing you see rather than something you reconstruct from sixty
+ * announcements, and `results.json` beside it means CI does not have to parse
+ * prose.
  */
-const { evaluate, runCheck } = require("./expect.cjs");
+import { evaluate, runCheck } from "./expect.ts";
+import { SILENCE } from "./speech.ts";
+import type {
+  CompiledScenario,
+  OpenResult,
+  RunRequest,
+  RunResult,
+  SnapshotComparison,
+  StepResult,
+  Verdict,
+} from "./types.ts";
+
+export interface JudgeInput {
+  opened: OpenResult;
+  scenario: CompiledScenario;
+  steps: readonly StepResult[];
+  comparison: SnapshotComparison | null;
+}
 
 /**
  * Judge a completed run.
@@ -17,18 +34,16 @@ const { evaluate, runCheck } = require("./expect.cjs");
  * differs. A missing snapshot is not a failure — it is recorded and reported, so
  * the first run of a new target produces a baseline rather than a red build.
  */
-function judge({ opened, scenario, steps, comparison }) {
+export function judge({ opened, scenario, steps, comparison }: JudgeInput): Verdict {
   const assertions = steps.flatMap((step) => {
     const failures = evaluate(step.heard, step.expect);
-    return failures.length === 0
-      ? []
-      : [{ label: step.label, spec: step.spec, failures }];
+    return failures.length === 0 ? [] : [{ label: step.label, spec: step.spec, failures }];
   });
 
   const checks = scenario.checks.map((check) => runCheck(check, steps));
   const failedChecks = checks.filter((check) => !check.ok);
 
-  const reasons = [];
+  const reasons: string[] = [];
   if (!opened.ok) reasons.push("never reached the page in a navigable state");
   if (assertions.length) {
     reasons.push(`${assertions.length} step expectation(s) failed`);
@@ -47,23 +62,25 @@ function judge({ opened, scenario, steps, comparison }) {
   };
 }
 
-const indent = (text) =>
-  String(text)
+const indent = (text: string): string =>
+  text
     .split("\n")
     .map((line) => `    ${line}`)
     .join("\n");
 
+const oneLine = (text: string): string => text.replace(/\n/g, " / ");
+
 /** The verdict block, which goes at the very top of the transcript. */
-function formatVerdict(verdict, comparison) {
-  const lines = [
-    verdict.ok ? "## PASS" : `## FAIL — ${verdict.reasons.join("; ")}`,
-    "",
-  ];
+export function formatVerdict(
+  verdict: Verdict,
+  comparison: SnapshotComparison | null,
+): string[] {
+  const lines = [verdict.ok ? "## PASS" : `## FAIL — ${verdict.reasons.join("; ")}`, ""];
 
   if (verdict.assertions.length) {
     lines.push("### failed expectations");
     for (const { label, spec, failures } of verdict.assertions) {
-      lines.push(`  ${label} [${spec}]`);
+      lines.push(`  ${label} [${String(spec)}]`);
       for (const failure of failures) lines.push(`    ${failure}`);
     }
     lines.push("");
@@ -103,15 +120,15 @@ function formatVerdict(verdict, comparison) {
     for (const difference of comparison.differences) {
       if (difference.kind === "changed") {
         lines.push(`  ~ ${difference.label}`);
-        lines.push(`    was ${difference.was.replace(/\n/g, " / ")}`);
-        lines.push(`    now ${difference.now.replace(/\n/g, " / ")}`);
+        lines.push(`    was ${oneLine(difference.was)}`);
+        lines.push(`    now ${oneLine(difference.now)}`);
       } else if (difference.kind === "added") {
-        lines.push(`  + ${difference.label}: ${difference.now.replace(/\n/g, " / ")}`);
+        lines.push(`  + ${difference.label}: ${oneLine(difference.now)}`);
       } else {
-        lines.push(`  - ${difference.label}: ${difference.was.replace(/\n/g, " / ")}`);
+        lines.push(`  - ${difference.label}: ${oneLine(difference.was)}`);
       }
     }
-    lines.push("", "  Accept these with: node runner.cjs --update-snapshots", "");
+    lines.push("", "  Accept these with: node runner.ts --update-snapshots", "");
   } else if (comparison?.status === "match") {
     lines.push("### snapshot", "  matches", "");
   }
@@ -119,8 +136,22 @@ function formatVerdict(verdict, comparison) {
   return lines;
 }
 
+export interface TranscriptInput extends JudgeInput {
+  request: Pick<RunRequest, "target">;
+  stamp: string[];
+  verdict: Verdict;
+}
+
 /** The whole transcript: verdict, provenance, guard diagnostics, announcements. */
-function formatTranscript({ request, scenario, stamp, opened, steps, verdict, comparison }) {
+export function formatTranscript({
+  request,
+  scenario,
+  stamp,
+  opened,
+  steps,
+  verdict,
+  comparison,
+}: TranscriptInput): string {
   const lines = [
     `# ${request.target}`,
     `scenario: ${scenario.name}${scenario.description ? ` — ${scenario.description}` : ""}`,
@@ -139,8 +170,7 @@ function formatTranscript({ request, scenario, stamp, opened, steps, verdict, co
   ];
 
   for (const step of steps) {
-    const shown = `${step.label} [${step.spec}]`;
-    lines.push(`### ${shown}`, step.heard, "");
+    lines.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
     const failures = evaluate(step.heard, step.expect);
     if (failures.length) {
       lines.push("EXPECTATION FAILED", indent(failures.join("\n")), "");
@@ -150,8 +180,20 @@ function formatTranscript({ request, scenario, stamp, opened, steps, verdict, co
   return lines.join("\n");
 }
 
+export interface ToResultInput extends TranscriptInput {
+  transcriptFile: string;
+}
+
 /** What CI reads. One entry per run request. */
-function toResult({ request, scenario, opened, steps, verdict, comparison, transcriptFile }) {
+export function toResult({
+  request,
+  scenario,
+  opened,
+  steps,
+  verdict,
+  comparison,
+  transcriptFile,
+}: ToResultInput): RunResult {
   return {
     target: request.target,
     scenario: scenario.name,
@@ -161,7 +203,7 @@ function toResult({ request, scenario, opened, steps, verdict, comparison, trans
     provenance: opened.target.provenance,
     transcript: transcriptFile,
     steps: steps.length,
-    silentSteps: steps.filter((step) => step.heard === "(silence)").length,
+    silentSteps: steps.filter((step) => step.heard === SILENCE).length,
     erroredSteps: steps.filter((step) => step.error).length,
     failedExpectations: verdict.assertions,
     checks: verdict.checks,
@@ -170,5 +212,3 @@ function toResult({ request, scenario, opened, steps, verdict, comparison, trans
       : { status: "not compared", differences: 0 },
   };
 }
-
-module.exports = { judge, formatVerdict, formatTranscript, toResult };

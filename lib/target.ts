@@ -11,23 +11,37 @@
  * sequence worked out in the probe could behave differently in the run that was
  * supposed to confirm it. One definition, one set of numbers.
  */
-const { join } = require("node:path");
-const { gitBlobHash } = require("./system.cjs");
+import { join } from "node:path";
+import { gitBlobHash } from "./system.ts";
+import type { ResolvedTarget, RunRequest } from "./types.ts";
 
-const FIXTURES = join(__dirname, "..", "fixtures");
+export const FIXTURES = join(import.meta.dirname, "..", "fixtures");
 
 /** Measured, not guessed. Override per call only with a reason. */
-const SETTLE = { fixture: 14000, url: 30000 };
+export const SETTLE = { fixture: 14000, url: 30000 } as const;
+
+/**
+ * The scenario a queue line gets when it does not name one.
+ *
+ * Set to the column-list investigation because that is what this rig's existing
+ * `queue.txt` means, and changing it silently would change the answer to a
+ * question that is still open. When the rig stops being column-list-shaped this
+ * becomes `survey`.
+ */
+export const DEFAULT_SCENARIO = "column-list-table";
 
 /**
  * Anything to something NTFS will accept as a file name. Used for both halves of
  * a transcript's name: a target may be a URL, and a scenario's name defaults to
  * whatever reference loaded it, which may be a path.
  */
-const slugify = (text) =>
+export const slugify = (text: string): string =>
   text.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "unnamed";
 
-function resolveTarget(target, { settle } = {}) {
+export function resolveTarget(
+  target: string,
+  { settle }: { settle?: number | undefined } = {},
+): ResolvedTarget {
   if (/^https?:/i.test(target)) {
     return {
       url: target,
@@ -46,16 +60,6 @@ function resolveTarget(target, { settle } = {}) {
 }
 
 /**
- * The scenario a queue line gets when it does not name one.
- *
- * Set to the column-list investigation because that is what this rig's existing
- * `queue.txt` means, and changing it silently would change the answer to a
- * question that is still open. When the rig stops being column-list-shaped this
- * becomes `survey`.
- */
-const DEFAULT_SCENARIO = "column-list-table";
-
-/**
  * Parse a queue file into run requests.
  *
  * One request per line, blank lines skipped, `#` comments stripped so an example
@@ -66,13 +70,12 @@ const DEFAULT_SCENARIO = "column-list-table";
  *
  *   control.html
  *   control.html :: survey
- *   http://192.168.64.1:5173/docs/column-list :: ./a11y/scenarios/table.mjs
- *
- * The `{ target, scenario }` shape returned here is deliberately the same shape
- * the Phase 4 daemon will accept over HTTP, so the queue file and the host-side
- * client stay one code path.
+ *   http://192.168.64.1:5173/docs/column-list :: ./a11y/scenarios/table.ts
  */
-function parseQueue(text, { defaultScenario = DEFAULT_SCENARIO } = {}) {
+export function parseQueue(
+  text: string,
+  { defaultScenario = DEFAULT_SCENARIO }: { defaultScenario?: string | undefined } = {},
+): RunRequest[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.replace(/^\s*#.*$/, "").trim())
@@ -85,12 +88,3 @@ function parseQueue(text, { defaultScenario = DEFAULT_SCENARIO } = {}) {
       return { target, scenario: scenario || defaultScenario };
     });
 }
-
-module.exports = {
-  FIXTURES,
-  SETTLE,
-  DEFAULT_SCENARIO,
-  slugify,
-  resolveTarget,
-  parseQueue,
-};

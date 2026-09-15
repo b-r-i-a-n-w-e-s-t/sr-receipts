@@ -2,15 +2,16 @@
  * Guest-OS odds and ends: sleeping, killing processes, asking Windows about
  * itself, and hashing bytes the way git does.
  */
-const { execFileSync } = require("node:child_process");
-const { createHash } = require("node:crypto");
-const { readFileSync } = require("node:fs");
-const { join } = require("node:path");
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+export const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Blunt but reliable: a half-dead Firefox is what froze the guest once. */
-function taskkill(image) {
+export function taskkill(image: string): void {
   try {
     execFileSync("taskkill", ["/F", "/IM", image], { stdio: "ignore" });
   } catch {
@@ -22,7 +23,7 @@ function taskkill(image) {
  * Returns "unknown" rather than throwing, because every caller is collecting
  * provenance for a transcript and a missing line is better than a lost run.
  */
-function powershell(command) {
+export function powershell(command: string): string {
   try {
     return execFileSync(
       "powershell",
@@ -35,7 +36,7 @@ function powershell(command) {
 }
 
 /** Git's blob hash, so a transcript names the exact bytes under test. */
-function gitBlobHash(path) {
+export function gitBlobHash(path: string): string {
   const bytes = readFileSync(path);
   return createHash("sha1")
     .update(`blob ${bytes.length}\0`)
@@ -44,7 +45,7 @@ function gitBlobHash(path) {
 }
 
 /** What was actually on screen, for when a focus check fails. */
-function windowList() {
+export function windowList(): string {
   try {
     return execFileSync(
       "powershell",
@@ -53,13 +54,11 @@ function windowList() {
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        join(__dirname, "..", "shot.ps1"),
+        join(import.meta.dirname, "..", "shot.ps1"),
       ],
       { encoding: "utf8" },
     ).trim();
   } catch (error) {
-    return `ERROR ${error?.message}`;
+    return `ERROR ${(error as Error)?.message}`;
   }
 }
-
-module.exports = { delay, taskkill, powershell, gitBlobHash, windowList };

@@ -15,7 +15,10 @@
  * announcement is evidence that the walk reached the end rather than stalling,
  * and it costs nothing to overshoot.
  */
-module.exports = {
+
+import type { Scenario } from "../lib/types.ts";
+
+const scenario: Scenario = {
   name: "column-list-header-naming",
   description:
     "Every column announces a name when walking the header row and when entering a cell.",
@@ -73,3 +76,5 @@ module.exports = {
     },
   ],
 };
+
+export default scenario;

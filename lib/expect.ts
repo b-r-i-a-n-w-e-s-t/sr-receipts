@@ -8,54 +8,47 @@
  *   "the coordinate must be announced". These live in the scenario, because they
  *   are the scenario's intent.
  *
- * - Exact wording lives in a snapshot instead (see lib/snapshot.cjs), because it
+ * - Exact wording lives in a snapshot instead (see lib/snapshot.ts), because it
  *   is a property of one target, not of the question being asked. Putting
- *   `equals: "Historical Structures, table, with 16 rows and 5 columns"` in a
- *   scenario would make that scenario runnable against exactly one fixture.
+ *   `equals: "Historical Structures, table, with 16 rows"` in a scenario would
+ *   make that scenario runnable against exactly one fixture.
  *
  * A scenario's `checks` are the third kind: assertions across the whole
  * transcript rather than one step, which is how "the detail is announced once,
  * not twice" gets asked.
- *
- * ## Matchers
- *
- *   { includes: "table" }          substring
- *   { matches: "with \\d+ rows" }  regex, as a string or a RegExp
- *   { equals: "row 2" }            the whole announcement, exactly
- *   { silent: true | false }       is this announcement "(silence)"?
- *   { not: { ... } }               any matcher, negated
- *
- * Several matchers in one object all have to hold. An array of objects is the
- * same thing spelled out, and reads better when the reasons differ.
  */
-const { SILENCE } = require("./speech.cjs");
+import { SILENCE } from "./speech.ts";
+import type { Check, CheckResult, Expectation, Expectations, StepResult } from "./types.ts";
 
-const asRegExp = (value) => (value instanceof RegExp ? value : new RegExp(value, "i"));
+const asRegExp = (value: string | RegExp): RegExp =>
+  value instanceof RegExp ? value : new RegExp(value, "i");
 
 /** A short, quotable form of an announcement, for a failure message. */
-const quote = (text) => {
+export const quote = (text: string): string => {
   const oneLine = text.replace(/\n/g, " / ");
   return oneLine.length > 120 ? `${oneLine.slice(0, 117)}...` : oneLine;
 };
 
-const MATCHERS = {
-  includes: (heard, value) =>
+type MatcherName = Exclude<keyof Expectation, "not">;
+
+const MATCHERS: { [K in MatcherName]: (heard: string, value: never) => string | null } = {
+  includes: (heard: string, value: string) =>
     heard.toLowerCase().includes(String(value).toLowerCase())
       ? null
       : `expected to include ${JSON.stringify(value)}`,
 
-  matches: (heard, value) =>
+  matches: (heard: string, value: string | RegExp) =>
     asRegExp(value).test(heard) ? null : `expected to match ${asRegExp(value)}`,
 
-  equals: (heard, value) =>
+  equals: (heard: string, value: string) =>
     heard === value ? null : `expected exactly ${JSON.stringify(value)}`,
 
-  silent: (heard, value) => {
+  silent: (heard: string, value: boolean) => {
     const isSilent = heard === SILENCE;
     if (isSilent === Boolean(value)) return null;
     return value ? "expected silence" : "expected something to be said";
   },
-};
+} as { [K in MatcherName]: (heard: string, value: never) => string | null };
 
 /**
  * Check one announcement against one expectation.
@@ -64,7 +57,7 @@ const MATCHERS = {
  * expectation is evaluated rather than stopping at the first failure, because a
  * transcript is read once and should say everything that is wrong with it.
  */
-function evaluate(heard, expectation) {
+export function evaluate(heard: string, expectation?: Expectations | null): string[] {
   if (expectation === undefined || expectation === null) return [];
 
   if (Array.isArray(expectation)) {
@@ -77,33 +70,33 @@ function evaluate(heard, expectation) {
     );
   }
 
-  const failures = [];
+  const failures: string[] = [];
   for (const [name, value] of Object.entries(expectation)) {
     if (name === "not") {
-      const negated = evaluate(heard, value);
+      const negated = evaluate(heard, value as Expectation);
       if (negated.length === 0) {
         failures.push(`expected NOT to satisfy ${JSON.stringify(value)}`);
       }
       continue;
     }
-    const matcher = MATCHERS[name];
+    const matcher = MATCHERS[name as MatcherName];
     if (!matcher) {
       throw new Error(
         `unknown matcher ${JSON.stringify(name)}; known: ${Object.keys(MATCHERS).join(", ")}, not`,
       );
     }
-    const failure = matcher(heard, value);
+    const failure = matcher(heard, value as never);
     if (failure) failures.push(`${failure}, heard ${quote(heard)}`);
   }
   return failures;
 }
 
 /** Structural validation, so a bad matcher name is caught before NVDA starts. */
-function validateExpectation(expectation, where) {
+export function validateExpectation(expectation: unknown, where: string): void {
   try {
-    evaluate("", expectation);
+    evaluate("", expectation as Expectations | undefined);
   } catch (error) {
-    throw new Error(`${where}: ${error.message}`);
+    throw new Error(`${where}: ${(error as Error).message}`);
   }
 }
 
@@ -118,11 +111,14 @@ function validateExpectation(expectation, where) {
  * rig was built for — is the expandable detail read out twice? — becomes
  * something a build can fail on.
  */
-function runCheck(check, steps) {
+export function runCheck(
+  check: Check,
+  steps: readonly Pick<StepResult, "label" | "heard">[],
+): CheckResult {
   const pattern = asRegExp(check.matches);
   const matched = steps.filter((step) => pattern.test(step.heard));
   const count = matched.length;
-  const failures = [];
+  const failures: string[] = [];
 
   if (check.equals !== undefined && count !== check.equals) {
     failures.push(`expected ${check.equals}, found ${count}`);
@@ -144,28 +140,30 @@ function runCheck(check, steps) {
   };
 }
 
-function validateCheck(check, where) {
+export function validateCheck(check: unknown, where: string): void {
   if (typeof check !== "object" || check === null) {
     throw new Error(`${where}: a check must be an object`);
   }
-  if (!check.name) throw new Error(`${where}: a check needs a "name"`);
-  if (check.matches === undefined) {
-    throw new Error(`${where}: check ${JSON.stringify(check.name)} needs "matches"`);
+  const candidate = check as Partial<Check>;
+  if (!candidate.name) throw new Error(`${where}: a check needs a "name"`);
+  if (candidate.matches === undefined) {
+    throw new Error(`${where}: check ${JSON.stringify(candidate.name)} needs "matches"`);
   }
-  const bounds = ["equals", "atLeast", "atMost"].filter((k) => check[k] !== undefined);
+  const bounds = (["equals", "atLeast", "atMost"] as const).filter(
+    (key) => candidate[key] !== undefined,
+  );
   if (bounds.length === 0) {
     throw new Error(
-      `${where}: check ${JSON.stringify(check.name)} needs one of equals, atLeast, atMost`,
+      `${where}: check ${JSON.stringify(candidate.name)} needs one of equals, atLeast, atMost`,
     );
   }
   for (const bound of bounds) {
-    if (!Number.isInteger(check[bound]) || check[bound] < 0) {
+    const value = candidate[bound];
+    if (!Number.isInteger(value) || (value as number) < 0) {
       throw new Error(
-        `${where}: check ${JSON.stringify(check.name)} "${bound}" must be a non-negative integer`,
+        `${where}: check ${JSON.stringify(candidate.name)} "${bound}" must be a non-negative integer`,
       );
     }
   }
-  asRegExp(check.matches);
+  asRegExp(candidate.matches);
 }
-
-module.exports = { evaluate, validateExpectation, runCheck, validateCheck, quote };

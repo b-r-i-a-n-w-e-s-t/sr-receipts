@@ -5,16 +5,17 @@
  * launch path, whose arguments (`-p1 -c`) are Chrome flags that Firefox does not
  * read as intended.
  */
-const { spawn } = require("node:child_process");
-const { mkdirSync, rmSync, writeFileSync } = require("node:fs");
-const { join } = require("node:path");
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { WindowSize } from "./types.ts";
 
-const RIG = join(__dirname, "..");
+const RIG = join(import.meta.dirname, "..");
 
-const FIREFOX =
+export const FIREFOX =
   process.env.FIREFOX_PATH ?? "C:\\Program Files\\Mozilla Firefox\\firefox.exe";
 
-const PROFILE = join(RIG, "ff-profile");
+export const PROFILE = join(RIG, "ff-profile");
 
 /**
  * A dedicated profile makes a run hermetic: no session restore, no welcome tab,
@@ -24,7 +25,7 @@ const PROFILE = join(RIG, "ff-profile");
  * Rewritten on every run so a hand-edited profile cannot silently change a
  * result. The profile directory itself is gitignored.
  */
-function ensureProfile() {
+export function ensureProfile(): void {
   mkdirSync(PROFILE, { recursive: true });
   writeFileSync(
     join(PROFILE, "user.js"),
@@ -45,7 +46,7 @@ function ensureProfile() {
   );
 }
 
-const XULSTORE = join(PROFILE, "xulstore.json");
+export const XULSTORE = join(PROFILE, "xulstore.json");
 
 /**
  * Size the browser window, for a scenario whose question only exists at a
@@ -65,7 +66,7 @@ const XULSTORE = join(PROFILE, "xulstore.json");
  * the fresh state every run had before this existed. Called on every launch, so
  * one narrow scenario cannot leave its width behind for the next target.
  */
-function writeWindowGeometry(window) {
+export function writeWindowGeometry(window?: WindowSize | undefined): void {
   if (!window) {
     rmSync(XULSTORE, { force: true });
     return;
@@ -101,17 +102,11 @@ function writeWindowGeometry(window) {
  * refuses from a non-elevated process while an elevated window holds the
  * foreground, and the guest desktop runs an elevated VS Code and PowerShell).
  * The readiness guard asks for activation only if it turns out to be needed.
- *
- * `window` is `{ width, height }` in pixels, or omitted for whatever size
- * Firefox picks on its own.
  */
-function launch(url, { window } = {}) {
+export function launch(url: string, { window }: { window?: WindowSize | undefined } = {}): ChildProcess {
   writeWindowGeometry(window);
-  return spawn(
-    FIREFOX,
-    ["-no-remote", "-profile", PROFILE, "-new-window", url],
-    { detached: true, stdio: "ignore" },
-  );
+  return spawn(FIREFOX, ["-no-remote", "-profile", PROFILE, "-new-window", url], {
+    detached: true,
+    stdio: "ignore",
+  });
 }
-
-module.exports = { FIREFOX, PROFILE, XULSTORE, ensureProfile, writeWindowGeometry, launch };

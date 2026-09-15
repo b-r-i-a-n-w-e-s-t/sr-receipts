@@ -1,8 +1,8 @@
 /**
  * Getting NVDA into a state where a key sequence means anything.
  *
- * This is the hard-won part of the rig. It was duplicated verbatim in both
- * `probe.cjs` and `runner.cjs`; it lives here once now.
+ * This is the hard-won part of the rig. It was duplicated verbatim in both the
+ * probe and the runner; it lives here once now.
  *
  * The title guard is not enough on its own, in two separate ways.
  *
@@ -27,9 +27,11 @@
  * The guard leaves the caret at the top of the document, so a sequence always
  * starts from a known position.
  */
-const { windowsActivate } = require("@guidepup/guidepup");
-const { delay } = require("./system.cjs");
-const { FIREFOX } = require("./firefox.cjs");
+import { windowsActivate } from "@guidepup/guidepup";
+import { delay } from "./system.ts";
+import { FIREFOX } from "./firefox.ts";
+import { SILENCE, type SpeechLog } from "./speech.ts";
+import type { GuardResult, NvdaCommand, NvdaDriver } from "./types.ts";
 
 /**
  * Which quick-navigation commands to use when asserting browse mode.
@@ -51,24 +53,34 @@ const { FIREFOX } = require("./firefox.cjs");
  * A target with no table, no heading and no landmark needs its own probe passed
  * in; there is no way to assert the mode without something to navigate to.
  */
-const MODE_PROBES = ["moveToNextTable", "moveToNextHeading", "moveToNextLandmark"];
+export const MODE_PROBES: NvdaCommand[] = [
+  "moveToNextTable",
+  "moveToNextHeading",
+  "moveToNextLandmark",
+];
 
-async function ensureReadyToNavigate(
-  nvda,
-  speech,
-  { focusAttempts = 8, modeAttempts = 3, modeProbes = MODE_PROBES } = {},
-) {
+export interface GuardOptions {
+  focusAttempts?: number | undefined;
+  modeAttempts?: number | undefined;
+  modeProbes?: NvdaCommand[] | undefined;
+}
+
+export async function ensureReadyToNavigate(
+  nvda: NvdaDriver,
+  speech: SpeechLog,
+  { focusAttempts = 8, modeAttempts = 3, modeProbes = MODE_PROBES }: GuardOptions = {},
+): Promise<GuardResult> {
   const k = nvda.keyboardCommands;
-  const seen = [];
+  const seen: string[] = [];
 
   // A misspelled probe would reach `nvda.perform(undefined)`, which is silent —
   // and this guard reads silence as "wrong mode". The result would be a
-  // focus-guard failure that looks exactly like a real one. Fail loudly instead.
+  // focus-guard failure that looks exactly like a real one. In TypeScript a
+  // literal typo no longer compiles, but a scenario can still arrive as JSON
+  // from a repo that never ran tsc, so the check stays.
   const unknown = modeProbes.filter((name) => !k[name]);
   if (unknown.length) {
-    throw new Error(
-      `unknown NVDA keyboard command(s) in modeProbes: ${unknown.join(", ")}`,
-    );
+    throw new Error(`unknown NVDA keyboard command(s) in modeProbes: ${unknown.join(", ")}`);
   }
 
   let inDocument = false;
@@ -105,7 +117,7 @@ async function ensureReadyToNavigate(
       await nvda.perform(k[probe]);
       const heard = await speech.heard();
       seen.push(`browse mode attempt ${attempt}, ${probe}: ${heard}`);
-      if (heard !== "(silence)") {
+      if (heard !== SILENCE) {
         await nvda.press("Control+Home");
         await delay(500);
         await speech.discard();
@@ -117,5 +129,3 @@ async function ensureReadyToNavigate(
   }
   return { ok: false, seen };
 }
-
-module.exports = { MODE_PROBES, ensureReadyToNavigate };

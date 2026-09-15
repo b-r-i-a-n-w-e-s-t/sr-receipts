@@ -2,21 +2,26 @@
  * Scenarios: what to ask a target, authored as data rather than welded into the
  * harness.
  *
- * Until now the sequence lived inside `runner.cjs`, so a repo that wanted to ask
- * a different question had to fork the runner — and with it the guards, the
- * timings and the lifecycle it had no interest in changing. A scenario is now a
- * file: this repo ships some under `scenarios/`, and a consuming repo can point
- * the rig at its own.
+ * The sequence used to live inside the runner, so a repo that wanted to ask a
+ * different question had to fork it — and with it the guards, the timings and
+ * the lifecycle it had no interest in changing. A scenario is now a file: this
+ * repo ships some under `scenarios/`, and a consuming repo can point the rig at
+ * its own.
+ *
+ * The authoring format is described by the `Scenario` type in `lib/types.ts`,
+ * which is where a reader should start: in TypeScript a misspelled command name
+ * or matcher no longer compiles. Everything validated here is validated because
+ * a scenario can also arrive as JSON, or from a repo that never ran tsc.
  *
  * ## Shape
  *
  *   {
  *     name: "column-list-table",
  *     description: "one line on what question this answers",
- *     modeProbes: ["moveToNextTable"],   // optional; see lib/guard.cjs
- *     window: { width: 1120, height: 1000 },  // optional; see lib/firefox.cjs
+ *     modeProbes: ["moveToNextTable"],        // optional; see lib/guard.ts
+ *     window: { width: 1120, height: 1000 },  // optional; see lib/firefox.ts
  *     steps: [ ... ],
- *     checks: [ ... ]                    // optional; see lib/expect.cjs
+ *     checks: [ ... ]                         // optional; see lib/expect.ts
  *   }
  *
  * ## Steps
@@ -28,11 +33,14 @@
  *   { label, perform: "moveToNextColumn" }      object
  *   { label, press: "ArrowDown" }
  *
- * The object form is the one that earns its keep, because it takes `repeat` and
- * `settle`:
+ * The object form is the one that earns its keep, because it takes `repeat`,
+ * `settle`, `expect` and `snapshot`:
  *
  *   { label: "ctrl+alt+right, move", perform: "moveToNextColumn", repeat: 11 }
  *   { label: "expand row 1", press: "Enter", settle: 1500 }
+ *   { label: "T table framing", perform: "moveToNextTable",
+ *     expect: { matches: "table, with \\d+ rows" } }
+ *   { label: "tab", press: "Tab", repeat: 8, snapshot: false }
  *
  * `repeat` expands to that many steps. The label is numbered: `{n}` is
  * substituted if present, otherwise the number is appended — so the two labels
@@ -44,67 +52,69 @@
  * re-renders. Most steps do not need it; NVDA has already answered by the time
  * `perform` resolves.
  *
- * Two more, both about judging the result rather than producing it:
- *
- *   { label: "T table framing", perform: "moveToNextTable",
- *     expect: { matches: "table, with \\d+ rows" } }
- *
- *   { label: "tab", press: "Tab", repeat: 8, snapshot: false }
- *
  * `expect` states what must be true of the announcement whatever the target —
  * exact wording belongs in a snapshot instead. `snapshot: false` records the
- * step but keeps it out of the snapshot, for a step whose exact wording is not
- * worth asserting. See lib/expect.cjs and lib/snapshot.cjs.
- *
- * ## Window size
- *
- * `window: { width, height }` sizes the browser before the target opens. It sits
- * uneasily beside the rule that a scenario knows nothing about the harness, and
- * it is here because for a responsive component the width is not environment but
- * premise: `column-list-overflow-header` asks about a column that only exists
- * below a breakpoint, so a run at the desktop's own width does not ask the
- * question at all. Omit it and the browser opens at whatever size it likes,
- * which is what every scenario did before this existed.
+ * step but keeps it out of the snapshot.
  */
-const { pathToFileURL } = require("node:url");
-const { readFileSync } = require("node:fs");
-const { extname, isAbsolute, join, resolve } = require("node:path");
-const { validateExpectation, validateCheck } = require("./expect.cjs");
+import { readFileSync } from "node:fs";
+import { extname, isAbsolute, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { validateCheck, validateExpectation } from "./expect.ts";
+import type {
+  AuthoredStep,
+  AuthoredStepObject,
+  Check,
+  CompiledScenario,
+  CompiledStep,
+  Expectations,
+  Scenario,
+  StepSpec,
+  WindowSize,
+} from "./types.ts";
 
-const SCENARIOS = join(__dirname, "..", "scenarios");
+export const SCENARIOS = join(import.meta.dirname, "..", "scenarios");
 
 /**
- * One compiled step. `settle` is omitted rather than set to undefined, so two
- * steps that mean the same thing compare equal — which matters once Phase 3
- * starts diffing compiled scenarios.
+ * One compiled step. Optional fields are omitted rather than set to undefined,
+ * so two steps that mean the same thing compare equal — which matters for
+ * diffing compiled scenarios.
  */
-const makeStep = (label, spec, extra = {}) => {
-  const step = { label, spec };
-  for (const [key, value] of Object.entries(extra)) {
-    if (value !== undefined) step[key] = value;
-  }
+const makeStep = (
+  label: string,
+  spec: StepSpec,
+  extra: {
+    settle?: number | undefined;
+    expect?: Expectations | undefined;
+    snapshot?: boolean | undefined;
+  } = {},
+): CompiledStep => {
+  const step: CompiledStep = { label, spec };
+  if (extra.settle !== undefined) step.settle = extra.settle;
+  if (extra.expect !== undefined) step.expect = extra.expect;
+  if (extra.snapshot !== undefined) step.snapshot = extra.snapshot;
   return step;
 };
 
-/** One authored step to one or more `{ label, spec, settle?, expect?, snapshot? }`. */
-function compileStep(step, index) {
+/** One authored step to one or more compiled steps. */
+export function compileStep(step: AuthoredStep, index: number): CompiledStep[] {
   const where = `step ${index + 1}`;
 
   if (typeof step === "string") return [makeStep(step, step)];
 
   if (Array.isArray(step)) {
-    const [label, spec] = step;
+    const [label, spec] = step as readonly [unknown, unknown];
     if (typeof label !== "string" || typeof spec !== "string") {
       throw new Error(`${where}: a tuple step must be ["label", "perform:x"|"press:y"]`);
     }
-    return [makeStep(label, spec)];
+    return [makeStep(label, spec as StepSpec)];
   }
 
   if (typeof step !== "object" || step === null) {
     throw new Error(`${where}: expected a string, a tuple or an object, got ${typeof step}`);
   }
 
-  const { label, perform, press, repeat = 1, settle, expect, snapshot } = step;
+  const { label, perform, press, repeat = 1, settle, expect, snapshot } =
+    step as AuthoredStepObject;
   if ((perform === undefined) === (press === undefined)) {
     throw new Error(`${where}: an object step needs exactly one of "perform" or "press"`);
   }
@@ -119,7 +129,7 @@ function compileStep(step, index) {
   }
   validateExpectation(expect, where);
 
-  const spec = perform !== undefined ? `perform:${perform}` : `press:${press}`;
+  const spec = (perform !== undefined ? `perform:${perform}` : `press:${press}`) as StepSpec;
   const base = label ?? spec;
   const extra = { settle, expect, snapshot };
 
@@ -142,14 +152,14 @@ function compileStep(step, index) {
  * so a typo costs a second on the host rather than a four-minute run that
  * silently measures the wrong width.
  */
-function validateWindow(window, source) {
+export function validateWindow(window: unknown, source: string): void {
   if (window === undefined) return;
   if (typeof window !== "object" || window === null || Array.isArray(window)) {
     throw new Error(`${source}: "window" must be { width, height }`);
   }
-  for (const key of ["width", "height"]) {
-    const value = window[key];
-    if (!Number.isInteger(value) || value < 1) {
+  for (const key of ["width", "height"] as const) {
+    const value = (window as Record<string, unknown>)[key];
+    if (!Number.isInteger(value) || (value as number) < 1) {
       throw new Error(`${source}: "window.${key}" must be a positive integer, got ${value}`);
     }
   }
@@ -160,76 +170,80 @@ function validateWindow(window, source) {
  * a malformed scenario in a consuming repo is caught by `npm test` rather than
  * three minutes into a run on the guest desktop.
  */
-function compileScenario(scenario, source = "scenario") {
+export function compileScenario(scenario: unknown, source = "scenario"): CompiledScenario {
   if (typeof scenario !== "object" || scenario === null) {
     throw new Error(`${source}: expected an object, got ${typeof scenario}`);
   }
-  if (!Array.isArray(scenario.steps) || scenario.steps.length === 0) {
+  const candidate = scenario as Scenario;
+
+  if (!Array.isArray(candidate.steps) || candidate.steps.length === 0) {
     throw new Error(`${source}: needs a non-empty "steps" array`);
   }
-  if (scenario.modeProbes !== undefined && !Array.isArray(scenario.modeProbes)) {
+  if (candidate.modeProbes !== undefined && !Array.isArray(candidate.modeProbes)) {
     throw new Error(`${source}: "modeProbes" must be an array of command names`);
   }
-  if (scenario.checks !== undefined && !Array.isArray(scenario.checks)) {
+  if (candidate.checks !== undefined && !Array.isArray(candidate.checks)) {
     throw new Error(`${source}: "checks" must be an array`);
   }
-  validateWindow(scenario.window, source);
+  validateWindow(candidate.window, source);
 
-  const steps = scenario.steps.flatMap((step, i) => {
+  const steps = candidate.steps.flatMap((step, i) => {
     try {
       return compileStep(step, i);
     } catch (error) {
-      throw new Error(`${source}: ${error.message}`);
+      throw new Error(`${source}: ${(error as Error).message}`);
     }
   });
 
-  const checks = scenario.checks ?? [];
+  const checks: Check[] = candidate.checks ?? [];
   checks.forEach((check, i) => validateCheck(check, `${source}: check ${i + 1}`));
 
-  return {
-    name: scenario.name ?? source,
-    description: scenario.description ?? "",
-    modeProbes: scenario.modeProbes,
-    window: scenario.window,
+  const compiled: CompiledScenario = {
+    name: candidate.name ?? source,
+    description: candidate.description ?? "",
     steps,
     checks,
   };
+  if (candidate.modeProbes !== undefined) compiled.modeProbes = candidate.modeProbes;
+  if (candidate.window !== undefined) compiled.window = candidate.window as WindowSize;
+  return compiled;
 }
 
 /**
  * Load a scenario by name or path.
  *
- * A bare name resolves to `scenarios/<name>.cjs` in this repo. Anything with a
+ * A bare name resolves to `scenarios/<name>.ts` in this repo. Anything with a
  * path separator or an extension is resolved against the current directory,
  * which is how a consuming repo points the rig at its own file:
  *
- *   node runner.cjs --scenario ./a11y/scenarios/data-table.mjs
+ *   node runner.ts --scenario ./a11y/scenarios/data-table.ts
  *
  * `.json` is read and parsed; everything else goes through dynamic `import`,
- * which handles `.cjs`, `.js` and `.mjs` alike and hands back `default` when the
- * file has one.
+ * which handles `.ts`, `.mts`, `.mjs`, `.cjs` and `.js` alike — Node strips
+ * types from an imported `.ts` the same way it does for an entry point — and
+ * hands back `default` when the file has one.
  */
-async function loadScenario(ref) {
+export async function loadScenario(ref: string): Promise<CompiledScenario> {
   const looksLikePath = /[\\/]/.test(ref) || extname(ref) !== "";
   const path = looksLikePath
     ? isAbsolute(ref)
       ? ref
       : resolve(process.cwd(), ref)
-    : join(SCENARIOS, `${ref}.cjs`);
+    : join(SCENARIOS, `${ref}.ts`);
 
-  let loaded;
+  let loaded: unknown;
   try {
     if (extname(path) === ".json") {
       loaded = JSON.parse(readFileSync(path, "utf8"));
     } else {
-      const module = await import(pathToFileURL(path).href);
+      const module = (await import(pathToFileURL(path).href)) as { default?: unknown };
       loaded = module.default ?? module;
     }
   } catch (error) {
-    throw new Error(`could not load scenario ${JSON.stringify(ref)} from ${path}: ${error.message}`);
+    throw new Error(
+      `could not load scenario ${JSON.stringify(ref)} from ${path}: ${(error as Error).message}`,
+    );
   }
 
   return compileScenario(loaded, ref);
 }
-
-module.exports = { SCENARIOS, compileStep, compileScenario, validateWindow, loadScenario };

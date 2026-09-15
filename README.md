@@ -165,6 +165,48 @@ A missing snapshot is a baseline, not a failure: the first run of a new target
 records one and passes. Mark a step `snapshot: false` to record it without
 asserting it.
 
+## When something steals the foreground
+
+The focus guard runs once, before the sequence. It used to be the only check,
+which meant that if another window took the foreground mid-run, the rig sent the
+rest of the scenario into it. Quick-navigation commands are bare letters, so
+`T`, `H` and `D` were typed in as text: one run filled the Windows Search box
+with `ttttddddddddhhhhhhhhhhhh` and recorded 45 steps of the desktop as though
+they were the page under test. The culprit was a Windows Update "Select a time
+to restart" dialog.
+
+The sequence now re-checks focus every `FOCUS_CHECK_EVERY` steps (5), and on the
+last step regardless, so the tail of a transcript is known-good rather than
+assumed-good. The check is `reportTitle` — NVDA+T, which NVDA intercepts
+globally — so it reports whatever has the foreground without typing anything
+into it, and the transcript names the culprit:
+
+```
+### FOCUS LOST after step 10
+  Select a time to restart had the foreground.
+  The remaining 39 step(s) were not run.
+```
+
+Three consequences worth knowing:
+
+- **The sequence stops rather than recovering.** Even if focus were won back,
+  the caret position the rest of the sequence depends on is gone. The next
+  target gets a fresh launch and a fresh guard, which is the real recovery.
+- **Snapshot comparison is skipped**, and no baseline is written. A truncated run
+  would otherwise report every remaining step as removed — 49 diffs burying the
+  one line that explains them.
+- **The bound is `every`, not zero.** Detection happens after a step, so up to
+  five keystrokes can still reach the wrong window. That is harmless for
+  navigation keys; a scenario that sends activating keys like `Enter` should pass
+  a smaller interval.
+
+If runs keep failing this way, check for a pending update reboot — it raises a
+dialog that will take the foreground again and again until you restart:
+
+```bash
+powershell -NoProfile -Command "Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'"
+```
+
 Exit codes: **0** all requests passed, **1** at least one failed, **2** the run
 itself broke. The distinction matters to CI — `1` is a finding, `2` is an
 unanswered question. Machine-readable results land in

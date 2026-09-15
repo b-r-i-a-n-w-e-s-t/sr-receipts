@@ -24,17 +24,32 @@ export interface JudgeInput {
   scenario: CompiledScenario;
   steps: readonly StepResult[];
   comparison: SnapshotComparison | null;
+  /** What had the foreground instead, when focus was lost mid-sequence. */
+  focusLost?: string | undefined;
+  focusLostAfter?: number | undefined;
 }
 
 /**
  * Judge a completed run.
  *
- * A run fails if the guards never got it to the page, if any step's `expect`
- * does not hold, if any scenario `check` does not hold, or if a saved snapshot
- * differs. A missing snapshot is not a failure — it is recorded and reported, so
- * the first run of a new target produces a baseline rather than a red build.
+ * A run fails if the guards never got it to the page, if focus left the page
+ * mid-sequence, if any step's `expect` does not hold, if any scenario `check`
+ * does not hold, or if a saved snapshot differs. A missing snapshot is not a
+ * failure — it is recorded and reported, so the first run of a new target
+ * produces a baseline rather than a red build.
+ *
+ * Losing focus and never reaching the page are the same kind of answer: the
+ * question was not asked, rather than asked and answered wrongly. Both read
+ * that way in the verdict.
  */
-export function judge({ opened, scenario, steps, comparison }: JudgeInput): Verdict {
+export function judge({
+  opened,
+  scenario,
+  steps,
+  comparison,
+  focusLost,
+  focusLostAfter,
+}: JudgeInput): Verdict {
   const assertions = steps.flatMap((step) => {
     const failures = evaluate(step.heard, step.expect);
     return failures.length === 0 ? [] : [{ label: step.label, spec: step.spec, failures }];
@@ -45,6 +60,11 @@ export function judge({ opened, scenario, steps, comparison }: JudgeInput): Verd
 
   const reasons: string[] = [];
   if (!opened.ok) reasons.push("never reached the page in a navigable state");
+  if (focusLost) {
+    reasons.push(
+      `focus left the page after step ${focusLostAfter} (${focusLost} had the foreground)`,
+    );
+  }
   if (assertions.length) {
     reasons.push(`${assertions.length} step expectation(s) failed`);
   }
@@ -140,6 +160,8 @@ export interface TranscriptInput extends JudgeInput {
   request: Pick<RunRequest, "target">;
   stamp: string[];
   verdict: Verdict;
+  /** How many steps the scenario had, so a truncated run can say what it skipped. */
+  plannedSteps?: number | undefined;
 }
 
 /** The whole transcript: verdict, provenance, guard diagnostics, announcements. */
@@ -151,6 +173,9 @@ export function formatTranscript({
   steps,
   verdict,
   comparison,
+  focusLost,
+  focusLostAfter,
+  plannedSteps,
 }: TranscriptInput): string {
   const lines = [
     `# ${request.target}`,
@@ -177,6 +202,28 @@ export function formatTranscript({
     }
   }
 
+  if (focusLost) {
+    const skipped = (plannedSteps ?? steps.length) - steps.length;
+    lines.push(
+      `### FOCUS LOST after step ${focusLostAfter}`,
+      `  ${focusLost} had the foreground.`,
+      skipped > 0
+        ? `  The remaining ${skipped} step(s) were not run.`
+        : "  The sequence had already finished, so no steps were skipped — but",
+      ...(skipped > 0
+        ? []
+        : ["  the announcements near the end of it may describe the wrong window."]),
+      "",
+      "  Quick-navigation commands are bare letters, so sending them to another",
+      "  window types them in as text rather than navigating. The sequence stops",
+      "  instead of doing that.",
+      "",
+      "  Snapshot comparison was skipped: a truncated run would report every",
+      "  remaining step as removed and bury this.",
+      "",
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -192,6 +239,7 @@ export function toResult({
   steps,
   verdict,
   comparison,
+  focusLost,
   transcriptFile,
 }: ToResultInput): RunResult {
   return {
@@ -210,5 +258,6 @@ export function toResult({
     snapshot: comparison
       ? { status: comparison.status, differences: comparison.differences.length }
       : { status: "not compared", differences: 0 },
+    focusLost: focusLost ?? null,
   };
 }

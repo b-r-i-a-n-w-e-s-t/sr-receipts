@@ -16,7 +16,7 @@ import { FIREFOX, ensureProfile, launch } from "./firefox.ts";
 import { SpeechLog } from "./speech.ts";
 import { ensureReadyToNavigate } from "./guard.ts";
 import { resolveTarget } from "./target.ts";
-import type { NvdaCommand, OpenResult, WindowSize } from "./types.ts";
+import type { FocusWatch, NvdaCommand, OpenResult, WindowSize } from "./types.ts";
 
 /**
  * `capture: true` keeps whole announcements; the default `"initial"` truncates
@@ -61,6 +61,42 @@ async function focusedTitle(speech: SpeechLog): Promise<string> {
   await speech.discard();
   await nvda.perform(nvda.keyboardCommands.reportTitle);
   return await speech.heard();
+}
+
+/**
+ * How many steps between mid-run focus checks.
+ *
+ * Each check costs one NVDA round trip, so this trades a little run time for a
+ * bound on how much damage a stolen foreground can do: at most this many
+ * keystrokes reach the wrong window before the sequence stops. Five keeps a
+ * 62-step scenario to a dozen extra round trips.
+ */
+export const FOCUS_CHECK_EVERY = 5;
+
+/**
+ * A mid-run check that keystrokes are still reaching the browser.
+ *
+ * Safe to call with focus already lost, which is the whole point:
+ * `reportTitle` is NVDA+T, and NVDA intercepts its own modified keys globally
+ * rather than passing them to the foreground window. So this reports whatever
+ * currently has the foreground without typing anything into it — unlike the
+ * bare letters a quick-navigation command sends.
+ *
+ * Returns the offending window title, which usually names the culprit outright
+ * ("Select a time to restart"), so a transcript says what went wrong rather
+ * than only that something did.
+ */
+export function watchFocus(
+  speech: SpeechLog,
+  { every = FOCUS_CHECK_EVERY }: { every?: number | undefined } = {},
+): FocusWatch {
+  return {
+    every,
+    async check() {
+      const title = await focusedTitle(speech);
+      return /Mozilla Firefox/i.test(title) ? null : title;
+    },
+  };
 }
 
 export interface OpenTargetOptions {

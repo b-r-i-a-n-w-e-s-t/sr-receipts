@@ -48,6 +48,7 @@ import {
   toResult,
   toSnapshot,
   validateSteps,
+  watchFocus,
   writeSnapshot,
   type CompiledScenario,
   type RunReport,
@@ -120,11 +121,15 @@ async function runRequest(
 
   // A run that never reached the page has no announcements to judge, but still
   // produces a transcript — the guard diagnostics in it are the whole diagnosis.
-  const steps = opened.ok
+  const { steps, focusLost, focusLostAfter } = opened.ok
     ? await runSteps(nvda, speech, scenario.steps, {
         log: (line) => console.log(`${request.target} :: ${line}`),
+        // Re-check every few steps that the keystrokes are still reaching the
+        // page, so a stolen foreground stops the sequence instead of typing the
+        // rest of it into somebody else's window.
+        watch: watchFocus(speech),
       })
-    : [];
+    : { steps: [] };
 
   const environment = stamp();
   const fresh = toSnapshot({
@@ -136,9 +141,11 @@ async function runRequest(
   });
 
   const path = snapshotPath(opened.target.slug, scenario.name);
-  // Comparing a run that never reached the page against a saved snapshot would
-  // report every step as removed, which buries the one thing that went wrong.
-  const comparison = opened.ok ? compareSnapshot(fresh, readSnapshot(path)) : null;
+  // Comparing a run that never reached the page — or lost it part way — against
+  // a saved snapshot would report every remaining step as removed, which buries
+  // the one thing that actually went wrong. Leaving `comparison` null also stops
+  // a truncated run being written out as a new baseline.
+  const comparison = opened.ok && !focusLost ? compareSnapshot(fresh, readSnapshot(path)) : null;
 
   if (comparison && (updateSnapshots || comparison.status === "new")) {
     writeSnapshot(path, fresh);
@@ -150,7 +157,7 @@ async function runRequest(
   // An explicit --update-snapshots means the operator has accepted this run, so
   // differences must not also fail it.
   const judged = updateSnapshots ? null : comparison;
-  const verdict = judge({ opened, scenario, steps, comparison: judged });
+  const verdict = judge({ opened, scenario, steps, comparison: judged, focusLost, focusLostAfter });
 
   const transcriptFile = `${opened.target.slug}--${slugify(scenario.name)}.txt`;
   writeFileSync(
@@ -163,6 +170,9 @@ async function runRequest(
       steps,
       verdict,
       comparison: judged,
+      focusLost,
+      focusLostAfter,
+      plannedSteps: scenario.steps.length,
     }),
     "utf8",
   );
@@ -179,6 +189,7 @@ async function runRequest(
     steps,
     verdict,
     comparison: judged,
+    focusLost,
     transcriptFile,
   });
 }

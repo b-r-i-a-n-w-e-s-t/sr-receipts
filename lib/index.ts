@@ -50,8 +50,10 @@ export {
 } from "./report.ts";
 export {
   NVDA_OPTIONS,
+  FOCUS_CHECK_EVERY,
   startSession,
   stopSession,
+  watchFocus,
   openTarget,
   type Session,
   type OpenTargetOptions,

@@ -14,8 +14,10 @@ import type { SpeechLog } from "./speech.ts";
 import type {
   AuthoredStep,
   CompiledStep,
+  FocusWatch,
   NvdaCommand,
   NvdaDriver,
+  RunStepsResult,
   StepAction,
   StepResult,
   StepSpec,
@@ -83,7 +85,13 @@ export function validateSteps(
 }
 
 export interface RunStepsOptions {
-  log?: (line: string) => void;
+  log?: ((line: string) => void) | undefined;
+  /**
+   * Re-check every few steps that the keystrokes are still reaching the target.
+   * Omit it and the sequence runs blind, which is what it did before this
+   * existed — see `FocusWatch` for what that cost.
+   */
+  watch?: FocusWatch | undefined;
 }
 
 /**
@@ -93,15 +101,23 @@ export interface RunStepsOptions {
  * command should not discard the fifty announcements either side of it. Its
  * `heard` is the error text, so a downstream expectation on that step fails
  * rather than silently passing on an empty string.
+ *
+ * Losing focus is the opposite case and stops the sequence dead. Once another
+ * window has the foreground, every remaining keystroke lands in it rather than
+ * in the page, so continuing would both record meaningless steps and type
+ * quick-navigation letters into a window that is not ours. There is no useful
+ * recovery either: even if focus were won back, the caret position the rest of
+ * the sequence depends on is gone. The next target gets a fresh launch and a
+ * fresh guard, which is the real recovery.
  */
 export async function runSteps(
   nvda: NvdaDriver,
   speech: SpeechLog,
   steps: readonly CompiledStep[],
-  { log }: RunStepsOptions = {},
-): Promise<StepResult[]> {
+  { log, watch }: RunStepsOptions = {},
+): Promise<RunStepsResult> {
   const results: StepResult[] = [];
-  for (const step of steps) {
+  for (const [index, step] of steps.entries()) {
     const { label, spec, settle, expect, snapshot } = step;
     const shown = typeof spec === "string" ? `${label} [${spec}]` : label;
     try {
@@ -132,6 +148,17 @@ export async function runSteps(
       });
       log?.(`${shown} :: ERROR ${message}`);
     }
+
+    // Always check the final step too, so the tail of a transcript is known to
+    // be trustworthy rather than merely assumed to be.
+    const done = index + 1;
+    if (watch && (done % watch.every === 0 || done === steps.length)) {
+      const thief = await watch.check();
+      if (thief !== null) {
+        log?.(`FOCUS LOST after step ${done}: ${thief}`);
+        return { steps: results, focusLost: thief, focusLostAfter: done };
+      }
+    }
   }
-  return results;
+  return { steps: results };
 }

@@ -21,6 +21,7 @@ import {
   runSteps,
   startSession,
   stopSession,
+  watchFocus,
   windowList,
   type AuthoredStep,
   type CompiledScenario,
@@ -66,14 +67,22 @@ try {
       "",
     );
   } else {
-    const steps = await runSteps(nvda, speech, scenario.steps, {
+    const { steps, focusLost, focusLostAfter } = await runSteps(nvda, speech, scenario.steps, {
       log: (line) => console.log(line),
+      watch: watchFocus(speech),
     });
     // The probe stays deliberately unjudged: it is for finding out what a target
     // says, not for asserting it. Expectations and snapshots belong to the
     // runner, once a sequence is worth keeping.
     for (const step of steps) {
       out.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
+    }
+    if (focusLost) {
+      out.push(
+        `### FOCUS LOST after step ${focusLostAfter}`,
+        `  ${focusLost} had the foreground; the rest of the probe was not run.`,
+        "",
+      );
     }
   }
 } catch (error) {

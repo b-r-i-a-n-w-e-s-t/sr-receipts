@@ -269,6 +269,8 @@ export interface RunResult {
   failedExpectations: FailedExpectation[];
   checks: CheckResult[];
   snapshot: { status: SnapshotStatus | "not compared"; differences: number };
+  /** What had the foreground instead, when focus was lost mid-run. */
+  focusLost: string | null;
 }
 
 /** `runs/<runId>/results.json`. */
@@ -310,4 +312,34 @@ export interface NvdaDriver {
   readonly keyboardCommands: Record<NvdaCommand, unknown>;
   perform(command: unknown): unknown;
   press(key: string): unknown;
+}
+
+/**
+ * A mid-run check that keystrokes are still reaching the target.
+ *
+ * The focus guard runs once, before the sequence. Nothing used to re-check it,
+ * so when something stole the foreground mid-run — a Windows Update restart
+ * dialog, in the case that prompted this — the rig sent the rest of the
+ * scenario into whatever had focus. Because NVDA's quick-navigation commands
+ * are bare letters, `T` and `H` and `D` were typed in as text: one run filled
+ * the Windows Search box with "ttttddddddddhhhhhhhhhhhh" and recorded 45 steps
+ * of the desktop as though they were the page under test.
+ */
+export interface FocusWatch {
+  /** Steps between checks. The last step is always checked. */
+  every: number;
+  /** `null` while focus is still on the target; otherwise what has it instead. */
+  check(): Promise<string | null>;
+}
+
+/** What a sequence produced, and whether it got to finish. */
+export interface RunStepsResult {
+  steps: StepResult[];
+  /**
+   * Set when focus left the target mid-sequence; names what had it instead.
+   * Any remaining steps were deliberately not run.
+   */
+  focusLost?: string;
+  /** How many steps had run when focus was found to be gone. */
+  focusLostAfter?: number;
 }

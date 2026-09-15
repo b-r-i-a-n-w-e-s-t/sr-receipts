@@ -23,6 +23,7 @@ import {
   stamp,
   startSession,
   stopSession,
+  watchFocus,
   type CompiledStep,
 } from "./lib/index.ts";
 
@@ -48,8 +49,9 @@ try {
   out.push(opened.target.provenance, "", ...opened.lines);
 
   if (opened.ok) {
-    const steps = await runSteps(nvda, speech, STEPS, {
+    const { steps, focusLost } = await runSteps(nvda, speech, STEPS, {
       log: (line) => console.log(line),
+      watch: watchFocus(speech),
     });
     for (const step of steps) {
       out.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
@@ -57,7 +59,12 @@ try {
     // The smoke test asserts only that the rig works: NVDA started, the page
     // was reached, and quick navigation answered. What it answered *with* is
     // the runner's business.
-    ok = steps.every((step) => !step.error) && steps.some((step) => step.heard !== SILENCE);
+    ok =
+      !focusLost &&
+      steps.length === STEPS.length &&
+      steps.every((step) => !step.error) &&
+      steps.some((step) => step.heard !== SILENCE);
+    if (focusLost) out.push("### FOCUS LOST", `  ${focusLost} had the foreground.`, "");
   }
 } catch (error) {
   const failure = error as Error;

@@ -98,6 +98,7 @@ function readQueue({ override, inline }) {
 async function runRequest(nvda, speech, request, scenario, outDir, { updateSnapshots }) {
   const opened = await openTarget(speech, request.target, {
     modeProbes: scenario.modeProbes,
+    window: scenario.window,
   });
 
   // A run that never reached the page has no announcements to judge, but still

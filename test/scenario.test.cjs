@@ -10,7 +10,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { join } = require("node:path");
 
-const { compileScenario, loadScenario } = require("../lib/scenario.cjs");
+const { readdirSync } = require("node:fs");
+
+const { SCENARIOS, compileScenario, loadScenario } = require("../lib/scenario.cjs");
 const { validateSteps, normalize } = require("../lib/steps.cjs");
 const { parseQueue, slugify, DEFAULT_SCENARIO } = require("../lib/target.cjs");
 
@@ -136,8 +138,15 @@ test("column-list-table still compiles to the sequence runner.cjs used to hold",
 test("every shipped scenario is runnable against the real command list", async () => {
   // The one check here that needs guidepup, though not a running NVDA: that
   // every command a shipped scenario names actually exists.
+  //
+  // Read from the directory rather than a list, so a scenario added tomorrow is
+  // covered without anyone remembering to add it here.
   const { nvda } = require("@guidepup/guidepup");
-  for (const name of ["column-list-table", "survey"]) {
+  const shipped = readdirSync(SCENARIOS)
+    .filter((file) => file.endsWith(".cjs"))
+    .map((file) => file.replace(/\.cjs$/, ""));
+  assert.ok(shipped.length >= 2, "expected the shipped scenarios to be found");
+  for (const name of shipped) {
     const compiled = await loadScenario(name);
     validateSteps(nvda, compiled.steps);
     for (const probe of compiled.modeProbes ?? []) {
@@ -208,4 +217,43 @@ test("a transcript name survives a URL target and a path-shaped scenario name", 
     assert.ok(name.length > 0);
   }
   assert.equal(slugify("!!!"), "unnamed");
+});
+
+test("a window size is optional, and survives compilation when given", async () => {
+  assert.equal(compileScenario({ steps: ["perform:reportTitle"] }).window, undefined);
+
+  const sized = compileScenario({
+    steps: ["perform:reportTitle"],
+    window: { width: 1120, height: 1000 },
+  });
+  assert.deepEqual(sized.window, { width: 1120, height: 1000 });
+});
+
+test("a malformed window size is rejected before NVDA starts", () => {
+  const bad = [
+    [{ width: 1120 }, /"window.height" must be a positive integer/],
+    [{ width: 0, height: 1000 }, /"window.width" must be a positive integer/],
+    [{ width: 1120.5, height: 1000 }, /"window.width" must be a positive integer/],
+    [[1120, 1000], /"window" must be \{ width, height \}/],
+    ["1120x1000", /"window" must be \{ width, height \}/],
+  ];
+  for (const [window, message] of bad) {
+    assert.throws(
+      () => compileScenario({ steps: ["perform:reportTitle"], window }, "sized"),
+      message,
+      `expected ${JSON.stringify(window)} to be rejected`,
+    );
+  }
+});
+
+test("column-list-overflow-header asks at a width where the column exists", async () => {
+  // The scenario measures a column that only renders below a breakpoint, so a
+  // width that drifted out of the 1000-1200px plateau would leave it silently
+  // measuring a table with no overflow column at all.
+  const compiled = await loadScenario("column-list-overflow-header");
+  assert.ok(compiled.window, "the scenario must size the window");
+  assert.ok(
+    compiled.window.width >= 1000 && compiled.window.width <= 1200,
+    `width ${compiled.window.width} is outside the plateau where columns overflow`,
+  );
 });

@@ -11,7 +11,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+const { existsSync, mkdirSync, readFileSync } = require("node:fs");
+
 const { parseQueue, resolveTarget, SETTLE } = require("../lib/target.cjs");
+const { PROFILE, XULSTORE, writeWindowGeometry } = require("../lib/firefox.cjs");
 const { toAction } = require("../lib/steps.cjs");
 const { SpeechLog } = require("../lib/speech.cjs");
 
@@ -130,4 +133,30 @@ test("discard moves the cursor without reporting", async () => {
   const speech = new SpeechLog(fakeSpeechSource(["noise from launching firefox"], ["the answer"]));
   await speech.discard();
   assert.equal(await speech.heard(), "the answer");
+});
+
+test("a window size is written where Firefox reads it, and cleared when not asked for", () => {
+  // Firefox has no flag for window size; xulstore.json is where it persists the
+  // geometry. `sizemode: normal` is what stops it opening maximized and
+  // ignoring the width entirely.
+  mkdirSync(PROFILE, { recursive: true });
+
+  writeWindowGeometry({ width: 1120, height: 1000 });
+  const stored = JSON.parse(readFileSync(XULSTORE, "utf8"));
+  const main = stored["chrome://browser/content/browser.xhtml"]["main-window"];
+  assert.deepEqual(main, {
+    screenX: "0",
+    screenY: "0",
+    width: "1120",
+    height: "1000",
+    sizemode: "normal",
+  });
+
+  // Every launch writes this, so a narrow scenario must not leave its width
+  // behind for the next target in the queue.
+  writeWindowGeometry(undefined);
+  assert.equal(existsSync(XULSTORE), false);
+
+  // And clearing an already-clear profile is not an error.
+  writeWindowGeometry(undefined);
 });

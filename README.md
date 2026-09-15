@@ -94,6 +94,12 @@ export default {
 - `modeProbes` tells the guard how to prove browse mode on this kind of page.
   Default is table → heading → landmark, so a page with any of those works
   untouched.
+- `window: { width, height }` sizes the browser before the target opens, for a
+  responsive component whose question only exists at a particular width. Firefox
+  has no flag for this (`--window-size` sizes a *screenshot*, and `-width` /
+  `-height` are gone), so the rig writes `xulstore.json` into the hermetic
+  profile, which is where Firefox persists window geometry. Omit it and the
+  browser opens at whatever size it likes, as every run did before this existed.
 
 Point the rig at one by name or path:
 
@@ -106,7 +112,9 @@ Scenarios are validated structurally by `npm test` and their command names are
 checked before NVDA opens the first target, so a typo costs a second rather than
 a three-minute run ending in silences that read exactly like real ones.
 
-Two ship with the rig: `column-list-table` (this rig's current investigation) and
+Four ship with the rig: `column-list-table` (this rig's current investigation),
+`column-list-header-naming` and `column-list-overflow-header` (Q4 of that
+investigation, the second of which is the one that sizes its window), and
 `survey`, which assumes nothing about the page and is the one to point at a
 component you have not tested before.
 

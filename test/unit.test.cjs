@@ -15,15 +15,17 @@ const { parseQueue, resolveTarget, SETTLE } = require("../lib/target.cjs");
 const { toAction } = require("../lib/steps.cjs");
 const { SpeechLog } = require("../lib/speech.cjs");
 
+const targets = (requests) => requests.map((r) => r.target);
+
 test("parseQueue skips blanks and comments", () => {
   const queue = parseQueue(
     ["# a comment", "", "control.html", "   ", "  # indented comment", "https://x/y"].join("\n"),
   );
-  assert.deepEqual(queue, ["control.html", "https://x/y"]);
+  assert.deepEqual(targets(queue), ["control.html", "https://x/y"]);
 });
 
 test("parseQueue handles CRLF, which is what an editor in the guest writes", () => {
-  assert.deepEqual(parseQueue("a.html\r\nb.html\r\n"), ["a.html", "b.html"]);
+  assert.deepEqual(targets(parseQueue("a.html\r\nb.html\r\n")), ["a.html", "b.html"]);
 });
 
 test("resolveTarget passes a URL through and settles longer for it", () => {

@@ -1,0 +1,211 @@
+/**
+ * The scenario layer: authoring format, compilation, loading, and the shipped
+ * scenarios themselves.
+ *
+ * None of this needs NVDA, which is the point — a consuming repo's scenario is
+ * validated by `npm test` on the host rather than three minutes into a run on
+ * the guest desktop.
+ */
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { join } = require("node:path");
+
+const { compileScenario, loadScenario } = require("../lib/scenario.cjs");
+const { validateSteps, normalize } = require("../lib/steps.cjs");
+const { parseQueue, slugify, DEFAULT_SCENARIO } = require("../lib/target.cjs");
+
+const labels = (compiled) => compiled.steps.map((s) => s.label);
+const specs = (compiled) => compiled.steps.map((s) => s.spec);
+
+test("the three authoring forms compile to the same step", () => {
+  const forms = [
+    { steps: ["perform:reportTitle"] },
+    { steps: [["perform:reportTitle", "perform:reportTitle"]] },
+    { steps: [{ label: "perform:reportTitle", perform: "reportTitle" }] },
+  ];
+  for (const form of forms) {
+    const compiled = compileScenario(form);
+    assert.deepEqual(compiled.steps, [
+      { label: "perform:reportTitle", spec: "perform:reportTitle" },
+    ]);
+  }
+});
+
+test("repeat numbers labels by appending", () => {
+  const compiled = compileScenario({
+    steps: [{ label: "tab", press: "Tab", repeat: 3 }],
+  });
+  assert.deepEqual(labels(compiled), ["tab 1", "tab 2", "tab 3"]);
+  assert.deepEqual(specs(compiled), ["press:Tab", "press:Tab", "press:Tab"]);
+});
+
+test("repeat substitutes {n} when the label says where the number goes", () => {
+  const compiled = compileScenario({
+    steps: [{ label: "ctrl+alt+down, row +{n}", perform: "moveToNextRow", repeat: 3 }],
+  });
+  assert.deepEqual(labels(compiled), [
+    "ctrl+alt+down, row +1",
+    "ctrl+alt+down, row +2",
+    "ctrl+alt+down, row +3",
+  ]);
+});
+
+test("repeat of 1 does not number the label", () => {
+  const compiled = compileScenario({ steps: [{ label: "tab", press: "Tab" }] });
+  assert.deepEqual(labels(compiled), ["tab"]);
+});
+
+test("settle rides along on every expanded step", () => {
+  const compiled = compileScenario({
+    steps: [{ label: "expand", press: "Enter", repeat: 2, settle: 1500 }],
+  });
+  assert.deepEqual(compiled.steps.map((s) => s.settle), [1500, 1500]);
+});
+
+test("a malformed scenario is rejected, naming the step", () => {
+  const cases = [
+    [{ steps: [] }, /non-empty "steps"/],
+    [{ steps: [{ label: "x" }] }, /exactly one of "perform" or "press"/],
+    [{ steps: [{ perform: "a", press: "b" }] }, /exactly one of "perform" or "press"/],
+    [{ steps: [{ press: "Tab", repeat: 0 }] }, /"repeat" must be a positive integer/],
+    [{ steps: [{ press: "Tab", repeat: 2.5 }] }, /"repeat" must be a positive integer/],
+    [{ steps: [{ press: "Tab", settle: -1 }] }, /"settle" must be a non-negative/],
+    [{ steps: [42] }, /expected a string, a tuple or an object/],
+    [{ steps: [["only-a-label"]] }, /tuple step must be/],
+    [{ steps: ["perform:x"], modeProbes: "moveToNextTable" }, /"modeProbes" must be an array/],
+  ];
+  for (const [scenario, expected] of cases) {
+    assert.throws(() => compileScenario(scenario, "under-test"), expected);
+  }
+});
+
+test("the error names the file and the step number", () => {
+  assert.throws(
+    () => compileScenario({ steps: ["perform:ok", { label: "bad" }] }, "my-scenario.mjs"),
+    /my-scenario\.mjs: step 2/,
+  );
+});
+
+test("loadScenario resolves a bare name against scenarios/", async () => {
+  const compiled = await loadScenario("survey");
+  assert.equal(compiled.name, "survey");
+  assert.ok(compiled.steps.length > 0);
+});
+
+test("loadScenario resolves a path, which is how a consuming repo brings its own", async () => {
+  const path = join(__dirname, "..", "scenarios", "column-list-table.cjs");
+  const compiled = await loadScenario(path);
+  assert.equal(compiled.name, "column-list-table");
+});
+
+test("loadScenario explains itself when the file is not there", async () => {
+  await assert.rejects(
+    loadScenario("./nope/missing.cjs"),
+    /could not load scenario "\.\/nope\/missing\.cjs"/,
+  );
+});
+
+/**
+ * The exact sequence runner.cjs ran before Phase 2, transcribed from the last
+ * pre-Phase-2 transcript. If the extracted scenario ever stops producing this,
+ * transcripts stop being comparable across the refactor.
+ */
+const PRE_PHASE_2_LABELS = [
+  "title bar",
+  "focus and mode",
+  "T table framing",
+  "T again",
+  "shift+T back",
+  "arrow down to enter the table",
+  "ctrl+alt+down to first data row",
+  ...Array.from({ length: 11 }, (_, i) => `ctrl+alt+right, move ${i + 1}`),
+  ...Array.from({ length: 3 }, (_, i) => `ctrl+alt+down, row +${i + 1}`),
+  "ctrl+alt+left, back one cell",
+  "ctrl+home to top",
+  "T table framing, repeat",
+  ...Array.from({ length: 30 }, (_, i) => `arrow down, line ${i + 1}`),
+  ...Array.from({ length: 8 }, (_, i) => `tab ${i + 1}`),
+];
+
+test("column-list-table still compiles to the sequence runner.cjs used to hold", async () => {
+  const compiled = await loadScenario("column-list-table");
+  assert.deepEqual(labels(compiled), PRE_PHASE_2_LABELS);
+  assert.equal(compiled.steps.length, 62);
+});
+
+test("every shipped scenario is runnable against the real command list", async () => {
+  // The one check here that needs guidepup, though not a running NVDA: that
+  // every command a shipped scenario names actually exists.
+  const { nvda } = require("@guidepup/guidepup");
+  for (const name of ["column-list-table", "survey"]) {
+    const compiled = await loadScenario(name);
+    validateSteps(nvda, compiled.steps);
+    for (const probe of compiled.modeProbes ?? []) {
+      assert.ok(nvda.keyboardCommands[probe], `${name}: unknown modeProbe ${probe}`);
+    }
+  }
+});
+
+test("validateSteps reports every bad step at once, not just the first", () => {
+  const nvda = { keyboardCommands: { reportTitle: Symbol("t") } };
+  assert.throws(
+    () =>
+      validateSteps(nvda, [
+        { label: "fine", spec: "perform:reportTitle" },
+        { label: "typo", spec: "perform:moveToNextTabel" },
+        { label: "nonsense", spec: "moveToNextTable" },
+      ]),
+    (error) =>
+      /step 2 \(typo\)/.test(error.message) && /step 3 \(nonsense\)/.test(error.message),
+  );
+});
+
+test("normalize accepts what probe.json is written in", () => {
+  assert.deepEqual(normalize(["title bar", "perform:reportTitle"]), {
+    label: "title bar",
+    spec: "perform:reportTitle",
+  });
+});
+
+test("a queue line can name its scenario, and defaults when it does not", () => {
+  const requests = parseQueue(
+    [
+      "control.html",
+      "control.html :: survey",
+      "http://192.168.64.1:5173/docs/column-list :: ./a11y/table.mjs",
+    ].join("\n"),
+  );
+  assert.deepEqual(requests, [
+    { target: "control.html", scenario: DEFAULT_SCENARIO },
+    { target: "control.html", scenario: "survey" },
+    {
+      target: "http://192.168.64.1:5173/docs/column-list",
+      scenario: "./a11y/table.mjs",
+    },
+  ]);
+});
+
+test("the default scenario is overridable, which is what --scenario does", () => {
+  assert.deepEqual(parseQueue("control.html", { defaultScenario: "survey" }), [
+    { target: "control.html", scenario: "survey" },
+  ]);
+});
+
+test("a queue line with a scenario but no target is rejected", () => {
+  assert.throws(() => parseQueue(":: survey"), /names no target/);
+});
+
+test("a transcript name survives a URL target and a path-shaped scenario name", () => {
+  // Both halves of `<target>--<scenario>.txt` reach NTFS, and either can be a
+  // URL or a path. Neither may smuggle a separator or a reserved character in.
+  const names = [
+    slugify("http://192.168.64.1:5173/docs/column-list"),
+    slugify("./a11y/scenarios/data-table.mjs"),
+    slugify("column-list-table"),
+  ];
+  for (const name of names) {
+    assert.doesNotMatch(name, /[\\/:*?"<>|]/);
+    assert.ok(name.length > 0);
+  }
+  assert.equal(slugify("!!!"), "unnamed");
+});

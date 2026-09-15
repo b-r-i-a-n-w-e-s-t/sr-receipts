@@ -20,21 +20,38 @@ const {
   startSession,
   stopSession,
   openTarget,
+  compileScenario,
   runSteps,
   windowList,
 } = require("./lib/index.cjs");
 
 const RIG = __dirname;
 
+/**
+ * `probe.json` is either a bare array of `["label", "perform:x"]` tuples — the
+ * form it has always had — or a whole scenario object, which is how a probe gets
+ * at `repeat` and `modeProbes` without being promoted to a file in `scenarios/`
+ * first. Both compile to the same thing.
+ */
+function readProbe(raw) {
+  const parsed = JSON.parse(raw);
+  return compileScenario(
+    Array.isArray(parsed) ? { name: "probe", steps: parsed } : parsed,
+    "probe.json",
+  );
+}
+
 (async () => {
   const target = readFileSync(join(RIG, "probe-fixture.txt"), "utf8").trim();
-  const steps = JSON.parse(readFileSync(join(RIG, "probe.json"), "utf8"));
-  const out = [`# probe on ${target}`, ""];
+  const scenario = readProbe(readFileSync(join(RIG, "probe.json"), "utf8"));
+  const out = [`# probe on ${target}`, `# scenario: ${scenario.name}`, ""];
 
   try {
     const { nvda, speech } = await startSession();
 
-    const opened = await openTarget(speech, target);
+    const opened = await openTarget(speech, target, {
+      modeProbes: scenario.modeProbes,
+    });
     out.push(`# url: ${opened.target.url}`, opened.target.provenance, "");
 
     // What is actually on the screen, rather than what we assume is.
@@ -48,7 +65,7 @@ const RIG = __dirname;
         "",
       );
     } else {
-      await runSteps(nvda, speech, steps, {
+      await runSteps(nvda, speech, scenario.steps, {
         lines: out,
         log: (line) => console.log(line),
       });

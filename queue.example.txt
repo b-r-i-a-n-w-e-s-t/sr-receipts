@@ -1,9 +1,23 @@
-# One target per line. Either a file name resolved under fixtures\, or an
-# http/https URL passed through unchanged (that is how a Vite dev server on the
-# UTM host gets driven). Copy to queue.txt before running nvda-run.
+# One run per line. Copy to queue.txt before starting nvda-run.
 #
-# Blank lines are skipped. This file's comment lines are NOT: runner.cjs takes
-# every non-empty line as a target, so strip them when you copy.
+# A line is:
+#     <target>
+#     <target> :: <scenario>
+#
+# <target> is a file name resolved under fixtures\, or an http/https URL passed
+# through unchanged — the URL form is how a Vite dev server on the UTM host gets
+# driven from inside the guest.
+#
+# <scenario> is a name in scenarios\, or a path to a scenario file a consuming
+# repo owns. Omit it and the default applies (see DEFAULT_SCENARIO in
+# lib/target.cjs).
+#
+# Blank lines and # comments are ignored, so this file can be copied as-is.
+
 control.html
-shape-05-group.html
-shape-G-cell.html
+shape-05-group.html :: column-list-table
+shape-G-cell.html :: column-list-table
+
+# A first look at something not tested before. `survey` assumes nothing about
+# the page — no tables required.
+# http://192.168.64.1:5173/docs/column-list :: survey

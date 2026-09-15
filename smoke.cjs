@@ -24,6 +24,11 @@ const {
   stamp,
 } = require("./lib/index.cjs");
 
+/**
+ * Kept inline rather than moved to `scenarios/`, deliberately. The smoke test
+ * has to be able to say "the rig itself is fine" when a scenario is broken, so
+ * it must not depend on scenario loading.
+ */
 const STEPS = [
   ["title bar (NVDA+T)", "perform:reportTitle"],
   ["current focus (NVDA+Tab)", "perform:reportCurrentFocus"],

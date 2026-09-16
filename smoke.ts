@@ -29,6 +29,7 @@ import {
 import {
   SMOKE_CONTROL_FIXTURE,
   SMOKE_RESULT_SCHEMA_VERSION,
+  type SmokeRequest,
   type SmokeResult,
 } from "./lib/smoke-result.ts";
 
@@ -43,12 +44,6 @@ const STEPS: CompiledStep[] = [
   { label: "next table (T)", spec: "perform:moveToNextTable" },
   { label: "next table again (T)", spec: "perform:moveToNextTable" },
 ];
-
-interface SmokeRequest {
-  runId: string;
-  smokeArtifact: string;
-  resultArtifact: string;
-}
 
 function smokeRequest(): SmokeRequest | undefined {
   const path = process.env.RIG_SMOKE_REQUEST ?? "artifacts/smoke-request.json";
@@ -105,7 +100,7 @@ try {
   out.push("### error", caught?.message ?? "", (caught?.cause as Error)?.message ?? "");
 } finally {
   const artifact = resolve(
-    request?.smokeArtifact ?? process.env.RIG_SMOKE_ARTIFACT ?? "artifacts/smoke-log.txt",
+    request?.speech ?? process.env.RIG_SMOKE_ARTIFACT ?? "artifacts/smoke-log.txt",
   );
   mkdirSync(dirname(artifact), { recursive: true });
   writeFileSync(artifact, out.join("\n") + "\n", "utf8");
@@ -133,7 +128,7 @@ try {
       executionPosture: process.env.RIG_EXECUTION_POSTURE ?? null,
     },
   };
-  const resultArtifact = resolve(request?.resultArtifact ?? "artifacts/smoke-result.json");
+  const resultArtifact = resolve(request?.result ?? "artifacts/smoke-result.json");
   mkdirSync(dirname(resultArtifact), { recursive: true });
   writeFileSync(resultArtifact, `${JSON.stringify(result, null, 2)}\n`, "utf8");
   console.log(ok ? "\nSMOKE OK" : `\nSMOKE FAILED — see ${artifact}`);

@@ -4,19 +4,27 @@
 .DESCRIPTION
   Completion is a run-specific JSON result written by smoke.ts, never scheduler
   wall-clock state. On timeout, stop the task and remove its control artifacts.
+
+  The caller owns both artifact paths: provisioning/health-report.ts derives
+  them from lib/smoke-result.ts, so no two scripts can name a run's evidence
+  differently.
 #>
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$RunId)
+param(
+  [Parameter(Mandatory)][string]$RunId,
+  [Parameter(Mandatory)][string]$Result,
+  [Parameter(Mandatory)][string]$Speech
+)
 
 $ErrorActionPreference = 'Stop'
 $rig = Split-Path -Parent $PSScriptRoot
-$artifactDirectory = Join-Path $rig 'artifacts'
-$request = Join-Path $artifactDirectory 'smoke-request.json'
-$result = Join-Path $artifactDirectory "smoke-result-$RunId.json"
-$smokeArtifact = Join-Path $artifactDirectory "smoke-log-$RunId.txt"
-New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
-Remove-Item -Force -ErrorAction SilentlyContinue $result, $smokeArtifact
-$requestValue = [ordered]@{ runId = $RunId; resultArtifact = $result; smokeArtifact = $smokeArtifact } |
+$request = Join-Path $rig 'artifacts\smoke-request.json'
+foreach ($artifact in @($request, $Result, $Speech)) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $artifact) | Out-Null
+}
+Remove-Item -Force -ErrorAction SilentlyContinue $Result, $Speech
+# The SmokeRequest contract from lib/smoke-result.ts, which smoke.ts reads.
+$requestValue = [ordered]@{ runId = $RunId; result = $Result; speech = $Speech } |
   ConvertTo-Json -Compress
 [IO.File]::WriteAllText($request, $requestValue, [Text.UTF8Encoding]::new($false))
 $task = Get-ScheduledTask -TaskName 'nvda-smoke' -ErrorAction Stop
@@ -28,13 +36,14 @@ try {
     $task = Get-ScheduledTask -TaskName 'nvda-smoke'
     if ((Get-Date) -gt $deadline) {
       Stop-ScheduledTask -InputObject $task -ErrorAction SilentlyContinue
-      Remove-Item -Force -ErrorAction SilentlyContinue $request, $result, $smokeArtifact
+      Remove-Item -Force -ErrorAction SilentlyContinue $request, $Result, $Speech
       throw 'nvda-smoke did not write its run result within ten minutes; task stopped and run artifacts removed.'
     }
-  } while ($task.State -eq 'Running' -or -not (Test-Path $result))
-  $smoke = Get-Content $result -Raw | ConvertFrom-Json
+  } while ($task.State -eq 'Running' -or -not (Test-Path $Result))
+  $smoke = Get-Content $Result -Raw | ConvertFrom-Json
   if (-not $smoke.ok) { throw 'nvda-smoke completed but reported an unhealthy smoke result.' }
-  Write-Output "nvda-smoke result: $result"
+  Write-Output "nvda-smoke result: $Result"
+  Write-Output "nvda-smoke speech log: $Speech"
 } finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $request
 }

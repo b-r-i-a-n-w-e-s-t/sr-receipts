@@ -354,8 +354,9 @@ indistinguishable from a formatting accident.
 
 ## Where this is going
 
-- **Phase 5** — provisioning, so a fresh UTM image is one command from working.
-  `tasks/register.ps1` is the first piece, taken early because the daemon could
-  not be used without it. What is left is Firefox, Node, NVDA itself
-  (`@guidepup/setup` covers that) and the fixtures.
+- **Phase 5** — done: `provisioning/provision.ps1` takes a manually installed
+  Windows 11 ARM64 guest to a working rig in one command, installing the
+  reviewed [`runtime-manifest.json`](provisioning/runtime-manifest.json) and
+  proving it with a real NVDA and headed Firefox run. See
+  [`provisioning/README.md`](provisioning/README.md).
 - **Phase 6** — split into a guest package and a host-side dev dependency.

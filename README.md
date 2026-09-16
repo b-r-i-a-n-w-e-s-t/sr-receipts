@@ -236,6 +236,11 @@ Start-ScheduledTask nvda-run      # the queue
 npm run daemon                    # the port, for the host to drive
 ```
 
+For the approved Windows 11 ARM64 UTM guest, follow the manual bootstrap and
+idempotent Provisioner in [`provisioning/README.md`](provisioning/README.md).
+It is the supported path to prove real NVDA plus headed Firefox on the guest;
+the optional host-URL probe is diagnostic only.
+
 `npm run smoke` and friends exist too, but only work if the shell you are in is
 already on the interactive desktop. The scheduled task is the reliable path.
 

@@ -28,6 +28,7 @@ queue.txt
 run.out
 runner.out
 smoke-log.txt
+provisioning/health-report.json
 
 # Full-desktop screenshot written by shot.ps1. Captures whatever else was on the
 # guest desktop at the time, including editor windows and terminals.

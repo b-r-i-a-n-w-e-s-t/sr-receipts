@@ -16,7 +16,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@guidepup/guidepup": "^0.34.0"
+    "@guidepup/guidepup": "0.34.0",
+    "@guidepup/setup": "0.21.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.0",

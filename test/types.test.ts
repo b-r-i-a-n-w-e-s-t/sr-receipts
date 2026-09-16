@@ -49,7 +49,9 @@ function check(source: string): string {
       }),
       "utf8",
     );
-    execFileSync(process.execPath, [TSC, "-p", dir], { encoding: "utf8" });
+    // TypeScript 7 may color diagnostics even when stdout is captured. Keep
+    // these assertions about the diagnostic text, not terminal capabilities.
+    execFileSync(process.execPath, [TSC, "-p", dir, "--pretty", "false"], { encoding: "utf8" });
     return "";
   } catch (error) {
     // tsc exits non-zero on type errors and reports them on stdout.

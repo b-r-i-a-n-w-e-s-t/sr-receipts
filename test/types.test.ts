@@ -49,8 +49,8 @@ function check(source: string): string {
       }),
       "utf8",
     );
-    // Keep compiler diagnostics machine-readable when a terminal/CI enables
-    // colour; the assertions below intentionally match TypeScript's text.
+    // TypeScript 7 may color diagnostics even when stdout is captured. Keep
+    // these assertions about the diagnostic text, not terminal capabilities.
     execFileSync(process.execPath, [TSC, "-p", dir, "--pretty", "false"], { encoding: "utf8" });
     return "";
   } catch (error) {

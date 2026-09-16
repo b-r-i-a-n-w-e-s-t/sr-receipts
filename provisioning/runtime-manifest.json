@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "node": {
+    "version": "22.14.0",
+    "architecture": "arm64",
+    "url": "https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-arm64.msi",
+    "sha256": "937735295d25236e21b9aea9a32a175434eccf765eabf25dad4ef450e3cb62bb"
+  },
+  "firefox": {
+    "version": "135.0",
+    "architecture": "arm64",
+    "url": "https://archive.mozilla.org/pub/firefox/releases/135.0/win64-aarch64/en-US/Firefox%20Setup%20135.0.exe",
+    "sha256": "57bafae270cf479ccfbd6c2ede7a2e1d3635d0294f8bf17bfdf00334701084a5"
+  },
+  "guidepup": {
+    "version": "0.34.0",
+    "setupVersion": "0.21.0",
+    "nvdaAssetVersion": "0.1.3-2021.3.1",
+    "nvdaAssetSha256": "ada901fd1599ca4256d3afec9e6bb3b159e122341a4e52c1987099cf610875c4"
+  }
+}

@@ -1,3 +1,5 @@
+@echo off
 cd /d "%~dp0"
 if not exist artifacts mkdir artifacts
-node daemon.ts > artifacts\daemon.out 2>&1
+call "%~dp0run-node.cmd" daemon.ts > artifacts\daemon.out 2>&1
+exit /b %ERRORLEVEL%

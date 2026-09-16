@@ -14,7 +14,7 @@
  * `nvda-smoke` scheduled task, registered with `/it` so it lands in the
  * logged-in console session.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   SILENCE,
@@ -26,6 +26,11 @@ import {
   watchFocus,
   type CompiledStep,
 } from "./lib/index.ts";
+import {
+  SMOKE_CONTROL_FIXTURE,
+  SMOKE_RESULT_SCHEMA_VERSION,
+  type SmokeResult,
+} from "./lib/smoke-result.ts";
 
 /**
  * Kept inline rather than moved to `scenarios/`, deliberately. The smoke test
@@ -39,9 +44,30 @@ const STEPS: CompiledStep[] = [
   { label: "next table again (T)", spec: "perform:moveToNextTable" },
 ];
 
-const target = process.argv[2] ?? "control.html";
+interface SmokeRequest {
+  runId: string;
+  smokeArtifact: string;
+  resultArtifact: string;
+}
+
+function smokeRequest(): SmokeRequest | undefined {
+  const path = process.env.RIG_SMOKE_REQUEST ?? "artifacts/smoke-request.json";
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as SmokeRequest;
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+const request = smokeRequest();
+const target = process.argv[2] ?? SMOKE_CONTROL_FIXTURE;
 const out = [`# smoke on ${target}`, "", ...stamp(), ""];
 let ok = false;
+let completedSteps = 0;
+let speechCaptured = false;
+let focusLost: string | null = null;
+let failure: string | null = null;
 
 try {
   const { nvda, speech } = await startSession();
@@ -49,35 +75,67 @@ try {
   out.push(opened.target.provenance, "", ...opened.lines);
 
   if (opened.ok) {
-    const { steps, focusLost } = await runSteps(nvda, speech, STEPS, {
+    const { steps, focusLost: lostFocus } = await runSteps(nvda, speech, STEPS, {
       log: (line) => console.log(line),
       watch: watchFocus(speech),
     });
     for (const step of steps) {
       out.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
     }
+    completedSteps = steps.length;
+    speechCaptured = steps.some((step) => step.heard !== SILENCE);
     // The smoke test asserts only that the rig works: NVDA started, the page
     // was reached, and quick navigation answered. What it answered *with* is
     // the runner's business.
     ok =
-      !focusLost &&
+      !lostFocus &&
       steps.length === STEPS.length &&
       steps.every((step) => !step.error) &&
-      steps.some((step) => step.heard !== SILENCE);
-    if (focusLost) out.push("### FOCUS LOST", `  ${focusLost} had the foreground.`, "");
+      speechCaptured;
+    if (lostFocus) {
+      focusLost = lostFocus;
+      out.push("### FOCUS LOST", `  ${lostFocus} had the foreground.`, "");
+    }
   }
 } catch (error) {
-  const failure = error as Error;
-  console.error("FAILED:", failure?.message);
-  console.error("CAUSE:", (failure?.cause as Error)?.message ?? failure?.cause ?? "(none)");
-  out.push("### error", failure?.message ?? "", (failure?.cause as Error)?.message ?? "");
+  const caught = error as Error;
+  failure = caught?.message ?? String(error);
+  console.error("FAILED:", caught?.message);
+  console.error("CAUSE:", (caught?.cause as Error)?.message ?? caught?.cause ?? "(none)");
+  out.push("### error", caught?.message ?? "", (caught?.cause as Error)?.message ?? "");
 } finally {
   const artifact = resolve(
-    process.env.RIG_SMOKE_ARTIFACT ?? "artifacts/smoke-log.txt",
+    request?.smokeArtifact ?? process.env.RIG_SMOKE_ARTIFACT ?? "artifacts/smoke-log.txt",
   );
   mkdirSync(dirname(artifact), { recursive: true });
   writeFileSync(artifact, out.join("\n") + "\n", "utf8");
-  await stopSession();
+  try {
+    await stopSession();
+  } catch (error) {
+    failure ??= (error as Error).message;
+    ok = false;
+  }
+  const result: SmokeResult = {
+    schemaVersion: SMOKE_RESULT_SCHEMA_VERSION,
+    runId: request?.runId ?? null,
+    fixture: target,
+    ok,
+    expectedSteps: STEPS.length,
+    completedSteps,
+    speechCaptured,
+    focusLost,
+    error: failure,
+    observed: {
+      node: process.version,
+      executable: process.execPath,
+      platform: process.platform,
+      architecture: process.arch,
+      executionPosture: process.env.RIG_EXECUTION_POSTURE ?? null,
+    },
+  };
+  const resultArtifact = resolve(request?.resultArtifact ?? "artifacts/smoke-result.json");
+  mkdirSync(dirname(resultArtifact), { recursive: true });
+  writeFileSync(resultArtifact, `${JSON.stringify(result, null, 2)}\n`, "utf8");
   console.log(ok ? "\nSMOKE OK" : `\nSMOKE FAILED — see ${artifact}`);
   process.exitCode = ok ? 0 : 1;
 }

@@ -9,12 +9,17 @@ SSH or shared-folder request protocols.
 Before running the Provisioner, a maintainer manually creates an approved
 Windows 11 **ARM64** guest from a CrystalFetch-built official Windows ISO,
 completes Windows first-run and activation, creates and signs into the desktop
-account, and installs/configures UTM guest tools as needed. The inspected rig
+account, and installs/configures UTM guest tools as needed. Clone or otherwise
+copy this repository into that signed-in user's local filesystem before running
+the command below. The inspected rig
 uses 4 vCPUs, 8 GiB RAM, 64 GiB storage, and UTM Shared/NAT networking. On that
 network, the Mac is currently reachable from the guest at `192.168.64.1`; this
 is an operational fact, not discovery or a supported UTM-control contract.
 
-Run the Provisioner from PowerShell in that signed-in, **unlocked** desktop:
+Run the Provisioner from PowerShell in that signed-in, **unlocked** desktop.
+The script deliberately registers the smoke task as that user at limited
+privilege; it is safe to launch the provisioner elevated only when Firefox
+installation needs it, because the proof is still unelevated:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File provisioning\provision.ps1
@@ -45,12 +50,16 @@ lockfile together.
 ## Evidence and optional network diagnosis
 
 Provisioning always runs `smoke.ts control.html`, a local fixture, through real
-NVDA and headed Firefox. The task clears and recreates
-`artifacts/smoke-log.txt` and `artifacts/smoke-task.out` for each proof, then
-writes `provisioning/health-report.json`. Success requires a successful task, a
-fresh speech artifact, and non-empty, non-silent recorded speech; installed
-files or stale logs alone are not a passing rig. The report also retains task
-output and Node/platform diagnostics when the smoke fails.
+NVDA and headed Firefox. The task writes a run-specific JSON smoke result and
+speech log under `artifacts/`; the result is the completion signal, so clock
+skew and a prior task's `LastRunTime` cannot satisfy the proof. Timeout stops
+the task and removes its request/result artifacts. Success requires the
+machine-readable smoke verdict, captured speech, retained focus, a fresh
+result, and confirmation that Node ran from the provisioned per-user path in
+the scheduled-task CMD posture. The UTF-8 health report retains the task
+diagnostics plus both reporter and smoke runtime/environment observations. If
+the reporter fails before it can write a report, the PowerShell provisioner
+writes a minimal UTF-8 unhealthy report instead.
 
 To diagnose a Mac-served app without making networking a provisioning
 requirement:

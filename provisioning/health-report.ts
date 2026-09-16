@@ -13,15 +13,8 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import {
-  NO_HOST_URL_PROBE,
-  assessProvisioning,
-  type HostUrlProbe,
-  type ProvisioningStage,
-} from "./health.ts";
+import { assessProvisioning, probeHostUrl, type ProvisioningStage } from "./health.ts";
 import { smokeArtifacts, type SmokeResult } from "../lib/smoke-result.ts";
-
-const PROBE_TIMEOUT_MS = 10_000;
 
 function option(name: string): string | undefined {
   const at = process.argv.indexOf(`--${name}`);
@@ -34,21 +27,6 @@ function fileSize(path: string): number {
     return statSync(path).size;
   } catch {
     return 0;
-  }
-}
-
-async function probeHostUrl(url: string | undefined): Promise<HostUrlProbe> {
-  if (!url) return NO_HOST_URL_PROBE;
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
-    return {
-      attempted: true,
-      ok: response.ok,
-      url,
-      failure: response.ok ? null : `${response.status} ${response.statusText}`,
-    };
-  } catch (error) {
-    return { attempted: true, ok: false, url, failure: (error as Error).message };
   }
 }
 

@@ -36,6 +36,35 @@ export const NO_HOST_URL_PROBE: HostUrlProbe = {
   failure: null,
 };
 
+export const PROBE_TIMEOUT_MS = 10_000;
+
+/**
+ * `fetch` reports every network failure as "fetch failed" and hides the reason
+ * in `cause`, which is the only part a maintainer can act on: a refused
+ * connection means no dev server, a timeout means the guest cannot route to
+ * the Mac at all.
+ */
+function describe(error: Error): string {
+  const cause = error.cause instanceof Error ? error.cause.message : error.cause;
+  return cause ? `${error.message}: ${cause}` : error.message;
+}
+
+/** Diagnose the guest's reach to a Mac-served URL. Reported, never a gate. */
+export async function probeHostUrl(url: string | undefined): Promise<HostUrlProbe> {
+  if (!url) return NO_HOST_URL_PROBE;
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    return {
+      attempted: true,
+      ok: response.ok,
+      url,
+      failure: response.ok ? null : `${response.status} ${response.statusText}`,
+    };
+  } catch (error) {
+    return { attempted: true, ok: false, url, failure: describe(error as Error) };
+  }
+}
+
 export interface HealthReport {
   schemaVersion: typeof HEALTH_REPORT_SCHEMA_VERSION;
   ok: boolean;

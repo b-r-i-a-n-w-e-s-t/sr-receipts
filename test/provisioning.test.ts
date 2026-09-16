@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   NO_HOST_URL_PROBE,
   assessProvisioning,
+  probeHostUrl,
   type ProvisioningStage,
 } from "../provisioning/health.ts";
 import {
@@ -106,6 +109,42 @@ test("the host URL probe is reported but never changes the verdict", () => {
   });
 });
 
+test("the probe answers what a maintainer can act on", async (t) => {
+  let status = 200;
+  const server = createServer((_request, response) => {
+    response.writeHead(status).end();
+  });
+  await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+
+  assert.deepEqual(await probeHostUrl(url), {
+    attempted: true, ok: true, url, failure: null,
+  });
+
+  // A served error is reachability with a broken app: say which it was.
+  status = 503;
+  assert.deepEqual(await probeHostUrl(url), {
+    attempted: true, ok: false, url, failure: "503 Service Unavailable",
+  });
+
+  assert.deepEqual(await probeHostUrl(undefined), NO_HOST_URL_PROBE);
+});
+
+test("an unreachable host URL reports the cause, not just 'fetch failed'", async () => {
+  // Nothing listens on a closed port, which is what a Mac with no dev server
+  // running looks like from the guest.
+  const closed = createServer();
+  await new Promise<void>((ready) => closed.listen(0, "127.0.0.1", ready));
+  const url = `http://127.0.0.1:${(closed.address() as AddressInfo).port}/`;
+  await new Promise<void>((closedDown) => closed.close(() => closedDown()));
+
+  const probe = await probeHostUrl(url);
+  assert.equal(probe.ok, false);
+  assert.equal(probe.url, url);
+  assert.match(probe.failure ?? "", /ECONNREFUSED/);
+});
+
 test("only the scheduled-task CMD posture using per-user Node proves the entry point", () => {
   const report = assessProvisioning({
     ...healthy,
@@ -123,6 +162,21 @@ test("CMD entry points explicitly use the provisioned per-user Node wrapper", ()
     readFileSync("run-node.cmd", "utf8"),
     /%LOCALAPPDATA%\\nvda-rig\\node-v22\.18\.0-win-arm64\\node\.exe/i,
   );
+});
+
+test("no script parameter default depends on $PSScriptRoot", () => {
+  // Windows PowerShell binds a script's parameter defaults before the script's
+  // own $PSScriptRoot exists, so such a default is an empty path and the
+  // script dies on its first Join-Path. Resolve these in the body instead.
+  for (const script of [
+    "provisioning/provision.ps1",
+    "provisioning/run-smoke-task.ps1",
+    "tasks/register.ps1",
+  ]) {
+    const block = /^param\(([\s\S]*?)^\)/m.exec(readFileSync(script, "utf8"));
+    assert.ok(block?.[1], `${script} has no script parameter block`);
+    assert.doesNotMatch(block[1], /\$PSScriptRoot/, script);
+  }
 });
 
 test("the task protocol is result-controlled and cleans up on timeout", () => {

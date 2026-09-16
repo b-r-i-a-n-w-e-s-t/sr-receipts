@@ -17,12 +17,17 @@
 [CmdletBinding()]
 param(
   [string]$HostUrl,
-  [string]$ReportPath = (Join-Path $PSScriptRoot 'health-report.json'),
-  [string]$StagePath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\provision-stages.json')
+  [string]$ReportPath,
+  [string]$StagePath
 )
 
 $ErrorActionPreference = 'Stop'
 $rig = Split-Path -Parent $PSScriptRoot
+# Resolved here, not as parameter defaults: Windows PowerShell binds defaults
+# before the script's own $PSScriptRoot exists, so `-File provision.ps1` from a
+# prompt died on an empty path before the provisioner did anything at all.
+if (-not $ReportPath) { $ReportPath = Join-Path $PSScriptRoot 'health-report.json' }
+if (-not $StagePath) { $StagePath = Join-Path $rig 'artifacts\provision-stages.json' }
 $manifest = Get-Content (Join-Path $PSScriptRoot 'runtime-manifest.json') -Raw | ConvertFrom-Json
 $stages = [Collections.Generic.List[object]]::new()
 

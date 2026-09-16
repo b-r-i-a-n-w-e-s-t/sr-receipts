@@ -21,3 +21,7 @@ shape-G-cell.html :: column-list-table
 # A first look at something not tested before. `survey` assumes nothing about
 # the page — no tables required.
 # http://192.168.64.1:5173/docs/column-list :: survey
+
+# The queue file is one of two ways in. The other is the daemon: POST /runs with
+# `{ "queue": "<the text of a file like this one>" }` parses it with exactly this
+# parser, so the host can send a queue rather than reimplement `target :: scenario`.

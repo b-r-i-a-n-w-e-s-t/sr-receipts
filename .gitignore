@@ -35,3 +35,6 @@ screen.png
 
 # Throwaway tsc projects written by test/types.test.ts.
 .type-case-*/
+
+# Console log from run-daemon.cmd.
+daemon.out

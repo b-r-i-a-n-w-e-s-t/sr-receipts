@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "smoke": "node smoke.ts",
     "probe": "node probe.ts",
-    "run-queue": "node runner.ts"
+    "run-queue": "node runner.ts",
+    "daemon": "node daemon.ts"
   },
   "keywords": [],
   "author": "",

@@ -343,3 +343,64 @@ export interface RunStepsResult {
   /** How many steps had run when focus was found to be gone. */
   focusLostAfter?: number;
 }
+
+/* ------------------------------------------------------------------- events */
+
+/**
+ * Progress from a run in flight.
+ *
+ * `RunStepsOptions.log` is a pre-formatted string sink — the right shape for
+ * `smoke.ts` and `probe.ts`, which print it and nothing else, and the wrong one
+ * for a wire, where the host wants the label and the announcement apart. So the
+ * run layer emits these instead, and the daemon serialises one per line.
+ *
+ * `request-started` and `opened` exist to bracket a silence rather than to
+ * report a result: `openTarget` spends between 17 and 45 seconds launching the
+ * browser and running the guards without emitting anything, and a host watching
+ * a stream cannot otherwise tell a slow open from a hung one.
+ */
+export type RunEvent =
+  | { type: "run-started"; runId: string; total: number }
+  | { type: "request-started"; index: number; target: string; scenario: string }
+  /** The guards finished. `lines` is the transcript prose; when `ok` is false it is the diagnosis. */
+  | { type: "opened"; target: string; ok: boolean; lines: string[] }
+  | { type: "step"; target: string; index: number; label: string; spec: string; heard: string }
+  | { type: "focus-lost"; target: string; after: number; thief: string }
+  | { type: "snapshot"; target: string; status: SnapshotStatus; written: boolean }
+  | { type: "request-finished"; target: string; result: RunResult }
+  /** The run itself broke, rather than a request failing. Exit code 2, not 1. */
+  | { type: "broke"; message: string }
+  | { type: "run-finished"; report: RunReport };
+
+/* ------------------------------------------------------------------- daemon */
+
+/**
+ * What `POST /runs` accepts.
+ *
+ * `queue` is the text of a queue file, parsed with the same `parseQueue` the
+ * runner uses, so a host that already has a queue file does not have to
+ * reimplement `<target> :: <scenario>` to send it. Exactly one of `requests`
+ * and `queue` is required.
+ */
+export interface DaemonRunBody {
+  /**
+   * `scenario` is optional per request only when the body carries the
+   * `scenario` override that will fill it in — the daemon rejects a request
+   * that would otherwise have no question to ask.
+   */
+  requests?: Array<{ target: string; scenario?: string }>;
+  queue?: string;
+  /** Overrides the scenario on every request, as `runner.ts --scenario` does. */
+  scenario?: string;
+  updateSnapshots?: boolean;
+}
+
+/** `GET /health`. `busy` is the one thing a host needs before it posts. */
+export interface DaemonHealth {
+  ok: boolean;
+  busy: boolean;
+  /** The run in flight, when there is one. */
+  runId: string | null;
+  /** The environment block that heads every transcript. */
+  rig: string[];
+}

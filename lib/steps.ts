@@ -87,6 +87,15 @@ export function validateSteps(
 export interface RunStepsOptions {
   log?: ((line: string) => void) | undefined;
   /**
+   * The same announcements as `log`, unformatted.
+   *
+   * `log` flattens a step to one printable line, which is all `smoke.ts` and
+   * `probe.ts` ever wanted. A run being watched over a wire wants the label and
+   * the announcement apart, and wants the newlines inside a multi-phrase
+   * announcement left alone, so it gets the `StepResult` itself.
+   */
+  onStep?: ((step: StepResult, index: number) => void) | undefined;
+  /**
    * Re-check every few steps that the keystrokes are still reaching the target.
    * Omit it and the sequence runs blind, which is what it did before this
    * existed — see `FocusWatch` for what that cost.
@@ -114,7 +123,7 @@ export async function runSteps(
   nvda: NvdaDriver,
   speech: SpeechLog,
   steps: readonly CompiledStep[],
-  { log, watch }: RunStepsOptions = {},
+  { log, onStep, watch }: RunStepsOptions = {},
 ): Promise<RunStepsResult> {
   const results: StepResult[] = [];
   for (const [index, step] of steps.entries()) {
@@ -128,25 +137,29 @@ export async function runSteps(
       // answered by the time `perform` resolves.
       if (settle) await delay(settle);
       const heard = await speech.heard();
-      results.push({
+      const result: StepResult = {
         label,
         spec,
         heard,
         ...(expect !== undefined && { expect }),
         ...(snapshot !== undefined && { snapshot }),
-      });
+      };
+      results.push(result);
       log?.(`${shown} :: ${heard.replace(/\n/g, " / ")}`);
+      onStep?.(result, index);
     } catch (error) {
       const message = (error as Error)?.message;
-      results.push({
+      const result: StepResult = {
         label,
         spec,
         heard: `ERROR ${message}`,
         error: message,
         ...(expect !== undefined && { expect }),
         ...(snapshot !== undefined && { snapshot }),
-      });
+      };
+      results.push(result);
       log?.(`${shown} :: ERROR ${message}`);
+      onStep?.(result, index);
     }
 
     // Always check the final step too, so the tail of a transcript is known to

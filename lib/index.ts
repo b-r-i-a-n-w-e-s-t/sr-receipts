@@ -49,6 +49,31 @@ export {
   type ToResultInput,
 } from "./report.ts";
 export {
+  RUNS,
+  runDir,
+  newRunId,
+  executeRun,
+  type ExecuteOptions,
+} from "./run.ts";
+export {
+  DEFAULT_PORT,
+  createRigServer,
+  resolveToken,
+  toRequests,
+  resolveRunFile,
+  isSafeSegment,
+  type RigServerOptions,
+  type TokenResolution,
+} from "./daemon.ts";
+export {
+  createClient,
+  readFrames,
+  RigError,
+  type ClientOptions,
+  type RigClient,
+  type RunOptions,
+} from "./client.ts";
+export {
   NVDA_OPTIONS,
   FOCUS_CHECK_EVERY,
   startSession,

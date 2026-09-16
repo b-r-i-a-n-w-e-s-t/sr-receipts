@@ -3,13 +3,12 @@
  * macOS desktop after completing voiceover/README.md's one-time authorization.
  */
 import { execFile } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { voiceOver } from "@guidepup/guidepup";
 import { inspect } from "./doctor.ts";
-import { resultFor, SUPPORTED } from "./evidence.ts";
+import { resultFor, SUPPORTED, writeRunArtifacts } from "./evidence.ts";
 
 const execFileAsync = promisify(execFile);
 const runDirectory = join(import.meta.dirname, "..", "voiceover-runs", new Date().toISOString().replaceAll(":", "-"));
@@ -29,25 +28,63 @@ const evidence = {
 const speech: string[] = [];
 let started = false;
 let failure: unknown;
+let stage = "preflight";
+const STAGE_TIMEOUT_MS = 30_000;
 
-mkdirSync(runDirectory, { recursive: true });
-writeFileSync(join(runDirectory, "environment.json"), JSON.stringify(evidence, null, 2) + "\n");
+async function withinStage<T>(name: string, action: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      action,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${name} timed out after ${STAGE_TIMEOUT_MS / 1_000}s`)),
+          STAGE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function persist(): void {
+  writeRunArtifacts(runDirectory, evidence, speech, failure, stage);
+}
+persist();
+
+// SIGINT/SIGTERM cannot safely await Guidepup cleanup. Preserve the evidence
+// collected so far; Guidepup also registers its own best-effort teardown.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    stage = `interrupted (${signal})`;
+    failure ??= new Error(`Smoke interrupted by ${signal}`);
+    persist();
+    process.exitCode = 1;
+  });
+}
 
 try {
   if (!evidence.checks.every((check) => check.ok)) {
     throw new Error("Unsupported or incomplete environment; see environment.json.");
   }
 
-  await voiceOver.start();
+  stage = "start VoiceOver";
+  await withinStage(stage, voiceOver.start({ capture: true }));
   started = true;
-  await execFileAsync("open", ["-a", "Safari", fixtureUrl]);
+  await voiceOver.clearSpokenPhraseLog();
+  stage = "open Safari fixture";
+  await withinStage(stage, execFileAsync("open", ["-a", "Safari", fixtureUrl]));
   await new Promise((resolve) => setTimeout(resolve, 1_500));
 
-  // The fixture contains exactly one heading. Retrying lets Safari finish
-  // placing the VoiceOver cursor in web content without weakening the proof.
+  // Enter Safari's document before asking for a heading. nextHeading alone can
+  // navigate VoiceOver's desktop/browser chrome context instead of this page.
+  stage = "enter Safari web content";
+  await withinStage(stage, voiceOver.perform(voiceOver.keyboardCommands.moveToNextWebSpot));
+  stage = "find fixture heading";
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await voiceOver.nextHeading();
-    const phrases = await voiceOver.spokenPhraseLog();
+    await withinStage(stage, voiceOver.nextHeading());
+    const phrases = await withinStage(stage, voiceOver.spokenPhraseLog());
     speech.splice(0, speech.length, ...phrases);
     if (phrases.some((phrase) => phrase.includes(SUPPORTED.heading))) break;
   }
@@ -56,19 +93,21 @@ try {
 } finally {
   if (started) {
     try {
+      stage = "capture speech";
       speech.splice(0, speech.length, ...(await voiceOver.spokenPhraseLog()));
     } catch (error) {
       failure ??= error;
     }
     try {
+      stage = "stop VoiceOver";
       await voiceOver.stop();
     } catch (error) {
       failure ??= error;
     }
   }
-  const result = resultFor(speech, failure);
-  writeFileSync(join(runDirectory, "speech.json"), JSON.stringify(speech, null, 2) + "\n");
-  writeFileSync(join(runDirectory, "result.json"), JSON.stringify({ ...result, finishedAt: new Date().toISOString() }, null, 2) + "\n");
+  stage = failure ? stage : "complete";
+  persist();
+  const result = resultFor(speech, failure, stage);
   console.log(`${result.ok ? "VOICEOVER SMOKE OK" : "VOICEOVER SMOKE FAILED"} — ${runDirectory}`);
   process.exitCode = result.ok ? 0 : 1;
 }

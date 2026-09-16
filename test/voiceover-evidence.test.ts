@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkExact, checkVersion, containsFixtureToken, errorChain, normalizeVoiceOverText, resultFor, SUPPORTED, writeRunArtifacts } from "../voiceover/evidence.ts";
-import { expectedVoiceOverAsset, preferenceAccessCheck } from "../voiceover/doctor.ts";
+import { appleScriptControlCheck, expectedVoiceOverAsset, preferenceAccessCheck, voiceOverPreferenceDirectory } from "../voiceover/doctor.ts";
 import { runVoiceOverSmoke, type VoiceOverDriver } from "../voiceover/orchestrator.ts";
 
 test("the VoiceOver target accepts only its pinned release family", () => {
@@ -23,6 +23,27 @@ test("doctor exposes its asset and protected-preference diagnostics", () => {
   const check = preferenceAccessCheck("/a/path-that-does-not-exist");
   assert.equal(check.ok, false);
   assert.equal(check.name, "VoiceOver preferences access");
+});
+
+test("doctor reports AppleScript control, the prerequisite VoiceOver capture depends on", () => {
+  assert.equal(
+    voiceOverPreferenceDirectory("/Users/someone"),
+    "/Users/someone/Library/Group Containers/group.com.apple.VoiceOver/Library/Preferences",
+  );
+  const directory = mkdtempSync(join(tmpdir(), "voiceover-preferences-"));
+  const missing = appleScriptControlCheck(join(directory, "absent.plist"));
+  assert.equal(missing.ok, false);
+  assert.match(missing.actual, /no VoiceOver preferences at/);
+
+  const disabled = join(directory, "disabled.plist");
+  writeFileSync(disabled, '{"SCREnableAppleScript":false}');
+  assert.equal(appleScriptControlCheck(disabled).ok, false);
+
+  const enabled = join(directory, "enabled.plist");
+  writeFileSync(enabled, '{"SCREnableAppleScript":true}');
+  const check = appleScriptControlCheck(enabled);
+  assert.equal(check.ok, true);
+  assert.equal(check.actual, "true");
 });
 
 test("speech proof requires normalized token evidence in both speech and cursor", () => {

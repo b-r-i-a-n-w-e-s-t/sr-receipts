@@ -52,9 +52,22 @@ npm run voiceover:smoke
 ```
 
 The doctor is read-only. Before smoke can start VoiceOver, it verifies the
-version family, exact Guidepup package, matching VoiceOver asset, and read/write
-access to the protected VoiceOver preferences directory. It cannot prove that
-macOS will authorize automation.
+version family, exact Guidepup package, matching VoiceOver asset, read/write
+access to the protected VoiceOver preferences directory, and that VoiceOver's
+AppleScript control is enabled. It cannot prove that macOS will authorize
+automation.
+
+The AppleScript-control check reads `SCREnableAppleScript` from
+`~/Library/Group Containers/group.com.apple.VoiceOver/Library/Preferences/com.apple.VoiceOver4/default.plist`.
+Sequoia moved these preferences into that group container, so `defaults` can no
+longer read them. When the setting is off, Guidepup still starts, stops, and
+sends keystrokes — those go through System Events, not VoiceOver — but every
+message to VoiceOver's own scripting dictionary fails: property reads with
+AppleScript `-1728` and commands with `-1708`. Capture therefore returns empty
+strings while control looks perfectly healthy, which is why the doctor checks
+it rather than leaving it to be diagnosed from a failed run. Enabling it is
+step 2 of the manual authorization above; nothing here writes it, because the
+preference lives in a protected group container.
 
 The smoke opens the committed local `fixture.html`, starts VoiceOver through
 Guidepup with phrase and cursor capture, then uses the documented public
@@ -76,6 +89,37 @@ A successful result is the required proof that Guidepup controlled real
 VoiceOver and captured speech from deterministic Safari content. A failure is
 evidence of a remaining compatibility limitation, not permission for the
 script to alter macOS state.
+
+> [!IMPORTANT]
+> Enabling AppleScript control is not optional and not merely a permissions
+> nicety: with it off, this target fails in a way that looks like a Guidepup
+> bug. Control, startup, and keystrokes all appear healthy while capture
+> silently returns empty strings.
+
+## Minimal capture probe
+
+```bash
+npm run voiceover:capture-probe
+```
+
+The probe is the smallest thing that exercises capture — no Safari, no fixture,
+no Item Chooser, only start, one cursor move, and the capture queries. Use it
+when the smoke reports empty speech, to separate a capture problem from a
+navigation problem.
+
+It records every reading instead of throwing on the first failure, so one run
+shows whether capture never worked or broke once the reader moved. Alongside
+Guidepup's `lastSpokenPhrase()`, `spokenPhraseLog()`, and `itemText()`, it runs
+the same AppleScript Guidepup runs plus `exists last phrase`. That matters
+because Guidepup's client polls those scripts and discards their errors: only
+the direct reading distinguishes a swallowed wrapper result from VoiceOver
+exposing no `last phrase` object at all.
+
+The probe prints one redacted JSON report to stdout, writes no artifacts, and
+like the smoke it starts and stops VoiceOver — so it needs the same manual
+authorization above. See
+[`../research/guidepup-voiceover-capture-macos26.md`](../research/guidepup-voiceover-capture-macos26.md)
+for what upstream Guidepup does and does not document about this failure.
 
 > [!IMPORTANT]
 > Guidepup 0.34.0 mounts the portable preference DMG, trusts its portable

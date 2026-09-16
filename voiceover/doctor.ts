@@ -32,6 +32,32 @@ export function expectedVoiceOverAsset(cache = process.env.GUIDEPUP_SCREEN_READE
     SUPPORTED.voiceOverAsset.version, SUPPORTED.voiceOverAsset.file);
 }
 
+/** Sequoia moved VoiceOver's preferences here, out of reach of `defaults`. */
+export function voiceOverPreferenceDirectory(home = homedir()): string {
+  return join(home, "Library", "Group Containers", "group.com.apple.VoiceOver", "Library", "Preferences");
+}
+
+/**
+ * VoiceOver's own scripting dictionary is gated on this preference. Without it
+ * Guidepup still starts, stops, and sends keystrokes, because those go through
+ * System Events rather than VoiceOver — but every VoiceOver dictionary message
+ * fails, property reads with AppleScript `-1728` and commands with `-1708`. So
+ * `lastSpokenPhrase()`, `spokenPhraseLog()`, and `itemText()` come back empty
+ * while control looks healthy. That combination is the whole failure, so check
+ * it before a run rather than diagnosing it afterwards.
+ */
+export function appleScriptControlCheck(plist = join(voiceOverPreferenceDirectory(), "com.apple.VoiceOver4", "default.plist")): Check {
+  const actual = existsSync(plist)
+    ? command("plutil", ["-extract", "SCREnableAppleScript", "raw", "-o", "-", plist])
+    : `no VoiceOver preferences at ${plist}`;
+  return {
+    name: "VoiceOver AppleScript control",
+    actual,
+    expected: "true (VoiceOver Utility → General → Allow VoiceOver to be controlled with AppleScript)",
+    ok: actual === "true",
+  };
+}
+
 export function preferenceAccessCheck(path: string): Check {
   try {
     // Guidepup mounts portable preferences and updates the local plist here.
@@ -49,8 +75,7 @@ export function inspect(): Check[] {
     ? command("mdls", ["-name", "kMDItemVersion", "-raw", safari]).replaceAll('"', "")
     : "not installed";
   const languages = command("defaults", ["read", "-g", "AppleLanguages"]);
-  const groupPreferences = join(homedir(), "Library", "Group Containers",
-    "group.com.apple.VoiceOver", "Library", "Preferences");
+  const groupPreferences = voiceOverPreferenceDirectory();
   const preferences = existsSync(groupPreferences)
     ? groupPreferences : join(homedir(), "Library", "Preferences");
 
@@ -62,6 +87,7 @@ export function inspect(): Check[] {
     checkExact("Guidepup", packageVersion(), SUPPORTED.guidepup),
     checkExact("Guidepup VoiceOver asset", existsSync(expectedVoiceOverAsset()) ? "present" : "missing", "present"),
     preferenceAccessCheck(preferences),
+    appleScriptControlCheck(),
     { name: "English language", actual: languages, expected: "AppleLanguages contains en", ok: /\ben\b/i.test(languages) },
   ];
 }

@@ -34,11 +34,14 @@ export type SmokeResult = {
   cursor: string[];
 };
 
-export type CleanupOutcome = {
+/** An attempted action and whether it succeeded. */
+export type Outcome = {
   action: string;
   ok: boolean;
   error?: string;
 };
+
+export type CleanupOutcome = Outcome;
 
 /** Compare reader output independently of punctuation, spacing, and case. */
 export function normalizeVoiceOverText(value: string): string {

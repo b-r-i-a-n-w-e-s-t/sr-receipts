@@ -1,113 +1,93 @@
 /**
- * Real local VoiceOver smoke proof. Run only from the supported interactive
- * macOS desktop after completing voiceover/README.md's one-time authorization.
+ * Real local VoiceOver smoke proof. Run only after voiceover/README.md's
+ * manual authorization. This file contains adapters; orchestration is tested
+ * without invoking VoiceOver in orchestrator.ts.
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { voiceOver } from "@guidepup/guidepup";
+import { MacOSKeyCodes, macOSActivate, voiceOver } from "@guidepup/guidepup";
 import { inspect } from "./doctor.ts";
-import { resultFor, SUPPORTED, writeRunArtifacts } from "./evidence.ts";
+import { containsFixtureToken, SUPPORTED, type CleanupOutcome, writeRunArtifacts } from "./evidence.ts";
+import { runVoiceOverSmoke, type VoiceOverDriver } from "./orchestrator.ts";
 
 const execFileAsync = promisify(execFile);
 const runDirectory = join(import.meta.dirname, "..", "voiceover-runs", new Date().toISOString().replaceAll(":", "-"));
-const fixture = join(import.meta.dirname, "fixture.html");
-const fixtureUrl = pathToFileURL(fixture).href;
-const evidence = {
-  startedAt: new Date().toISOString(),
-  fixture: fixtureUrl,
-  supported: {
-    macOS: "26.6.x",
-    safari: "26.6.x",
-    voiceOver: "bundled",
-    guidepup: SUPPORTED.guidepup,
-  },
-  checks: inspect(),
-};
-const speech: string[] = [];
-let started = false;
-let failure: unknown;
-let stage = "preflight";
-const STAGE_TIMEOUT_MS = 30_000;
-
-async function withinStage<T>(name: string, action: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      action,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`${name} timed out after ${STAGE_TIMEOUT_MS / 1_000}s`)),
-          STAGE_TIMEOUT_MS,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-function persist(): void {
-  writeRunArtifacts(runDirectory, evidence, speech, failure, stage);
-}
-persist();
-
-// SIGINT/SIGTERM cannot safely await Guidepup cleanup. Preserve the evidence
-// collected so far; Guidepup also registers its own best-effort teardown.
+const fixtureUrl = pathToFileURL(join(import.meta.dirname, "fixture.html")).href;
+const controller = new AbortController();
+const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+let signalName: string | undefined;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
-    stage = `interrupted (${signal})`;
-    failure ??= new Error(`Smoke interrupted by ${signal}`);
-    persist();
-    process.exitCode = 1;
+    signalName = signal;
+    controller.abort();
   });
 }
 
-try {
-  if (!evidence.checks.every((check) => check.ok)) {
-    throw new Error("Unsupported or incomplete environment; see environment.json.");
-  }
-
-  stage = "start VoiceOver";
-  await withinStage(stage, voiceOver.start({ capture: true }));
-  started = true;
-  await voiceOver.clearSpokenPhraseLog();
-  stage = "open Safari fixture";
-  await withinStage(stage, execFileAsync("open", ["-a", "Safari", fixtureUrl]));
-  await new Promise((resolve) => setTimeout(resolve, 1_500));
-
-  // Enter Safari's document before asking for a heading. nextHeading alone can
-  // navigate VoiceOver's desktop/browser chrome context instead of this page.
-  stage = "enter Safari web content";
-  await withinStage(stage, voiceOver.perform(voiceOver.keyboardCommands.moveToNextWebSpot));
-  stage = "find fixture heading";
+async function enterSafariWebContent(): Promise<void> {
+  // Guidepup Playwright's navigateToWebContent implementation uses these public
+  // primitives: activate Safari, cancel, Item Chooser → Web Content, interact.
+  // Do not substitute moveToNextWebSpot: it can land outside document content.
+  await macOSActivate("Safari");
+  await voiceOver.perform({ keyCode: MacOSKeyCodes.Control }, { capture: false });
+  await delay(100);
+  await voiceOver.perform({ keyCode: MacOSKeyCodes.Escape }, { capture: false });
+  await delay(100);
+  await voiceOver.perform(voiceOver.keyboardCommands.openItemChooser, { capture: true });
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await withinStage(stage, voiceOver.nextHeading());
-    const phrases = await withinStage(stage, voiceOver.spokenPhraseLog());
-    speech.splice(0, speech.length, ...phrases);
-    if (phrases.some((phrase) => phrase.includes(SUPPORTED.heading))) break;
-  }
-} catch (error) {
-  failure = error;
-} finally {
-  if (started) {
-    try {
-      stage = "capture speech";
-      speech.splice(0, speech.length, ...(await voiceOver.spokenPhraseLog()));
-    } catch (error) {
-      failure ??= error;
+    for (const character of "web content") {
+      await voiceOver.perform({ keyCode: MacOSKeyCodes.Control }, { capture: false });
+      await delay(100);
+      await voiceOver.type(character, { capture: "initial" });
+      if ((await voiceOver.lastSpokenPhrase()).toLocaleLowerCase("en-US").includes("web content")) {
+        await voiceOver.perform({ keyCode: MacOSKeyCodes.Enter }, { capture: false });
+        await voiceOver.interact({ capture: false });
+        return;
+      }
     }
-    try {
-      stage = "stop VoiceOver";
-      await voiceOver.stop();
-    } catch (error) {
-      failure ??= error;
-    }
+    await voiceOver.perform({ keyCode: MacOSKeyCodes.Backspace }, { capture: false });
+    await delay(100);
   }
-  stage = failure ? stage : "complete";
-  persist();
-  const result = resultFor(speech, failure, stage);
-  console.log(`${result.ok ? "VOICEOVER SMOKE OK" : "VOICEOVER SMOKE FAILED"} — ${runDirectory}`);
-  process.exitCode = result.ok ? 0 : 1;
+  throw new Error("VoiceOver Item Chooser did not select Web Content");
 }
+
+const driver: VoiceOverDriver = {
+  start: () => voiceOver.start({ capture: true }),
+  stop: () => voiceOver.stop(),
+  clearSpokenPhraseLog: () => voiceOver.clearSpokenPhraseLog(),
+  clearItemTextLog: () => voiceOver.clearItemTextLog(),
+  spokenPhraseLog: () => voiceOver.spokenPhraseLog(),
+  itemText: () => voiceOver.itemText(),
+  enterSafariWebContent,
+  nextHeading: () => voiceOver.nextHeading(),
+};
+const evidence = {
+  startedAt: new Date().toISOString(),
+  fixture: fixtureUrl,
+  supported: { macOS: "26.6.x", safari: "26.6.x", voiceOver: "bundled", guidepup: SUPPORTED.guidepup },
+  checks: inspect(),
+};
+
+let speech: string[] = [];
+let cursor: string[] = [];
+let cleanup: CleanupOutcome[] = [];
+let failure: unknown;
+let stage = "preflight";
+if (!evidence.checks.every((check) => check.ok)) {
+  failure = new Error("Unsupported or incomplete environment; see environment.json.");
+} else {
+  const observation = await runVoiceOverSmoke(driver, {
+    timeoutMs: 30_000,
+    openFixture: () => execFileAsync("open", ["-a", "Safari", fixtureUrl]).then(() => undefined),
+    waitForSafari: () => new Promise((resolve) => setTimeout(resolve, 1_500)),
+    matchesFixture: containsFixtureToken,
+    signal: controller.signal,
+  });
+  ({ speech, cursor, cleanup } = observation);
+  failure = observation.failure ?? (signalName ? new Error(`Smoke interrupted by ${signalName}`) : undefined);
+  stage = observation.failedStage ?? "complete";
+}
+const result = writeRunArtifacts(runDirectory, evidence, speech, cursor, failure, stage, cleanup);
+console.log(`${result.ok ? "VOICEOVER SMOKE OK" : "VOICEOVER SMOKE FAILED"} — ${runDirectory}`);
+process.exitCode = result.ok ? 0 : 1;

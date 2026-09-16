@@ -125,6 +125,21 @@ test("CMD entry points explicitly use the provisioned per-user Node wrapper", ()
   );
 });
 
+test("no script parameter default depends on $PSScriptRoot", () => {
+  // Windows PowerShell binds a script's parameter defaults before the script's
+  // own $PSScriptRoot exists, so such a default is an empty path and the
+  // script dies on its first Join-Path. Resolve these in the body instead.
+  for (const script of [
+    "provisioning/provision.ps1",
+    "provisioning/run-smoke-task.ps1",
+    "tasks/register.ps1",
+  ]) {
+    const block = /^param\(([\s\S]*?)^\)/m.exec(readFileSync(script, "utf8"));
+    assert.ok(block?.[1], `${script} has no script parameter block`);
+    assert.doesNotMatch(block[1], /\$PSScriptRoot/, script);
+  }
+});
+
 test("the task protocol is result-controlled and cleans up on timeout", () => {
   const task = readFileSync("provisioning/run-smoke-task.ps1", "utf8");
   assert.doesNotMatch(task, /LastRunTime/);

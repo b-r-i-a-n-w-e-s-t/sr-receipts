@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { MacOSKeyCodes, macOSActivate, voiceOver } from "@guidepup/guidepup";
 import { inspect } from "./doctor.ts";
 import { containsFixtureToken, SUPPORTED, type CleanupOutcome, writeRunArtifacts } from "./evidence.ts";
-import { runVoiceOverSmoke, type VoiceOverDriver } from "./orchestrator.ts";
+import { launchWithRetry, runVoiceOverSmoke, type VoiceOverDriver } from "./orchestrator.ts";
 
 const execFileAsync = promisify(execFile);
 const runDirectory = join(import.meta.dirname, "..", "voiceover-runs", new Date().toISOString().replaceAll(":", "-"));
@@ -79,8 +79,9 @@ async function enterSafariWebContent(): Promise<void> {
   await voiceOver.interact({ capture: false });
 }
 
+const startAttempts: CleanupOutcome[] = [];
 const driver: VoiceOverDriver = {
-  start: () => voiceOver.start({ capture: true }),
+  start: launchWithRetry(() => voiceOver.start({ capture: true }), () => voiceOver.stop(), startAttempts),
   stop: () => voiceOver.stop(),
   clearSpokenPhraseLog: () => voiceOver.clearSpokenPhraseLog(),
   clearItemTextLog: () => voiceOver.clearItemTextLog(),
@@ -122,6 +123,6 @@ if (!evidence.checks.every((check) => check.ok)) {
   failure = observation.failure ?? (signalName ? new Error(`Smoke interrupted by ${signalName}`) : undefined);
   stage = observation.failedStage ?? "complete";
 }
-const result = writeRunArtifacts(runDirectory, evidence, speech, cursor, failure, stage, cleanup);
+const result = writeRunArtifacts(runDirectory, { ...evidence, startAttempts }, speech, cursor, failure, stage, cleanup);
 console.log(`${result.ok ? "VOICEOVER SMOKE OK" : "VOICEOVER SMOKE FAILED"} — ${runDirectory}`);
 process.exitCode = result.ok ? 0 : 1;

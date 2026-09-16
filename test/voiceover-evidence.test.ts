@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkExact, checkVersion, containsFixtureToken, errorChain, normalizeVoiceOverText, resultFor, SUPPORTED, writeRunArtifacts } from "../voiceover/evidence.ts";
 import { appleScriptControlCheck, expectedVoiceOverAsset, preferenceAccessCheck, voiceOverPreferenceDirectory } from "../voiceover/doctor.ts";
-import { runVoiceOverSmoke, type VoiceOverDriver } from "../voiceover/orchestrator.ts";
+import { isLaunchRace, launchWithRetry, runVoiceOverSmoke, START_ATTEMPTS, START_SETTLE_MS, type VoiceOverDriver } from "../voiceover/orchestrator.ts";
+import type { Outcome } from "../voiceover/evidence.ts";
 
 test("the VoiceOver target accepts only its pinned release family", () => {
   assert.equal(checkVersion("macOS", "26.6.4", SUPPORTED.macOS).ok, true);
@@ -121,6 +122,59 @@ test("token-bearing speech alone does not end navigation before the cursor arriv
   assert.equal(headings, 3, "navigation must continue while only speech carries the token");
   assert.equal(result.failure, undefined);
   assert.equal(containsFixtureToken(result.cursor), true);
+});
+
+test("only the VoiceOver launch race counts as retryable", () => {
+  assert.equal(isLaunchRace(new Error("VoiceOver got an error: Application isn\u2019t running. (-600)")), true);
+  assert.equal(isLaunchRace(new Error("VoiceOver cannot be started", { cause: new Error("execution error: (-600)") })), true);
+  assert.equal(isLaunchRace(new Error("Can't get content of last phrase. (-1728)")), false);
+  assert.equal(isLaunchRace(new Error("not authorized to send Apple events")), false);
+});
+
+test("a lost launch race is retried, stopped and settled between attempts, and disclosed", async () => {
+  const record: Outcome[] = [];
+  const calls: string[] = [];
+  let failures = 1;
+  const start = launchWithRetry(
+    async () => {
+      calls.push("start");
+      if (failures-- > 0) throw new Error("VoiceOver cannot be started", { cause: new Error("Application isn\u2019t running. (-600)") });
+    },
+    async () => { calls.push("stop"); },
+    record,
+    { wait: async (milliseconds) => { calls.push(`wait ${milliseconds}`); } },
+  );
+  await start();
+  assert.deepEqual(calls, ["start", "stop", `wait ${START_SETTLE_MS}`, "start"]);
+  assert.equal(record.length, 2);
+  assert.equal(record[0]?.ok, false);
+  assert.match(record[0]?.error ?? "", /-600/);
+  // A run that needed a retry must still say so after it passes.
+  assert.deepEqual(record[1], { action: "start VoiceOver (attempt 2)", ok: true });
+});
+
+test("a launch that never wins the race gives up, and other failures are not retried", async () => {
+  const persistent: Outcome[] = [];
+  let attempts = 0;
+  await assert.rejects(launchWithRetry(
+    async () => { attempts += 1; throw new Error("Application isn\u2019t running. (-600)"); },
+    async () => undefined,
+    persistent,
+    { wait: async () => undefined },
+  )(), /-600/);
+  assert.equal(attempts, START_ATTEMPTS);
+
+  const unrelated: Outcome[] = [];
+  let tries = 0;
+  let waits = 0;
+  await assert.rejects(launchWithRetry(
+    async () => { tries += 1; throw new Error("not authorized to send Apple events"); },
+    async () => undefined,
+    unrelated,
+    { wait: async () => { waits += 1; } },
+  )(), /not authorized/);
+  assert.equal(waits, 0, "a non-race failure must not even pay the settle delay");
+  assert.equal(tries, 1, "a real authorization failure must fail on the first attempt");
 });
 
 test("an abort during a pending start schedules a late stop instead of leaking VoiceOver", async () => {

@@ -18,6 +18,7 @@ import { promisify } from "node:util";
 import { voiceOver } from "@guidepup/guidepup";
 import { inspect } from "./doctor.ts";
 import { errorChain, type Outcome } from "./evidence.ts";
+import { launchWithRetry } from "./orchestrator.ts";
 
 export type CaptureProbeDriver = {
   start(): Promise<void>;
@@ -126,8 +127,12 @@ export function redactHome(text: string, home = homedir()): string {
 
 if (process.argv[1] === import.meta.filename) {
   const execFileAsync = promisify(execFile);
+  // The probe retries the same launch race the smoke does, so a lost race does
+  // not read as "capture is broken" — the exact confusion this probe exists to
+  // prevent. Each attempt lands in the report's actions.
+  const launchAttempts: Outcome[] = [];
   const driver: CaptureProbeDriver = {
-    start: () => voiceOver.start({ capture: true }),
+    start: launchWithRetry(() => voiceOver.start({ capture: true }), () => voiceOver.stop(), launchAttempts),
     stop: () => voiceOver.stop(),
     clearSpokenPhraseLog: () => voiceOver.clearSpokenPhraseLog(),
     lastSpokenPhrase: () => voiceOver.lastSpokenPhrase(),
@@ -145,7 +150,7 @@ if (process.argv[1] === import.meta.filename) {
 
   const report = await probeCapture(driver);
   const checks = inspect().filter((check) => !check.ok).map((check) => check.name);
-  console.log(redactHome(JSON.stringify({ ...report, failedChecks: checks }, null, 2)));
+  console.log(redactHome(JSON.stringify({ ...report, launchAttempts, failedChecks: checks }, null, 2)));
   const captured = report.queries.some(
     (query) => query.spokenPhraseLog.ok && query.spokenPhraseLog.value.some((phrase) => phrase.trim() !== ""),
   );

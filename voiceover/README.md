@@ -69,6 +69,12 @@ it rather than leaving it to be diagnosed from a failed run. Enabling it is
 step 2 of the manual authorization above; nothing here writes it, because the
 preference lives in a protected group container.
 
+> [!IMPORTANT]
+> Enabling AppleScript control is not optional and not merely a permissions
+> nicety: with it off, this target fails in a way that looks like a Guidepup
+> bug. Control, startup, and keystrokes all appear healthy while capture
+> silently returns empty strings.
+
 The smoke opens the committed local `fixture.html`, starts VoiceOver through
 Guidepup with phrase and cursor capture, then uses the documented public
 Guidepup sequence that its Playwright adapter uses for web content: activate
@@ -86,10 +92,12 @@ announced only as a generic VoiceOver menu — VoiceOver never speaks the words
 feature's name. And every wait in the sequence is bounded by an attempt count
 that reports the phrase VoiceOver actually spoke, because a stage timeout alone
 reports only elapsed time and hides why the sequence stalled.
+
 It writes an ignored, timestamped `voiceover-runs/<run-id>/` directory even if
 startup, Safari control, navigation, capture, or cleanup fails:
 
-- `environment.json` — pinned environment declaration and read-only checks
+- `environment.json` — pinned environment declaration, read-only checks, failed
+  stage, and every VoiceOver start attempt
 - `speech.json` — complete captured VoiceOver phrase log available at cleanup
 - `cursor.json` — VoiceOver cursor text observed after heading navigation
 - `result.json` — pass/fail, original failed stage, cleanup outcomes, expected
@@ -100,11 +108,35 @@ VoiceOver and captured speech from deterministic Safari content. A failure is
 evidence of a remaining compatibility limitation, not permission for the
 script to alter macOS state.
 
-> [!IMPORTANT]
-> Enabling AppleScript control is not optional and not merely a permissions
-> nicety: with it off, this target fails in a way that looks like a Guidepup
-> bug. Control, startup, and keystrokes all appear healthy while capture
-> silently returns empty strings.
+## The VoiceOver launch race
+
+Roughly one run in four used to fail at `start VoiceOver` with `VoiceOver cannot
+be started` / `Application isn't running. (-600)` before any capture happened.
+Guidepup terminates and restarts VoiceOver during `start()` and can activate it
+before macOS has finished launching it; upstream issue
+[#101](https://github.com/guidepup/guidepup/issues/101) reports related
+not-fully-quitting behavior on Tahoe.
+
+Startup now retries this, up to `START_ATTEMPTS` attempts, stopping the reader
+between tries so a half-launched VoiceOver is not left behind and then waiting
+`START_SETTLE_MS` before the next attempt.
+
+**The delay is the part that works, not the retry.** Retrying immediately failed
+all three attempts every time, while a fresh run seconds later always succeeded
+— so the race needs macOS to finish tearing the reader down, not another
+immediate attempt. With the settle delay, 8 of 8 consecutive runs passed, one of
+them by recovering on its second attempt. Shortening or removing the delay
+returns the whole retry to useless; measure before changing it.
+
+Two further properties make the retry safe to trust:
+
+- **Only this error is retried.** Anything else — a missing permission, a reader
+  that cannot start at all — fails on the first attempt. A passing result still
+  has to mean VoiceOver really was driven.
+- **Every attempt is disclosed.** `environment.json` records `startAttempts`,
+  including the successful one, so a run that needed a retry says so instead of
+  passing silently. Watch that field: if retries become common, the race has
+  changed and is worth reporting upstream rather than absorbing.
 
 ## Minimal capture probe
 
@@ -115,7 +147,8 @@ npm run voiceover:capture-probe
 The probe is the smallest thing that exercises capture — no Safari, no fixture,
 no Item Chooser, only start, one cursor move, and the capture queries. Use it
 when the smoke reports empty speech, to separate a capture problem from a
-navigation problem.
+navigation problem. It is what identified `SCREnableAppleScript` as the cause of
+the `Can't get content of last phrase. (-1728)` failure.
 
 It records every reading instead of throwing on the first failure, so one run
 shows whether capture never worked or broke once the reader moved. Alongside

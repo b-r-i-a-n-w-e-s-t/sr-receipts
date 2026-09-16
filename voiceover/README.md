@@ -76,6 +76,16 @@ Safari; cancel the current interaction; open **Item Chooser**; select
 **Web Content**; and `interact()`. It deliberately does **not** use a web spot.
 It advances by heading until both captured speech and the VoiceOver cursor
 contain the normalized fixture token `MarigoldComet48291`, then stops VoiceOver.
+Both streams must carry the token before navigation stops: the Item Chooser
+speaks the name of the heading it is choosing, so speech alone can hold the
+token while the cursor is still on the enclosing landmark.
+
+Two details of this sequence are specific to macOS 26. The Item Chooser is
+announced only as a generic VoiceOver menu — VoiceOver never speaks the words
+"Item Chooser" — so the adapter matches that announcement instead of the
+feature's name. And every wait in the sequence is bounded by an attempt count
+that reports the phrase VoiceOver actually spoke, because a stage timeout alone
+reports only elapsed time and hides why the sequence stalled.
 It writes an ignored, timestamped `voiceover-runs/<run-id>/` directory even if
 startup, Safari control, navigation, capture, or cleanup fails:
 

@@ -25,31 +25,58 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-async function enterSafariWebContent(): Promise<void> {
-  // Guidepup Playwright's navigateToWebContent implementation uses these public
-  // primitives: activate Safari, cancel, Item Chooser → Web Content, interact.
-  // Do not substitute moveToNextWebSpot: it can land outside document content.
-  await macOSActivate("Safari");
-  await voiceOver.perform({ keyCode: MacOSKeyCodes.Control }, { capture: false });
-  await delay(100);
-  await voiceOver.perform({ keyCode: MacOSKeyCodes.Escape }, { capture: false });
-  await delay(100);
-  await voiceOver.perform(voiceOver.keyboardCommands.openItemChooser, { capture: true });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+/**
+ * macOS 26 announces the Item Chooser only as a generic VoiceOver menu — it
+ * never speaks the words "Item Chooser". Matching on the name alone spins
+ * forever against a chooser that is already open. This also matches VoiceOver's
+ * other menus, which is acceptable: landing in the wrong menu then fails in
+ * `chooseWebContent` with the phrase VoiceOver actually spoke.
+ */
+const ITEM_CHOOSER_ANNOUNCEMENT = /item chooser|voiceover menu/i;
+const CHOOSER_ATTEMPTS = 5;
+const SEARCH_ATTEMPTS = 3;
+
+async function openItemChooser(): Promise<void> {
+  let spoken = "";
+  for (let attempt = 0; attempt < CHOOSER_ATTEMPTS; attempt += 1) {
+    await voiceOver.perform({ keyCode: MacOSKeyCodes.Control }, { capture: false });
+    await delay(100);
+    await voiceOver.perform({ keyCode: MacOSKeyCodes.Escape }, { capture: false });
+    await delay(100);
+    await voiceOver.perform(voiceOver.keyboardCommands.openItemChooser, { capture: true });
+    spoken = await voiceOver.lastSpokenPhrase();
+    if (ITEM_CHOOSER_ANNOUNCEMENT.test(spoken)) return;
+  }
+  throw new Error(`Item Chooser did not open in ${CHOOSER_ATTEMPTS} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
+}
+
+async function chooseWebContent(): Promise<void> {
+  let spoken = "";
+  for (let attempt = 0; attempt < SEARCH_ATTEMPTS; attempt += 1) {
     for (const character of "web content") {
       await voiceOver.perform({ keyCode: MacOSKeyCodes.Control }, { capture: false });
       await delay(100);
       await voiceOver.type(character, { capture: "initial" });
-      if ((await voiceOver.lastSpokenPhrase()).toLocaleLowerCase("en-US").includes("web content")) {
-        await voiceOver.perform({ keyCode: MacOSKeyCodes.Enter }, { capture: false });
-        await voiceOver.interact({ capture: false });
-        return;
-      }
+      spoken = await voiceOver.lastSpokenPhrase();
+      if (spoken.toLowerCase().includes("web content")) return;
     }
     await voiceOver.perform({ keyCode: MacOSKeyCodes.Backspace }, { capture: false });
     await delay(100);
   }
-  throw new Error("VoiceOver Item Chooser did not select Web Content");
+  throw new Error(`Item Chooser had no Web Content entry after ${SEARCH_ATTEMPTS} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
+}
+
+async function enterSafariWebContent(): Promise<void> {
+  // Guidepup Playwright's navigateToWebContent implementation uses these public
+  // primitives: activate Safari, cancel, Item Chooser → Web Content, interact.
+  // Do not substitute moveToNextWebSpot: it can land outside document content.
+  // Every wait here is bounded: a stage timeout reports only elapsed time,
+  // while these report what VoiceOver actually said.
+  await macOSActivate("Safari");
+  await openItemChooser();
+  await chooseWebContent();
+  await voiceOver.perform({ keyCode: MacOSKeyCodes.Enter }, { capture: false });
+  await voiceOver.interact({ capture: false });
 }
 
 const driver: VoiceOverDriver = {
@@ -79,6 +106,13 @@ if (!evidence.checks.every((check) => check.ok)) {
 } else {
   const observation = await runVoiceOverSmoke(driver, {
     timeoutMs: 30_000,
+    // Guidepup's own start operation performs two terminate/start attempts.
+    // It needs a longer budget than individual navigation operations.
+    startTimeoutMs: 150_000,
+    // Item Chooser discovery is a sequence of VoiceOver commands, not a single
+    // operation. Its own attempt limits are the real bound; this is a backstop
+    // against a VoiceOver command that never returns at all.
+    webContentTimeoutMs: 150_000,
     openFixture: () => execFileAsync("open", ["-a", "Safari", fixtureUrl]).then(() => undefined),
     waitForSafari: () => new Promise((resolve) => setTimeout(resolve, 1_500)),
     matchesFixture: containsFixtureToken,

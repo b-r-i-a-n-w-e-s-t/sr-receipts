@@ -97,6 +97,32 @@ test("orchestration keeps the primary failure stage while reporting successful c
   assert.deepEqual(calls, ["start", "clear speech", "clear cursor", "open", "wait", "stop"]);
 });
 
+test("token-bearing speech alone does not end navigation before the cursor arrives", async () => {
+  // The Item Chooser speaks the heading it is choosing, so speech can carry the
+  // token while the VoiceOver cursor is still on the enclosing landmark.
+  const cursorTexts = ["main", "main", SUPPORTED.heading];
+  let headings = 0;
+  const driver: VoiceOverDriver = {
+    start: async () => undefined,
+    stop: async () => undefined,
+    clearSpokenPhraseLog: async () => undefined,
+    clearItemTextLog: async () => undefined,
+    spokenPhraseLog: async () => [`On item 1: ${SUPPORTED.heading}`],
+    itemText: async () => cursorTexts.shift() ?? SUPPORTED.heading,
+    enterSafariWebContent: async () => undefined,
+    nextHeading: async () => { headings += 1; },
+  };
+  const result = await runVoiceOverSmoke(driver, {
+    timeoutMs: 100,
+    openFixture: async () => undefined,
+    waitForSafari: async () => undefined,
+    matchesFixture: containsFixtureToken,
+  });
+  assert.equal(headings, 3, "navigation must continue while only speech carries the token");
+  assert.equal(result.failure, undefined);
+  assert.equal(containsFixtureToken(result.cursor), true);
+});
+
 test("an abort during a pending start schedules a late stop instead of leaking VoiceOver", async () => {
   let resolveStart!: () => void;
   const controller = new AbortController();

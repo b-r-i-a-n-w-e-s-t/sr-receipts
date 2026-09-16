@@ -91,6 +91,8 @@ export async function runVoiceOverSmoke(driver: VoiceOverDriver, options: SmokeO
     speech.splice(0, speech.length, ...(await driver.spokenPhraseLog()));
     cursor.push(await driver.itemText());
   };
+  /** The run's success condition: the token reached speech *and* the cursor. */
+  const proven = () => options.matchesFixture(speech) && options.matchesFixture(cursor);
 
   try {
     checkAbort();
@@ -121,14 +123,18 @@ export async function runVoiceOverSmoke(driver: VoiceOverDriver, options: SmokeO
     checkAbort();
     currentStage = "enter Safari web content";
     await timed(currentStage, options.timeoutMs, driver.enterSafariWebContent, options.signal);
-    for (let attempt = 0; attempt < 3 && !options.matchesFixture([...speech, ...cursor]); attempt += 1) {
+    // Navigate until the proof itself holds. Stopping as soon as *either*
+    // stream matched let the Item Chooser's own announcement — which speaks the
+    // heading being chosen, and so contains the token — end navigation with the
+    // cursor still outside the heading.
+    for (let attempt = 0; attempt < 3 && !proven(); attempt += 1) {
       checkAbort();
       currentStage = "find fixture heading";
       await timed(currentStage, options.timeoutMs, driver.nextHeading, options.signal);
       currentStage = "capture heading evidence";
       await timed(currentStage, options.timeoutMs, capture, options.signal);
     }
-    if (!options.matchesFixture(speech) || !options.matchesFixture(cursor)) {
+    if (!proven()) {
       throw new Error("Fixture token was not observed in both spoken output and VoiceOver cursor text");
     }
   } catch (error) {

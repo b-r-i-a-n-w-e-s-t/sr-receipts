@@ -3,8 +3,9 @@ import test from "node:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkExact, checkVersion, errorChain, resultFor, SUPPORTED, writeRunArtifacts } from "../voiceover/evidence.ts";
+import { checkExact, checkVersion, containsFixtureToken, errorChain, normalizeVoiceOverText, resultFor, SUPPORTED, writeRunArtifacts } from "../voiceover/evidence.ts";
 import { expectedVoiceOverAsset, preferenceAccessCheck } from "../voiceover/doctor.ts";
+import { runVoiceOverSmoke, type VoiceOverDriver } from "../voiceover/orchestrator.ts";
 
 test("the VoiceOver target accepts only its pinned release family", () => {
   assert.equal(checkVersion("macOS", "26.6.4", SUPPORTED.macOS).ok, true);
@@ -24,15 +25,17 @@ test("doctor exposes its asset and protected-preference diagnostics", () => {
   assert.equal(check.name, "VoiceOver preferences access");
 });
 
-test("speech proof requires a non-empty capture containing the unique heading", () => {
+test("speech proof requires normalized token evidence in both speech and cursor", () => {
   assert.equal(resultFor([]).limitation?.includes("could not prove"), true);
-  assert.equal(resultFor(["loading", SUPPORTED.heading]).ok, true);
-  assert.equal(resultFor([SUPPORTED.heading], new Error("cleanup failed")).ok, false);
+  assert.equal(normalizeVoiceOverText("Marigold Comet-48291"), "marigoldcomet48291");
+  assert.equal(containsFixtureToken(["heading, Marigold Comet 48291"]), true);
+  assert.equal(resultFor(["loading", SUPPORTED.heading], undefined, undefined, [SUPPORTED.heading]).ok, true);
+  assert.equal(resultFor([SUPPORTED.heading], new Error("cleanup failed"), undefined, [SUPPORTED.heading]).ok, false);
 });
 
 test("failure evidence names the failed stage and preserves nested diagnostics", () => {
   const failure = new Error("could not stop VoiceOver", { cause: new Error("Apple event timed out") });
-  const result = resultFor(["partial capture"], failure, "stop VoiceOver");
+  const result = resultFor(["partial capture"], failure, "stop VoiceOver", ["partial cursor"]);
   assert.deepEqual(errorChain(failure), ["could not stop VoiceOver", "Apple event timed out"]);
   assert.equal(result.stage, "stop VoiceOver");
   assert.deepEqual(result.causes, ["could not stop VoiceOver", "Apple event timed out"]);
@@ -41,10 +44,63 @@ test("failure evidence names the failed stage and preserves nested diagnostics",
 
 test("a failed stage persists complete observable artifacts", () => {
   const directory = mkdtempSync(join(tmpdir(), "voiceover-evidence-"));
-  writeRunArtifacts(directory, { fixture: "file:///fixture.html" }, ["partial capture"], new Error("timed out"), "enter Safari web content");
+  writeRunArtifacts(directory, { fixture: "file:///fixture.html" }, ["partial capture"], ["partial cursor"], new Error("timed out"), "enter Safari web content", [{ action: "stop VoiceOver", ok: false, error: "stop failed" }]);
   assert.deepEqual(JSON.parse(readFileSync(join(directory, "speech.json"), "utf8")), ["partial capture"]);
   const result = JSON.parse(readFileSync(join(directory, "result.json"), "utf8"));
   assert.equal(result.stage, "enter Safari web content");
   assert.equal(result.error, "timed out");
   assert.match(result.limitation, /enter Safari web content/);
+  assert.deepEqual(result.cleanup, [{ action: "stop VoiceOver", ok: false, error: "stop failed" }]);
+});
+
+test("orchestration keeps the primary failure stage while reporting successful cleanup", async () => {
+  const calls: string[] = [];
+  const driver: VoiceOverDriver = {
+    start: async () => { calls.push("start"); },
+    stop: async () => { calls.push("stop"); },
+    clearSpokenPhraseLog: async () => { calls.push("clear speech"); },
+    clearItemTextLog: async () => { calls.push("clear cursor"); },
+    spokenPhraseLog: async () => ["Marigold Comet 48291"],
+    itemText: async () => "MarigoldComet48291",
+    enterSafariWebContent: async () => { throw new Error("chooser unavailable"); },
+    nextHeading: async () => { calls.push("next heading"); },
+  };
+  const result = await runVoiceOverSmoke(driver, {
+    timeoutMs: 100,
+    openFixture: async () => { calls.push("open"); },
+    waitForSafari: async () => { calls.push("wait"); },
+    matchesFixture: containsFixtureToken,
+  });
+  assert.equal(result.failedStage, "enter Safari web content");
+  assert.equal(result.cleanup.find((outcome) => outcome.action === "stop VoiceOver")?.ok, true);
+  assert.deepEqual(calls, ["start", "clear speech", "clear cursor", "open", "wait", "stop"]);
+});
+
+test("an abort during a pending start schedules a late stop instead of leaking VoiceOver", async () => {
+  let resolveStart!: () => void;
+  const controller = new AbortController();
+  let stops = 0;
+  const driver: VoiceOverDriver = {
+    start: () => new Promise<void>((resolve) => { resolveStart = resolve; }),
+    stop: async () => { stops += 1; },
+    clearSpokenPhraseLog: async () => undefined,
+    clearItemTextLog: async () => undefined,
+    spokenPhraseLog: async () => [],
+    itemText: async () => "",
+    enterSafariWebContent: async () => undefined,
+    nextHeading: async () => undefined,
+  };
+  const running = runVoiceOverSmoke(driver, {
+    timeoutMs: 1_000,
+    openFixture: async () => undefined,
+    waitForSafari: async () => undefined,
+    matchesFixture: containsFixtureToken,
+    signal: controller.signal,
+  });
+  controller.abort();
+  const result = await running;
+  resolveStart();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(result.failedStage, "interrupted");
+  assert.ok(stops >= 1);
 });

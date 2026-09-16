@@ -10,23 +10,32 @@ NVDA workflow.
 Do these actions manually, while signed in to the interactive Mac desktop:
 
 1. Install this repository's pinned Node dependencies with `npm ci`.
-2. In **VoiceOver Utility → General**, enable **Allow VoiceOver to be
-   controlled with AppleScript**. Do this interactively; do not edit TCC or
-   `/private/var/db/Accessibility` and do not disable SIP.
+2. Start the bundled VoiceOver once manually (Command-F5), complete Apple's
+   first-run onboarding, then open **VoiceOver Utility → General** and enable
+   **Allow VoiceOver to be controlled with AppleScript**. This establishes the
+   local VoiceOver configuration without writing TCC's database.
 3. In **System Settings → Privacy & Security → Accessibility**, enable the
-   terminal application that will run `npm run voiceover:smoke` (and approve
-   any Guidepup helper that macOS presents).
+   terminal application that will run `npm run voiceover:smoke`. When macOS
+   presents one, also approve the Guidepup helper used by this installation.
 4. In **System Settings → Privacy & Security → Automation**, allow that terminal
-   and the Guidepup helper to control Safari if macOS asks.
-5. Keep the system language list containing English and use the bundled
+   (and any presented Guidepup helper) to control **Safari** and **VoiceOver**.
+   These rows appear only after the relevant first request; rerun the smoke and
+   answer the system prompt rather than editing TCC.
+5. In **System Settings → Privacy & Security → Full Disk Access**, enable the
+   same terminal application. It needs access to VoiceOver's protected group
+   preference directory while Guidepup mounts its preference asset. If the
+   terminal is an IDE-integrated terminal, grant the IDE application instead.
+   Quit and reopen that application after changing Full Disk Access.
+6. Keep the system language list containing English and use the bundled
    VoiceOver. Do not run this smoke against a manually installed replacement.
-6. Separately download the asset matched to this repository's Guidepup version:
+7. Download the asset matched to this repository's Guidepup version:
 
    ```bash
    npx @guidepup/setup install voiceover
    ```
 
-   This downloads the VoiceOver preference asset; rerun it after changing
+   This is the supported asset-install step, not the TCC-bypass `setup` step.
+   It downloads the VoiceOver preference asset; rerun it after changing
    Guidepup. It is not a substitute for the manual permissions above.
 
 Never run `@guidepup/setup setup` for this target: that setup flow can attempt
@@ -48,15 +57,20 @@ access to the protected VoiceOver preferences directory. It cannot prove that
 macOS will authorize automation.
 
 The smoke opens the committed local `fixture.html`, starts VoiceOver through
-Guidepup with full phrase capture, explicitly enters Safari web content, then
-advances by heading until it hears the unique text
-`Dogwalk VoiceOver smoke heading: Marigold Comet 48291`, and stops VoiceOver.
+Guidepup with phrase and cursor capture, then uses the documented public
+Guidepup sequence that its Playwright adapter uses for web content: activate
+Safari; cancel the current interaction; open **Item Chooser**; select
+**Web Content**; and `interact()`. It deliberately does **not** use a web spot.
+It advances by heading until both captured speech and the VoiceOver cursor
+contain the normalized fixture token `MarigoldComet48291`, then stops VoiceOver.
 It writes an ignored, timestamped `voiceover-runs/<run-id>/` directory even if
 startup, Safari control, navigation, capture, or cleanup fails:
 
 - `environment.json` — pinned environment declaration and read-only checks
 - `speech.json` — complete captured VoiceOver phrase log available at cleanup
-- `result.json` — pass/fail, expected heading, error, and completion time
+- `cursor.json` — VoiceOver cursor text observed after heading navigation
+- `result.json` — pass/fail, original failed stage, cleanup outcomes, expected
+  token, error, and completion time
 
 A successful result is the required proof that Guidepup controlled real
 VoiceOver and captured speech from deterministic Safari content. A failure is
@@ -64,7 +78,9 @@ evidence of a remaining compatibility limitation, not permission for the
 script to alter macOS state.
 
 > [!IMPORTANT]
-> Guidepup temporarily mounts its portable VoiceOver preference asset and
-> updates VoiceOver preference links/identifiers while it runs, then attempts to
-> undo that work on stop. Run this only on a suitable local test desktop; it is
+> Guidepup 0.34.0 mounts the portable preference DMG, trusts its portable
+> identifier, restarts the preferences daemon, and creates portable-preference
+> symlinks. Its `stop()` implementation detaches the DMG and removes its shadow
+> file, but does not remove those symlinks, untrust the identifier, or restart
+> the preferences daemon. Run this only on a suitable local test desktop; it is
 > not a read-only smoke test.

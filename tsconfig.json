@@ -28,5 +28,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["lib/**/*.ts", "scenarios/**/*.ts", "test/**/*.ts", "*.ts"]
+  "include": ["lib/**/*.ts", "scenarios/**/*.ts", "test/**/*.ts", "voiceover/**/*.ts", "*.ts"]
 }

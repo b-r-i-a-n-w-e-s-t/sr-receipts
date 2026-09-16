@@ -38,3 +38,5 @@ screen.png
 
 # Console log from run-daemon.cmd.
 daemon.out
+voiceover-runs/
+voiceover/doctor.json

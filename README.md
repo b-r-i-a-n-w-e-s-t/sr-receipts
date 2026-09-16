@@ -3,6 +3,10 @@
 Drives NVDA and Firefox to capture screen-reader transcripts, so an
 accessibility question can be answered with evidence rather than recollection.
 
+The Windows/NVDA workflow remains unchanged. The separate, intentionally narrow
+[local VoiceOver smoke](voiceover/README.md) proves the macOS execution target
+without generalizing it into the rig's Windows implementation.
+
 Runs inside a Windows 11 **ARM64** guest under UTM on a Mac. Targets are either
 local fixtures or `http(s)` URLs — the URL form is how a Vite dev server on the
 host gets driven from inside the guest.

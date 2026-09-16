@@ -49,7 +49,9 @@ function check(source: string): string {
       }),
       "utf8",
     );
-    execFileSync(process.execPath, [TSC, "-p", dir], { encoding: "utf8" });
+    // Keep compiler diagnostics machine-readable when a terminal/CI enables
+    // colour; the assertions below intentionally match TypeScript's text.
+    execFileSync(process.execPath, [TSC, "-p", dir, "--pretty", "false"], { encoding: "utf8" });
     return "";
   } catch (error) {
     // tsc exits non-zero on type errors and reports them on stdout.

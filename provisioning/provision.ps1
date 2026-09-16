@@ -81,8 +81,36 @@ try {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tasks\register.ps1
   if ($LASTEXITCODE) { throw 'Interactive task registration failed.' }
 
+  # The reporter normally owns this file. Retain a valid, UTF-8 failure report
+  # even if Node cannot start or the reporter itself fails before writing one.
   & $node provisioning\health-report.ts $ReportPath
-  $provisionOk = $LASTEXITCODE -eq 0
+  $reporterExit = $LASTEXITCODE
+  $provisionOk = $reporterExit -eq 0
+  if (-not (Test-Path $ReportPath)) {
+    $fallback = [ordered]@{
+      schemaVersion = 2
+      ok = $false
+      fixture = 'control.html'
+      execution = 'unelevated interactive scheduled task: real NVDA with headed Firefox'
+      checks = [ordered]@{
+        taskCompleted = $false; smokePassed = $false; speechCaptured = $false
+        focusRetained = $false; scheduledCmdNode = $false; freshArtifact = $false
+      }
+      artifact = $null
+      observed = [ordered]@{
+        reporterNode = (& $node --version)
+        reporterPlatform = 'win32'
+        reporterArchitecture = $env:PROCESSOR_ARCHITECTURE
+        taskOutput = ''
+      }
+      failure = "health reporter failed with exit code $reporterExit"
+    }
+    [IO.File]::WriteAllText(
+      $ReportPath,
+      ($fallback | ConvertTo-Json -Depth 5),
+      [Text.UTF8Encoding]::new($false)
+    )
+  }
 
   $probe = [ordered]@{ attempted = [bool]$HostUrl; ok = $null; url = $HostUrl; failure = $null }
   if ($HostUrl) {
@@ -91,7 +119,11 @@ try {
   }
   $report = Get-Content $ReportPath -Raw | ConvertFrom-Json
   $report | Add-Member -NotePropertyName hostUrlProbe -NotePropertyValue $probe
-  $report | ConvertTo-Json -Depth 5 | Set-Content $ReportPath
+  [IO.File]::WriteAllText(
+    $ReportPath,
+    ($report | ConvertTo-Json -Depth 5),
+    [Text.UTF8Encoding]::new($false)
+  )
   if (-not $provisionOk) { exit 1 }
 } finally {
   Pop-Location

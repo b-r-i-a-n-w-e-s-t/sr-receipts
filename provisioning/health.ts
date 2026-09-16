@@ -1,55 +1,57 @@
-/**
- * Turn the smoke artifact into a machine-readable provisioning verdict.
- *
- * Keeping this decision pure means the PowerShell provisioner can always
- * persist useful evidence, including when the desktop-dependent smoke fails.
- */
+import {
+  SMOKE_CONTROL_FIXTURE,
+  SMOKE_RESULT_SCHEMA_VERSION,
+  SCHEDULED_TASK_POSTURE,
+  type SmokeResult,
+} from "../lib/smoke-result.ts";
+
 export interface HealthReport {
-  schemaVersion: 1;
+  schemaVersion: 2;
   ok: boolean;
-  fixture: "control.html";
+  fixture: typeof SMOKE_CONTROL_FIXTURE;
   execution: "unelevated interactive scheduled task: real NVDA with headed Firefox";
   checks: {
-    smokeExited: boolean;
+    taskCompleted: boolean;
+    smokePassed: boolean;
     speechCaptured: boolean;
+    focusRetained: boolean;
+    scheduledCmdNode: boolean;
     freshArtifact: boolean;
   };
   artifact: string;
   observed: {
-    node: string;
-    platform: string;
-    architecture: string;
+    reporterNode: string;
+    reporterPlatform: string;
+    reporterArchitecture: string;
     taskOutput: string;
+    smoke?: SmokeResult["observed"];
   };
   failure?: string;
 }
 
-const SPEECH_HEADING = "### ";
-
-/** A smoke log has speech only when a recorded step has non-silent content. */
-export function hasCapturedSpeech(smokeLog: string): boolean {
-  const sections = smokeLog.split(SPEECH_HEADING).slice(1);
-  return sections.some((section) => {
-    const speech = section.split("\n").slice(1).join("\n").trim();
-    return speech.length > 0 && speech !== "(silence)";
-  });
-}
-
 export function assessSmoke(
-  smokeExited: boolean,
-  smokeLog: string | undefined,
+  taskCompleted: boolean,
+  smoke: SmokeResult | undefined,
   artifact: string,
   freshArtifact: boolean,
   observed: HealthReport["observed"],
   failure?: string,
 ): HealthReport {
-  const speechCaptured = smokeLog === undefined ? false : hasCapturedSpeech(smokeLog);
+  const smokePassed = smoke?.ok === true;
+  const speechCaptured = smoke?.speechCaptured === true;
+  const focusRetained = smoke?.focusLost === null;
+  const scheduledCmdNode =
+    smoke?.schemaVersion === SMOKE_RESULT_SCHEMA_VERSION &&
+    smoke.fixture === SMOKE_CONTROL_FIXTURE &&
+    smoke.observed.executionPosture === SCHEDULED_TASK_POSTURE &&
+    smoke.observed.platform === "win32" &&
+    smoke.observed.executable.toLowerCase().includes("\\nvda-rig\\node-v");
   return {
-    schemaVersion: 1,
-    ok: smokeExited && speechCaptured && freshArtifact,
-    fixture: "control.html",
+    schemaVersion: 2,
+    ok: taskCompleted && smokePassed && speechCaptured && focusRetained && scheduledCmdNode && freshArtifact,
+    fixture: SMOKE_CONTROL_FIXTURE,
     execution: "unelevated interactive scheduled task: real NVDA with headed Firefox",
-    checks: { smokeExited, speechCaptured, freshArtifact },
+    checks: { taskCompleted, smokePassed, speechCaptured, focusRetained, scheduledCmdNode, freshArtifact },
     artifact,
     observed,
     ...(failure ? { failure } : {}),

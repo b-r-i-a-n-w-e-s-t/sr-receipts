@@ -1,2 +1,3 @@
-cd /d %USERPROFILE%\nvda-rig
-node probe.ts > probe.out 2>&1
+cd /d "%~dp0"
+if not exist artifacts mkdir artifacts
+node probe.ts > artifacts\probe.out 2>&1

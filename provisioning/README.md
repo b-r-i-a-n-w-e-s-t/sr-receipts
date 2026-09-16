@@ -22,25 +22,35 @@ powershell -ExecutionPolicy Bypass -File provisioning\provision.ps1
 
 NVDA and headed Firefox must share the interactive desktop. Do not run this
 over SSH, as a service, or while the desktop is locked. Re-running is safe: the
-script verifies installed versions, uses `npm ci`, and Guidepup reuses its
-registered portable NVDA installation.
+script verifies installed versions, uses `npm ci`, invokes Guidepup's `setup`
+then `install nvda` lifecycle, and re-registers the required limited,
+interactive entry points. The proof itself is always launched through the
+unelevated `nvda-smoke` scheduled task—not the possibly elevated provisioning
+PowerShell process.
 
 ## Reviewed runtime manifest
 
 [`runtime-manifest.json`](./runtime-manifest.json) is the review point for every
-runtime version and downloaded executable hash. Node and Firefox are ARM64
-installer URLs whose SHA-256 values are verified before installation. The exact
-locked `@guidepup/setup` version supplies Guidepup's tagged portable NVDA asset;
-the asset tag and archive SHA-256 are recorded for review. Updating any runtime
-means reviewing this manifest and the npm lockfile together.
+runtime version and downloaded executable hash. Node 22.18.0 is the official
+ARM64 ZIP distribution; it is installed into the current user's local
+application data so direct TypeScript execution needs no machine-wide MSI or
+elevation. Firefox is pinned to 156.0, the version recorded by the committed
+Windows transcript baselines. Both downloads have SHA-256 values verified before
+installation. The exact locked `@guidepup/setup` 0.25.3 installs assets selected
+from `@guidepup/guidepup` 0.34.0's own manifest; the NVDA asset facts in this
+manifest are a reviewed copy of that source, and the pure test asserts their
+conformance. Updating any runtime means reviewing this manifest and the npm
+lockfile together.
 
 ## Evidence and optional network diagnosis
 
 Provisioning always runs `smoke.ts control.html`, a local fixture, through real
-NVDA and headed Firefox. It writes `smoke-log.txt` (the speech artifact) and
-`provisioning/health-report.json`. Success requires both a successful smoke
-exit and non-empty, non-silent recorded speech; installed files alone are not a
-passing rig.
+NVDA and headed Firefox. The task clears and recreates
+`artifacts/smoke-log.txt` and `artifacts/smoke-task.out` for each proof, then
+writes `provisioning/health-report.json`. Success requires a successful task, a
+fresh speech artifact, and non-empty, non-silent recorded speech; installed
+files or stale logs alone are not a passing rig. The report also retains task
+output and Node/platform diagnostics when the smoke fails.
 
 To diagnose a Mac-served app without making networking a provisioning
 requirement:

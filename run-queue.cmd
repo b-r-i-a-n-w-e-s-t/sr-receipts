@@ -1,2 +1,3 @@
-cd /d %USERPROFILE%\nvda-rig
-node runner.ts > runner.out 2>&1
+cd /d "%~dp0"
+if not exist artifacts mkdir artifacts
+node runner.ts > artifacts\runner.out 2>&1

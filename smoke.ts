@@ -14,8 +14,8 @@
  * `nvda-smoke` scheduled task, registered with `/it` so it lands in the
  * logged-in console session.
  */
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import {
   SILENCE,
   openTarget,
@@ -72,8 +72,12 @@ try {
   console.error("CAUSE:", (failure?.cause as Error)?.message ?? failure?.cause ?? "(none)");
   out.push("### error", failure?.message ?? "", (failure?.cause as Error)?.message ?? "");
 } finally {
-  writeFileSync(join(import.meta.dirname, "smoke-log.txt"), out.join("\n") + "\n", "utf8");
+  const artifact = resolve(
+    process.env.RIG_SMOKE_ARTIFACT ?? "artifacts/smoke-log.txt",
+  );
+  mkdirSync(dirname(artifact), { recursive: true });
+  writeFileSync(artifact, out.join("\n") + "\n", "utf8");
   await stopSession();
-  console.log(ok ? "\nSMOKE OK" : "\nSMOKE FAILED — see smoke-log.txt");
+  console.log(ok ? "\nSMOKE OK" : `\nSMOKE FAILED — see ${artifact}`);
   process.exitCode = ok ? 0 : 1;
 }

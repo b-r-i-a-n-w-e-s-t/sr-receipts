@@ -1,21 +1,28 @@
 {
   "schemaVersion": 1,
   "node": {
-    "version": "22.14.0",
+    "version": "22.18.0",
     "architecture": "arm64",
-    "url": "https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-arm64.msi",
-    "sha256": "937735295d25236e21b9aea9a32a175434eccf765eabf25dad4ef450e3cb62bb"
+    "kind": "zip",
+    "url": "https://nodejs.org/dist/v22.18.0/node-v22.18.0-win-arm64.zip",
+    "sha256": "023afb3d25c4c7d10cb6eb8a64865c347b56d4b07e6690606d021130a9192263"
   },
   "firefox": {
-    "version": "135.0",
+    "version": "156.0",
     "architecture": "arm64",
-    "url": "https://archive.mozilla.org/pub/firefox/releases/135.0/win64-aarch64/en-US/Firefox%20Setup%20135.0.exe",
-    "sha256": "57bafae270cf479ccfbd6c2ede7a2e1d3635d0294f8bf17bfdf00334701084a5"
+    "url": "https://archive.mozilla.org/pub/firefox/releases/156.0/win64-aarch64/en-US/Firefox%20Setup%20156.0.exe",
+    "sha256": "6a51462fa456728c90db840bae43f27b30f49f56e038006b5ac4c4eaecc57003"
   },
   "guidepup": {
     "version": "0.34.0",
-    "setupVersion": "0.21.0",
-    "nvdaAssetVersion": "0.1.3-2021.3.1",
-    "nvdaAssetSha256": "ada901fd1599ca4256d3afec9e6bb3b159e122341a4e52c1987099cf610875c4"
+    "setupVersion": "0.25.3",
+    "nvdaAsset": {
+      "manifest": "node_modules/@guidepup/guidepup/manifest.json",
+      "id": "nvda",
+      "version": "0.2.1-2026.2",
+      "repository": "guidepup/nvda",
+      "asset": "guidepup-nvda-0.2.1-2026.2.zip",
+      "sha256": "7df0ca3c1c9e8c6521bc7553486ca360ed6f0b4f9bdbd6603131e38b5c1497a1"
+    }
   }
 }

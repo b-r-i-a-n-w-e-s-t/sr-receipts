@@ -27,7 +27,7 @@ queue.txt
 # Console logs from the .cmd wrappers.
 run.out
 runner.out
-smoke-log.txt
+artifacts/
 provisioning/health-report.json
 
 # Full-desktop screenshot written by shot.ps1. Captures whatever else was on the

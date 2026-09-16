@@ -8,12 +8,19 @@ export interface HealthReport {
   schemaVersion: 1;
   ok: boolean;
   fixture: "control.html";
-  execution: "real NVDA with headed Firefox";
+  execution: "unelevated interactive scheduled task: real NVDA with headed Firefox";
   checks: {
     smokeExited: boolean;
     speechCaptured: boolean;
+    freshArtifact: boolean;
   };
   artifact: string;
+  observed: {
+    node: string;
+    platform: string;
+    architecture: string;
+    taskOutput: string;
+  };
   failure?: string;
 }
 
@@ -32,16 +39,19 @@ export function assessSmoke(
   smokeExited: boolean,
   smokeLog: string | undefined,
   artifact: string,
+  freshArtifact: boolean,
+  observed: HealthReport["observed"],
   failure?: string,
 ): HealthReport {
   const speechCaptured = smokeLog === undefined ? false : hasCapturedSpeech(smokeLog);
   return {
     schemaVersion: 1,
-    ok: smokeExited && speechCaptured,
+    ok: smokeExited && speechCaptured && freshArtifact,
     fixture: "control.html",
-    execution: "real NVDA with headed Firefox",
-    checks: { smokeExited, speechCaptured },
+    execution: "unelevated interactive scheduled task: real NVDA with headed Firefox",
+    checks: { smokeExited, speechCaptured, freshArtifact },
     artifact,
+    observed,
     ...(failure ? { failure } : {}),
   };
 }

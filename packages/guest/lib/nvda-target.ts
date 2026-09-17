@@ -6,6 +6,7 @@
  * session, for the reasons `session.ts` gives.
  */
 import type { ExecutionTarget } from "./execution-target.ts";
+import { excludeAddressBar } from "./firefox.ts";
 import { openTarget, startSession, stopSession, watchFocus, type Session } from "./session.ts";
 import { stamp } from "./stamp.ts";
 import { runSteps, validateSteps } from "./steps.ts";
@@ -30,8 +31,10 @@ export const nvdaTarget: ExecutionTarget = {
       // Re-check every few steps that the keystrokes are still reaching the
       // page, so a stolen foreground stops the sequence instead of typing the
       // rest of it into somebody else's window.
-      perform: (scenario, onStep) =>
-        runSteps(nvda, speech, scenario.steps, { onStep, watch: watchFocus(speech) }),
+      perform: async (scenario, onStep) => {
+        const result = await runSteps(nvda, speech, scenario.steps, { onStep, watch: watchFocus(speech) });
+        return { ...result, steps: excludeAddressBar(result.steps) };
+      },
       stop: stopSession,
     };
   },

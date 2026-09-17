@@ -197,7 +197,9 @@ node runner.ts --update-snapshots
 
 A missing snapshot is a baseline, not a failure: the first run of a new target
 records one and passes. Mark a step `snapshot: false` to record it without
-asserting it.
+asserting it. Firefox's address bar is always kept out: it reads the target's
+location aloud, the checkout path or the host's address, and that is a fact
+about the machine rather than the page. The rest of the toolbar stays in.
 
 ## When something steals the foreground
 

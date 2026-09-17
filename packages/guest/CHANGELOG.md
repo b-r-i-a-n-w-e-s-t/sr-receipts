@@ -3,6 +3,13 @@
 All notable changes to `@sr-receipts/guest`. Pre-1.0: a minor version may break
 the contract.
 
+## Unreleased
+
+- Firefox's address bar is kept out of snapshots. It announces the target's
+  location, the checkout path or the host's address, which failed every
+  control-fixture baseline after the move into `packages/guest`. The committed
+  baselines drop those steps; the rest of the toolbar is still compared.
+
 ## 0.1.0
 
 First version as its own package, extracted from the single-repository NVDA

@@ -77,7 +77,8 @@ const scenario: Scenario = {
     // end of the content and into Firefox's own toolbar, whose wording really
     // does change between browser versions — it changed between 155.0.1 and
     // 156.0 during this rig's development. That is a diff worth seeing and
-    // accepting deliberately, not one worth hiding.
+    // accepting deliberately, not one worth hiding. The address bar is the
+    // exception, kept out by the NVDA target: it reads the checkout path aloud.
     { label: "tab", press: "Tab", repeat: 8 },
   ],
 

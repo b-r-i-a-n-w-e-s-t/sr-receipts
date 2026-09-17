@@ -8,7 +8,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { WindowSize } from "./types.ts";
+import type { StepResult, WindowSize } from "./types.ts";
 
 const RIG = join(import.meta.dirname, "..");
 
@@ -109,4 +109,27 @@ export function launch(url: string, { window }: { window?: WindowSize | undefine
     detached: true,
     stdio: "ignore",
   });
+}
+
+/**
+ * Firefox's address bar, as NVDA announces it: "Search with Google or enter
+ * address, combo box", then wherever the target lives. The engine name varies,
+ * the rest has not.
+ */
+const ADDRESS_BAR = /enter address, combo box/i;
+
+/**
+ * Keep the address bar out of snapshots.
+ *
+ * Tabbing past the end of a page reaches Firefox's toolbar, and the address bar
+ * reads out the target's location: the checkout path for a fixture, the host's
+ * address for a URL. That is a fact about the machine, not the page, and it
+ * failed every committed baseline when the guest moved into `packages/guest`.
+ *
+ * Only the address bar. The rest of the toolbar stays in the snapshot on
+ * purpose: its wording changes between Firefox releases, and that diff is
+ * worth seeing. The step is still recorded, so the transcript keeps it.
+ */
+export function excludeAddressBar(steps: StepResult[]): StepResult[] {
+  return steps.map((step) => (ADDRESS_BAR.test(step.heard) ? { ...step, snapshot: false } : step));
 }

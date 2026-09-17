@@ -11,14 +11,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import { parseQueue, resolveTarget, SETTLE } from "../lib/target.ts";
-import { PROFILE, XULSTORE, writeWindowGeometry } from "../lib/firefox.ts";
+import { PROFILE, XULSTORE, excludeAddressBar, writeWindowGeometry } from "../lib/firefox.ts";
 import { toAction } from "../lib/steps.ts";
 import { SpeechLog } from "../lib/speech.ts";
 import type { SpeechSource } from "../lib/speech.ts";
-import type { NvdaCommand, NvdaDriver, RunRequest, StepSpec } from "../lib/types.ts";
+import type { NvdaCommand, NvdaDriver, RunRequest, Snapshot, StepResult, StepSpec } from "../lib/types.ts";
 
 /**
  * Deliberately-invalid input, cast so it compiles.
@@ -200,4 +201,40 @@ test("a window size is written where Firefox reads it, and cleared when not aske
 
   // And clearing an already-clear profile is not an error.
   writeWindowGeometry(undefined);
+});
+
+/**
+ * Firefox's address bar reads out where the target lives: the checkout path for
+ * a fixture, the host's address for a URL. Neither is a property of the page,
+ * so a baseline that recorded it failed when the rig moved into
+ * packages/guest. The rest of the toolbar stays in, because its wording
+ * changing between Firefox releases is a diff worth seeing.
+ */
+test("the address bar is kept out of snapshots, and the rest of the toolbar is not", () => {
+  const step = (label: string, heard: string): StepResult => ({ label, spec: "press:Tab", heard });
+  const marked = excludeAddressBar([
+    step("tab 5", "Pick a Search Engine, button, collapsed, sub Menu, Google, pick a search engine"),
+    step(
+      "tab 6",
+      "Search with Google or enter address, combo box, collapsed, has auto complete, editable, selected file: slash slash slash C: slash Users slash brian slash nvda-rig slash packages slash guest slash fixtures slash control dot html",
+    ),
+    step("tab 7", "Bookmark this page (Ctrl plus D), button"),
+    step("url", "Search with Google or enter address, combo box, http colon slash slash 192 dot 168 dot 64 dot 1 colon 5174"),
+  ]);
+  assert.deepEqual(
+    marked.map((s) => [s.label, s.snapshot]),
+    [["tab 5", undefined], ["tab 6", false], ["tab 7", undefined], ["url", false]],
+  );
+  // Still recorded, so the transcript keeps the announcement.
+  assert.match(marked[1]?.heard ?? "", /control dot html/);
+});
+
+test("no committed snapshot carries an address-bar announcement", () => {
+  const dir = join(import.meta.dirname, "..", "snapshots");
+  for (const file of readdirSync(dir)) {
+    const snapshot = JSON.parse(readFileSync(join(dir, file), "utf8")) as Snapshot;
+    const steps = snapshot.steps.map((s): StepResult => ({ ...s, spec: "press:Tab" }));
+    const leaked = excludeAddressBar(steps).filter((s) => s.snapshot === false);
+    assert.deepEqual(leaked.map((s) => s.label), [], file);
+  }
 });

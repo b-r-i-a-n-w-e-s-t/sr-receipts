@@ -1,26 +1,15 @@
 {
   "name": "nvda-rig",
-  "version": "1.0.0",
-  "description": "Drives NVDA and Firefox to capture screen-reader transcripts for accessibility testing.",
-  "main": "lib/index.ts",
-  "scripts": {
-    "test": "node --test test/*.test.ts && npm run typecheck",
-    "typecheck": "tsc --noEmit",
-    "smoke": "node smoke.ts",
-    "voiceover:doctor": "node voiceover/doctor.ts",
-    "voiceover:smoke": "node voiceover/smoke.ts",
-    "voiceover:capture-probe": "node voiceover/capture-probe.ts",
-    "probe": "node probe.ts",
-    "run-queue": "node runner.ts",
-    "daemon": "node daemon.ts"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "private": true,
+  "description": "Workspace root for the sr-receipts packages. Not itself a package.",
   "type": "module",
-  "dependencies": {
-    "@guidepup/guidepup": "0.34.0",
-    "@guidepup/setup": "0.25.3"
+  "workspaces": [
+    "packages/host",
+    "packages/guest"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces && npm run typecheck",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^26.6.0",

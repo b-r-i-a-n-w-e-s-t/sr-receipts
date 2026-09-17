@@ -15,17 +15,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 const RIG = join(import.meta.dirname, "..");
-const TSC = join(RIG, "node_modules", "typescript", "bin", "tsc");
+// Resolved rather than joined: npm workspaces install typescript at the
+// workspace root. Its exports map hides `bin/tsc`, so the package root is
+// resolved and the binary found beside it.
+const TSC = join(dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin", "tsc");
 
 /**
  * Compile one snippet against the rig's own types; return tsc's output.
  *
  * The throwaway project lives inside the rig rather than in the system temp
  * directory, so a relative import reaches `../lib` and Node's module resolution
- * walks up to the rig's own `node_modules` for `@types/node` and guidepup.
+ * walks up to the workspace's `node_modules` for `@types/node` and guidepup.
  */
 function check(source: string): string {
   const dir = mkdtempSync(join(RIG, ".type-case-"));

@@ -2,9 +2,10 @@
  * The host's side of the wire, against the guest's side of it.
  *
  * These run both halves in one process over a real socket, with a fake executor
- * standing in for NVDA. That is the most that can be tested off the guest, and
- * it is the half most likely to be wrong: the frame splitting, and what a
- * caller is told when a run breaks rather than merely fails.
+ * standing in for the screen reader. They live in the guest package because the
+ * guest depends on `@sr-receipts/host` and never the other way round. What they
+ * cover is what a caller is told when a run breaks rather than merely fails.
+ * Frame splitting on its own is tested in the host package.
  *
  * Run: npm test
  */
@@ -17,7 +18,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 
 import { createRigServer } from "../lib/daemon.ts";
-import { createClient, readFrames, RigError, type RigClient } from "../lib/client.ts";
+import { createClient, RigError, type RigClient } from "@sr-receipts/host";
 import type { ExecuteOptions } from "../lib/run.ts";
 import type { RunEvent, RunReport } from "../lib/types.ts";
 
@@ -173,65 +174,4 @@ test("health and the readback routes round-trip", async (t) => {
   assert.equal(fetched.runId, "run-1");
   // The executor is a fake, so the only file the run left is its event log.
   assert.deepEqual(await rig.files("run-1"), ["events.ndjson"]);
-});
-
-/* --------------------------------------------------------------- framing */
-
-/** Frames arrive split across chunks and several to a chunk; both must work. */
-function stream(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
-      controller.close();
-    },
-  });
-}
-
-const collect = async (chunks: string[]): Promise<RunEvent[]> => {
-  const events: RunEvent[] = [];
-  for await (const event of readFrames(stream(chunks))) events.push(event);
-  return events;
-};
-
-test("readFrames reassembles a frame split across chunks", async () => {
-  const events = await collect(['{"type":"run-star', 'ted","runId":"r","total":2}\n']);
-  assert.deepEqual(events, [{ type: "run-started", runId: "r", total: 2 }]);
-});
-
-test("readFrames splits several frames arriving in one chunk", async () => {
-  const events = await collect([
-    '{"type":"run-started","runId":"r","total":1}\n{"type":"broke","message":"x"}\n',
-  ]);
-  assert.deepEqual(
-    events.map((event) => event.type),
-    ["run-started", "broke"],
-  );
-});
-
-test("readFrames yields a last frame that arrived without a trailing newline", async () => {
-  const events = await collect(['{"type":"broke","message":"x"}']);
-  assert.deepEqual(events, [{ type: "broke", message: "x" }]);
-});
-
-/**
- * A multi-byte character can be split across a chunk boundary. The decoder is
- * called in streaming mode so the halves are rejoined rather than each becoming
- * a replacement character — NVDA's announcements contain them, notably the
- * object-replacement character focus mode appends.
- */
-test("readFrames rejoins a multi-byte character split across chunks", async () => {
-  const frame = JSON.stringify({ type: "broke", message: "focus mode ￼" }) + "\n";
-  const bytes = new TextEncoder().encode(frame);
-  const split = 15;
-  const events: RunEvent[] = [];
-  const parts = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(bytes.slice(0, split));
-      controller.enqueue(bytes.slice(split));
-      controller.close();
-    },
-  });
-  for await (const event of readFrames(parts)) events.push(event);
-  assert.deepEqual(events, [{ type: "broke", message: "focus mode ￼" }]);
 });

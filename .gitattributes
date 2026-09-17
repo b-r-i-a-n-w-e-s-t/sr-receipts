@@ -6,5 +6,5 @@
 *.cmd text eol=crlf
 
 # Transcripts are evidence: never touch their bytes.
-runs/** -text
+**/runs/** -text
 *.txt -text

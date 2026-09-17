@@ -23,7 +23,7 @@
     powershell -ExecutionPolicy Bypass -File tasks\register.ps1
 
   The daemon is deliberately NOT one of them. Starting it by hand for a session
-  of accessibility work — `npm run daemon`, from a terminal on the guest desktop
+  of accessibility work — `npm run daemon` in packages\guest, from a terminal on the guest desktop
   — is the expected way to use it, and needs nothing registered. All a logon
   task buys is that the port comes back by itself after a reboot, which matters
   to CI and generally not to a person.
@@ -185,7 +185,7 @@ if ($Daemon) {
   Write-Host 'from a terminal on this desktop when you want to drive the rig from the'
   Write-Host 'host; it prints the URL and token to use:'
   Write-Host ''
-  Write-Host '  npm run daemon'
+  Write-Host "  cd $rig; npm run daemon"
   if (-not $Firewall) {
     Write-Host ''
     Write-Host "Re-run with -Firewall to open TCP $Port first, so the host can reach it"

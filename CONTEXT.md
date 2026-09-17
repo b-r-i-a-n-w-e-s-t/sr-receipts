@@ -1,9 +1,23 @@
 # Domain Glossary
 
-## Dogwalk
+## sr-receipts
 
 The product that orchestrates accessibility execution across supported
-Execution Targets.
+Execution Targets, and keeps what each screen reader said as evidence.
+Formerly named Dogwalk.
+
+## Host
+
+The machine a developer works on, and the `@sr-receipts/host` package that
+connects from it to a Guest's daemon. It owns the wire protocol and knows
+nothing about any screen reader.
+
+## Guest
+
+The side that runs a screen reader on its own interactive desktop, and the
+`@sr-receipts/guest` package. It holds every Execution Target, including the
+local macOS VoiceOver target, so "guest" means the reader's side of the wire
+rather than a virtual machine.
 
 ## Baseline Identity
 
@@ -32,5 +46,5 @@ scenario and produces its observed speech.
 
 ## Registered Playwright Suite
 
-A named, guest-local Playwright test suite that Dogwalk is authorized to run
+A named, guest-local Playwright test suite that sr-receipts is authorized to run
 with its approved configuration and artifact location.

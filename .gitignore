@@ -28,7 +28,7 @@ queue.txt
 run.out
 runner.out
 artifacts/
-provisioning/health-report.json
+packages/guest/provisioning/health-report.json
 
 # Full-desktop screenshot written by shot.ps1. Captures whatever else was on the
 # guest desktop at the time, including editor windows and terminals.
@@ -40,4 +40,4 @@ screen.png
 # Console log from run-daemon.cmd.
 daemon.out
 voiceover-runs/
-voiceover/doctor.json
+packages/guest/voiceover/doctor.json

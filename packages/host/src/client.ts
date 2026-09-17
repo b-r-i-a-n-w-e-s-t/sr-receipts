@@ -1,15 +1,14 @@
 /**
  * The host's side of the daemon.
  *
- * This is what Phase 6 publishes as the dev dependency a component library
- * takes: from the Mac, `await rig.run([...])` opens a target in NVDA inside the
- * guest and resolves with the verdict.
+ * From the Mac, `await rig.run([...])` opens a target in a real screen reader
+ * inside the guest and resolves with the verdict.
  *
- * It exists here, next to the daemon, so the wire format has exactly one
- * implementation on each side and they are edited together. `fetch` and nothing
- * else — no dependency, and it runs on whatever Node the host has.
+ * The wire format has exactly one implementation on each side: this client, and
+ * the guest's daemon, which implements `./protocol.ts`. `fetch` and nothing
+ * else, so it has no dependency and runs on whatever Node the host has.
  */
-import type { DaemonHealth, RunEvent, RunReport, RunRequest } from "./types.ts";
+import type { DaemonHealth, RunEvent, RunReport, RunRequest } from "./protocol.ts";
 
 export interface ClientOptions {
   /** The daemon's base URL, e.g. `http://192.168.64.7:8765`. */

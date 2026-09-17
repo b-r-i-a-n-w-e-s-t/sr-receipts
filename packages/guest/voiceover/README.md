@@ -9,7 +9,8 @@ NVDA workflow.
 
 Do these actions manually, while signed in to the interactive Mac desktop:
 
-1. Install this repository's pinned Node dependencies with `npm ci`.
+1. Install this repository's pinned Node dependencies with `npm ci` at the
+   repository root. The commands below run from `packages/guest`.
 2. Start the bundled VoiceOver once manually (Command-F5), complete Apple's
    first-run onboarding, then open **VoiceOver Utility → General** and enable
    **Allow VoiceOver to be controlled with AppleScript**. This establishes the

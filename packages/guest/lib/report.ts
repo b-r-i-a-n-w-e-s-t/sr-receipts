@@ -11,6 +11,8 @@ import { evaluate, runCheck } from "./expect.ts";
 import { SILENCE } from "./speech.ts";
 import type {
   CompiledScenario,
+  StepAction,
+  StepSpec,
   OpenResult,
   RunRequest,
   RunResult,
@@ -18,6 +20,14 @@ import type {
   StepResult,
   Verdict,
 } from "./types.ts";
+
+/**
+ * A step's spec as the wire carries it. A step authored as data always has a
+ * string spec; the escape hatch, a `StepAction`, would otherwise stringify to
+ * its own source, and inside JSON it would vanish altogether.
+ */
+export const wireSpec = (spec: StepSpec | StepAction): string =>
+  typeof spec === "string" ? spec : "action";
 
 export interface JudgeInput {
   opened: OpenResult;
@@ -52,7 +62,7 @@ export function judge({
 }: JudgeInput): Verdict {
   const assertions = steps.flatMap((step) => {
     const failures = evaluate(step.heard, step.expect);
-    return failures.length === 0 ? [] : [{ label: step.label, spec: step.spec, failures }];
+    return failures.length === 0 ? [] : [{ label: step.label, spec: wireSpec(step.spec), failures }];
   });
 
   const checks = scenario.checks.map((check) => runCheck(check, steps));
@@ -100,7 +110,7 @@ export function formatVerdict(
   if (verdict.assertions.length) {
     lines.push("### failed expectations");
     for (const { label, spec, failures } of verdict.assertions) {
-      lines.push(`  ${label} [${String(spec)}]`);
+      lines.push(`  ${label} [${spec}]`);
       for (const failure of failures) lines.push(`    ${failure}`);
     }
     lines.push("");

@@ -23,6 +23,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $rig = Split-Path -Parent $PSScriptRoot
+# The guest is a workspace package: the lockfile and node_modules live two
+# levels up, at the repository root.
+$workspace = Split-Path -Parent (Split-Path -Parent $rig)
 # Resolved here, not as parameter defaults: Windows PowerShell binds defaults
 # before the script's own $PSScriptRoot exists, so `-File provision.ps1` from a
 # prompt died on an empty path before the provisioner did anything at all.
@@ -202,11 +205,18 @@ try {
   }
 
   Invoke-Stage 'packages' {
-    & (Join-Path (Split-Path -Parent $node) 'npm.cmd') ci
-    if ($LASTEXITCODE) { throw "npm ci exited $LASTEXITCODE." }
+    # From the workspace root, which is the only place `npm ci` honours the
+    # committed lockfile for every package.
+    Push-Location $workspace
+    try {
+      & (Join-Path (Split-Path -Parent $node) 'npm.cmd') ci
+      if ($LASTEXITCODE) { throw "npm ci exited $LASTEXITCODE." }
+    } finally {
+      Pop-Location
+    }
     # The installed Guidepup version, not the fact that a command ran: it is
     # the reviewed component this stage exists to put on disk.
-    $installed = Get-Content 'node_modules\@guidepup\guidepup\package.json' -Raw | ConvertFrom-Json
+    $installed = Get-Content (Join-Path $workspace 'node_modules\@guidepup\guidepup\package.json') -Raw | ConvertFrom-Json
     if ($installed.version -ne $manifest.guidepup.version) {
       throw "npm ci installed @guidepup/guidepup $($installed.version), not the reviewed $($manifest.guidepup.version)."
     }
@@ -214,7 +224,7 @@ try {
   }
 
   Invoke-Stage 'guidepup-nvda' {
-    $guidepup = 'node_modules\@guidepup\setup\bin\guidepup'
+    $guidepup = Join-Path $workspace 'node_modules\@guidepup\setup\bin\guidepup'
     # On Windows `setup` is intentionally a no-op today, but keeping the
     # documented lifecycle explicit makes a future Guidepup setup action part
     # of this reviewed provisioner rather than an untracked manual step.

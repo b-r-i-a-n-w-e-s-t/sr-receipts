@@ -16,18 +16,18 @@
  * What it does not own is printing. Progress leaves through `onEvent` as data;
  * `runner.ts` formats it for a console and the daemon serialises it to NDJSON.
  *
- * Must be reached from the interactive console session — see `lib/session.ts`.
+ * Nor does it own a screen reader. The reader is an `ExecutionTarget`, passed
+ * in, and nothing here may branch on which one it is: see
+ * `lib/execution-target.ts`.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareSnapshot, readSnapshot, snapshotPath, toSnapshot, writeSnapshot } from "./snapshot.ts";
-import { formatTranscript, judge, toResult } from "./report.ts";
-import { openTarget, startSession, stopSession, watchFocus, type Session } from "./session.ts";
+import { formatTranscript, judge, toResult, wireSpec } from "./report.ts";
 import { loadScenario } from "./scenario.ts";
-import { runSteps, validateSteps } from "./steps.ts";
+import { SNAPSHOTS } from "./snapshot.ts";
 import { slugify } from "./target.ts";
-import { stamp } from "./stamp.ts";
-import type { SpeechLog } from "./speech.ts";
+import type { ExecutionTarget, ReaderSession } from "./execution-target.ts";
 import type { CompiledScenario, RunEvent, RunReport, RunRequest, RunResult } from "./types.ts";
 
 const RIG = join(import.meta.dirname, "..");
@@ -36,6 +36,20 @@ export const RUNS = join(RIG, "runs");
 
 /** Where a run's transcripts and `results.json` live. */
 export const runDir = (runId: string): string => join(RUNS, runId);
+
+/** Where a run leaves its evidence. Only a test has a reason to change these. */
+export interface RunPaths {
+  runs: string;
+  snapshots: string;
+  /** Holds the id of the most recent run, for tooling that watches the filesystem. */
+  lastRun: string;
+}
+
+export const RUN_PATHS: RunPaths = {
+  runs: RUNS,
+  snapshots: SNAPSHOTS,
+  lastRun: join(RIG, "last-run.txt"),
+};
 
 /**
  * Colons are legal in an ISO timestamp and not in an NTFS file name, and the
@@ -59,41 +73,31 @@ export interface ExecuteOptions {
 }
 
 async function runRequest(
-  nvda: Session["nvda"],
-  speech: SpeechLog,
+  target: ExecutionTarget,
+  session: ReaderSession,
   request: RunRequest,
   scenario: CompiledScenario,
   outDir: string,
+  snapshots: string,
   updateSnapshots: boolean,
   emit: (event: RunEvent) => void,
 ): Promise<RunResult> {
-  const opened = await openTarget(speech, request.target, {
-    modeProbes: scenario.modeProbes,
-    window: scenario.window,
-  });
+  const opened = await session.open(request.target, scenario);
   emit({ type: "opened", target: request.target, ok: opened.ok, lines: opened.lines });
 
   // A run that never reached the page has no announcements to judge, but still
   // produces a transcript — the guard diagnostics in it are the whole diagnosis.
   const { steps, focusLost, focusLostAfter } = opened.ok
-    ? await runSteps(nvda, speech, scenario.steps, {
-        onStep: (step, index) =>
-          emit({
-            type: "step",
-            target: request.target,
-            index,
-            label: step.label,
-            // A step authored as data always has a string spec. The escape
-            // hatch — a `StepAction` — would otherwise stringify to its own
-            // source, which is not something to put in every NDJSON frame.
-            spec: typeof step.spec === "string" ? step.spec : "action",
-            heard: step.heard,
-          }),
-        // Re-check every few steps that the keystrokes are still reaching the
-        // page, so a stolen foreground stops the sequence instead of typing the
-        // rest of it into somebody else's window.
-        watch: watchFocus(speech),
-      })
+    ? await session.perform(scenario, (step, index) =>
+        emit({
+          type: "step",
+          target: request.target,
+          index,
+          label: step.label,
+          spec: wireSpec(step.spec),
+          heard: step.heard,
+        }),
+      )
     : { steps: [] };
 
   if (focusLost) {
@@ -105,7 +109,7 @@ async function runRequest(
     });
   }
 
-  const environment = stamp();
+  const environment = target.environment();
   const fresh = toSnapshot({
     target: request.target,
     scenario,
@@ -114,7 +118,7 @@ async function runRequest(
     provenance: opened.target.provenance,
   });
 
-  const path = snapshotPath(opened.target.slug, scenario.name);
+  const path = snapshotPath(opened.target.slug, scenario.name, snapshots);
   // Comparing a run that never reached the page — or lost it part way — against
   // a saved snapshot would report every remaining step as removed, which buries
   // the one thing that actually went wrong. Leaving `comparison` null also stops
@@ -169,25 +173,24 @@ async function runRequest(
 }
 
 /**
- * Run every request in one NVDA session and report.
+ * Run every request in one reader session and report.
  *
  * Never throws: a broken run is a `RunReport` with `broke` set, because the
  * caller has to write `results.json` and answer the host either way. The
  * distinction the report preserves is the one CI cares about — `broke` is an
  * unanswered question, `failed` is a wrong answer.
  */
-export async function executeRun({
-  requests,
-  updateSnapshots = false,
-  onEvent,
-  runId = newRunId(),
-}: ExecuteOptions): Promise<RunReport> {
-  const outDir = runDir(runId);
+export async function executeRun(
+  target: ExecutionTarget,
+  { requests, updateSnapshots = false, onEvent, runId = newRunId() }: ExecuteOptions,
+  paths: RunPaths = RUN_PATHS,
+): Promise<RunReport> {
+  const outDir = join(paths.runs, runId);
   mkdirSync(outDir, { recursive: true });
 
   // A handler that throws must not take the run down with it: the run holds
-  // NVDA, Firefox and the whole desktop, and a client that hung up mid-stream
-  // is not a reason to abandon them.
+  // the reader, the browser and the whole desktop, and a client that hung up
+  // mid-stream is not a reason to abandon them.
   const emit = (event: RunEvent): void => {
     try {
       onEvent?.(event);
@@ -198,13 +201,14 @@ export async function executeRun({
 
   const results: RunResult[] = [];
   let broke: Error | undefined;
+  let session: ReaderSession | undefined;
 
   emit({ type: "run-started", runId, total: requests.length });
 
   try {
-    // Load and compile every scenario before NVDA starts. A typo in a scenario
-    // should cost a second, not a three-minute run that ends in a transcript
-    // full of silences that look exactly like real ones.
+    // Load and compile every scenario before the reader starts. A typo in a
+    // scenario should cost a second, not a three-minute run that ends in a
+    // transcript full of silences that look exactly like real ones.
     const scenarios = new Map<string, CompiledScenario>();
     for (const { scenario } of requests) {
       if (!scenarios.has(scenario)) {
@@ -212,14 +216,14 @@ export async function executeRun({
       }
     }
 
-    // One NVDA session for the whole queue: same version, same settings, same
-    // voice, so a diff between two targets cannot be version drift.
-    const { nvda, speech } = await startSession();
+    // One reader session for the whole queue: same version, same settings,
+    // same voice, so a diff between two targets cannot be version drift.
+    session = await target.start();
 
-    // Command names can only be checked once NVDA is up, but still before the
-    // first target is opened.
+    // What a reader can do is only checkable once it is up, but still before
+    // the first target is opened.
     for (const scenario of scenarios.values()) {
-      validateSteps(nvda, scenario.steps);
+      session.validate(scenario);
     }
 
     for (const [index, request] of requests.entries()) {
@@ -231,11 +235,12 @@ export async function executeRun({
         scenario: scenario.name,
       });
       const result = await runRequest(
-        nvda,
-        speech,
+        target,
+        session,
         request,
         scenario,
         outDir,
+        paths.snapshots,
         updateSnapshots,
         emit,
       );
@@ -251,7 +256,7 @@ export async function executeRun({
     );
     emit({ type: "broke", message: broke?.message ?? String(broke) });
   } finally {
-    await stopSession();
+    await session?.stop();
   }
 
   const failed = results.filter((result) => !result.ok);
@@ -271,7 +276,7 @@ export async function executeRun({
   // but the marker is what anything watching the filesystem keys off — and it
   // is the only signal a run that lost its client leaves behind.
   writeFileSync(join(outDir, "DONE"), `${new Date().toISOString()}\n`, "utf8");
-  writeFileSync(join(RIG, "last-run.txt"), `${runId}\n`, "utf8");
+  writeFileSync(paths.lastRun, `${runId}\n`, "utf8");
 
   emit({ type: "run-finished", report });
   return report;

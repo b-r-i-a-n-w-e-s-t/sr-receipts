@@ -1,0 +1,25 @@
+{
+  "name": "@sr-receipts/guest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs real screen readers on their own desktop, behind an authenticated daemon, and records what they said.",
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "smoke": "node smoke.ts",
+    "voiceover:doctor": "node voiceover/doctor.ts",
+    "voiceover:smoke": "node voiceover/smoke.ts",
+    "voiceover:capture-probe": "node voiceover/capture-probe.ts",
+    "probe": "node probe.ts",
+    "run-queue": "node runner.ts",
+    "daemon": "node daemon.ts"
+  },
+  "dependencies": {
+    "@guidepup/guidepup": "0.34.0",
+    "@guidepup/setup": "0.25.3",
+    "@sr-receipts/host": "0.1.0"
+  }
+}

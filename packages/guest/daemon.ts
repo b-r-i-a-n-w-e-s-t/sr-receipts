@@ -22,9 +22,9 @@ import {
   DEFAULT_PORT,
   executeRun,
   newRunId,
+  nvdaTarget,
   resolveToken,
   runDir,
-  stamp,
 } from "./lib/index.ts";
 
 let token: string;
@@ -46,7 +46,13 @@ try {
 const port = Number(process.env.RIG_PORT ?? DEFAULT_PORT);
 const host = process.env.RIG_HOST ?? "0.0.0.0";
 
-const server = createRigServer({ token, execute: executeRun, runDir, newRunId, stamp });
+const server = createRigServer({
+  token,
+  execute: (options) => executeRun(nvdaTarget, options),
+  runDir,
+  newRunId,
+  stamp: () => nvdaTarget.environment(),
+});
 
 /** Where the host should point, since nothing records how it addresses the guest. */
 const addresses = (): string[] =>
@@ -59,7 +65,7 @@ server.listen(port, host, () => {
   console.log(`nvda-rig daemon listening on ${host}:${port}`);
   // The stamp is what heads every transcript, so printing it at startup means
   // the daemon's log says which NVDA and Firefox the runs it serves will use.
-  for (const line of stamp()) console.log(`  ${line}`);
+  for (const line of nvdaTarget.environment()) console.log(`  ${line}`);
 
   console.log("\nFrom the host:");
   for (const address of addresses()) console.log(`  RIG_URL=http://${address}:${port}`);

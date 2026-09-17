@@ -1,7 +1,7 @@
 /**
- * The rig core. Everything `runner.ts`, `probe.ts` and `smoke.ts` are built
- * from, and the surface the host-side client will drive once Phase 4 puts a
- * daemon in front of it.
+ * The guest's core. Everything `runner.ts`, `probe.ts`, `smoke.ts` and
+ * `daemon.ts` are built from. The host-side client lives in `@sr-receipts/host`,
+ * which owns the wire types re-exported through `./types.ts`.
  *
  * Re-exported explicitly rather than spread from each module, so the published
  * API is a list someone can read rather than whatever happened to be exported.
@@ -44,6 +44,7 @@ export {
   formatVerdict,
   formatTranscript,
   toResult,
+  wireSpec,
   type JudgeInput,
   type TranscriptInput,
   type ToResultInput,
@@ -55,6 +56,8 @@ export {
   executeRun,
   type ExecuteOptions,
 } from "./run.ts";
+export type { ExecutionTarget, ReaderSession } from "./execution-target.ts";
+export { nvdaTarget } from "./nvda-target.ts";
 export {
   DEFAULT_PORT,
   createRigServer,
@@ -65,14 +68,6 @@ export {
   type RigServerOptions,
   type TokenResolution,
 } from "./daemon.ts";
-export {
-  createClient,
-  readFrames,
-  RigError,
-  type ClientOptions,
-  type RigClient,
-  type RunOptions,
-} from "./client.ts";
 export {
   NVDA_OPTIONS,
   FOCUS_CHECK_EVERY,

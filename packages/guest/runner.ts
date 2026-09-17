@@ -34,6 +34,7 @@ import { join } from "node:path";
 import {
   DEFAULT_SCENARIO,
   executeRun,
+  nvdaTarget,
   parseQueue,
   type RunEvent,
   type RunRequest,
@@ -137,7 +138,7 @@ try {
   process.exit(2);
 }
 
-const report = await executeRun({
+const report = await executeRun(nvdaTarget, {
   requests,
   updateSnapshots: options.updateSnapshots,
   onEvent: print,

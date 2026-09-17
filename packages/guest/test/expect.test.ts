@@ -334,6 +334,25 @@ test("a failed expectation fails the run and names the step", () => {
   assert.match(verdict.reasons.join(" "), /1 step expectation\(s\) failed/);
 });
 
+/**
+ * `results.json` and the stream carry a failed step's spec to the host, and a
+ * function cannot cross JSON: it used to vanish from the object entirely. It is
+ * named the way the step event has always named it.
+ */
+test("a failed expectation names its spec in a form the wire can carry", () => {
+  const verdict = judge({
+    opened: OPENED_OK,
+    scenario: EMPTY_SCENARIO,
+    steps: [
+      { label: "a", spec: "press:Tab", heard: "(silence)", expect: { silent: false } } satisfies StepResult,
+      { label: "b", spec: () => undefined, heard: "(silence)", expect: { silent: false } } satisfies StepResult,
+    ],
+    comparison: { status: "match", differences: [] },
+  });
+  const onTheWire = JSON.parse(JSON.stringify(verdict.assertions)) as Array<{ spec: string }>;
+  assert.deepEqual(onTheWire.map((a) => a.spec), ["press:Tab", "action"]);
+});
+
 test("a snapshot difference fails the run", () => {
   const verdict = judge({
     opened: OPENED_OK,

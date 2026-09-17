@@ -1,9 +1,8 @@
 /**
  * The rig's type surface.
  *
- * This is the API Phase 6 publishes, so it is written for the person authoring
- * a scenario in another repo rather than for the harness. Two things here earn
- * their keep beyond documentation:
+ * Written for the person authoring a scenario in another repo rather than for
+ * the harness. Two things here earn their keep beyond documentation:
  *
  * - `NvdaCommand` is derived from guidepup's own `keyboardCommands` object, so
  *   it is the exact union of the 160 command names that exist. A misspelled
@@ -17,6 +16,23 @@
  *   `includes` was meant is a compile error rather than a runtime one.
  */
 import type { nvda } from "@guidepup/guidepup";
+import type { CheckResult, FailedExpectation, SnapshotStatus } from "@sr-receipts/host";
+
+/**
+ * The wire types are owned by `@sr-receipts/host`, which consumes them, and
+ * re-exported here so a guest author has one place to import from.
+ */
+export type {
+  CheckResult,
+  DaemonHealth,
+  DaemonRunBody,
+  FailedExpectation,
+  RunEvent,
+  RunReport,
+  RunRequest,
+  RunResult,
+  SnapshotStatus,
+} from "@sr-receipts/host";
 
 /** Every NVDA command guidepup exposes, as a union of literal names. */
 export type NvdaCommand = keyof typeof nvda.keyboardCommands;
@@ -71,16 +87,6 @@ export interface Check {
   equals?: number;
   atLeast?: number;
   atMost?: number;
-}
-
-/** The result of running one check against a transcript. */
-export interface CheckResult {
-  name: string;
-  pattern: string;
-  count: number;
-  ok: boolean;
-  failures: string[];
-  matchedLabels: string[];
 }
 
 /* ---------------------------------------------------------------- scenarios */
@@ -156,20 +162,6 @@ export interface CompiledScenario {
 
 /* --------------------------------------------------------------------- runs */
 
-/**
- * One thing to do: a target, and the question to ask it.
- *
- * Deliberately the shape a queue line parses to *and* the shape the Phase 4
- * daemon will accept over HTTP, so the queue file and the host-side client stay
- * one code path.
- */
-export interface RunRequest {
-  /** A fixture file name resolved under `fixtures/`, or an http(s) URL. */
-  target: string;
-  /** A name in `scenarios/`, or a path to a scenario file. */
-  scenario: string;
-}
-
 /** Where to point the browser, and what exactly is under test. */
 export interface ResolvedTarget {
   url: string;
@@ -199,12 +191,6 @@ export interface OpenResult {
   target: ResolvedTarget;
 }
 
-export interface FailedExpectation {
-  label: string;
-  spec: StepSpec | StepAction;
-  failures: string[];
-}
-
 /** Whether the run answered correctly, and if not, why. */
 export interface Verdict {
   ok: boolean;
@@ -215,8 +201,6 @@ export interface Verdict {
 }
 
 /* ---------------------------------------------------------------- snapshots */
-
-export type SnapshotStatus = "new" | "match" | "differs";
 
 /** One recorded announcement. The only thing a snapshot compares. */
 export interface SnapshotStep {
@@ -250,40 +234,6 @@ export interface SnapshotComparison {
   provenanceChanged?: boolean;
   savedEnvironment?: string[];
   savedProvenance?: string;
-}
-
-/* ------------------------------------------------------------------ results */
-
-/** What CI reads. One entry per run request. */
-export interface RunResult {
-  target: string;
-  scenario: string;
-  ok: boolean;
-  reasons: string[];
-  openedOk: boolean;
-  provenance: string;
-  transcript: string;
-  steps: number;
-  silentSteps: number;
-  erroredSteps: number;
-  failedExpectations: FailedExpectation[];
-  checks: CheckResult[];
-  snapshot: { status: SnapshotStatus | "not compared"; differences: number };
-  /** What had the foreground instead, when focus was lost mid-run. */
-  focusLost: string | null;
-}
-
-/** `runs/<runId>/results.json`. */
-export interface RunReport {
-  runId: string;
-  finishedAt: string;
-  ok: boolean;
-  /** Non-null when the run itself broke, rather than a request failing. */
-  broke: string | null;
-  updatedSnapshots: boolean;
-  total: number;
-  failed: number;
-  results: RunResult[];
 }
 
 /** The readiness guard's outcome. */
@@ -342,65 +292,4 @@ export interface RunStepsResult {
   focusLost?: string;
   /** How many steps had run when focus was found to be gone. */
   focusLostAfter?: number;
-}
-
-/* ------------------------------------------------------------------- events */
-
-/**
- * Progress from a run in flight.
- *
- * `RunStepsOptions.log` is a pre-formatted string sink — the right shape for
- * `smoke.ts` and `probe.ts`, which print it and nothing else, and the wrong one
- * for a wire, where the host wants the label and the announcement apart. So the
- * run layer emits these instead, and the daemon serialises one per line.
- *
- * `request-started` and `opened` exist to bracket a silence rather than to
- * report a result: `openTarget` spends between 17 and 45 seconds launching the
- * browser and running the guards without emitting anything, and a host watching
- * a stream cannot otherwise tell a slow open from a hung one.
- */
-export type RunEvent =
-  | { type: "run-started"; runId: string; total: number }
-  | { type: "request-started"; index: number; target: string; scenario: string }
-  /** The guards finished. `lines` is the transcript prose; when `ok` is false it is the diagnosis. */
-  | { type: "opened"; target: string; ok: boolean; lines: string[] }
-  | { type: "step"; target: string; index: number; label: string; spec: string; heard: string }
-  | { type: "focus-lost"; target: string; after: number; thief: string }
-  | { type: "snapshot"; target: string; status: SnapshotStatus; written: boolean }
-  | { type: "request-finished"; target: string; result: RunResult }
-  /** The run itself broke, rather than a request failing. Exit code 2, not 1. */
-  | { type: "broke"; message: string }
-  | { type: "run-finished"; report: RunReport };
-
-/* ------------------------------------------------------------------- daemon */
-
-/**
- * What `POST /runs` accepts.
- *
- * `queue` is the text of a queue file, parsed with the same `parseQueue` the
- * runner uses, so a host that already has a queue file does not have to
- * reimplement `<target> :: <scenario>` to send it. Exactly one of `requests`
- * and `queue` is required.
- */
-export interface DaemonRunBody {
-  /**
-   * `scenario` is optional per request only when the body carries the
-   * `scenario` override that will fill it in — the daemon rejects a request
-   * that would otherwise have no question to ask.
-   */
-  requests?: Array<{ target: string; scenario?: string }>;
-  queue?: string;
-  /** Overrides the scenario on every request, as `runner.ts --scenario` does. */
-  scenario?: string;
-  updateSnapshots?: boolean;
-}
-
-/** `GET /health`. `busy` is the one thing a host needs before it posts. */
-export interface DaemonHealth {
-  ok: boolean;
-  busy: boolean;
-  /** The run in flight, when there is one. */
-  runId: string | null;
-  /** The environment block that heads every transcript. */
-  rig: string[];
 }

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -231,6 +232,21 @@ test("the provisioner's no-Node fallback report cannot drift from the report typ
   assert.match(script, /reporterNode = \$reporterNode/);
 });
 
+/**
+ * The guest is a workspace package. `npm ci` only honours the committed
+ * lockfile from the workspace root, and it installs Guidepup there rather than
+ * beside this package, so the stages that install and read it must both look
+ * there. Getting this wrong fails on the guest, where nothing here runs.
+ */
+test("the provisioner installs and reads packages at the workspace root", () => {
+  const script = readFileSync("provisioning/provision.ps1", "utf8");
+  assert.match(script, /\$workspace = Split-Path -Parent \(Split-Path -Parent \$rig\)/);
+  const packages = script.slice(script.indexOf("Invoke-Stage 'packages'"), script.indexOf("Invoke-Stage 'tasks'"));
+  assert.match(packages, /Push-Location \$workspace/);
+  assert.match(packages, /Join-Path \$workspace 'node_modules\\@guidepup\\guidepup\\package\.json'/);
+  assert.match(packages, /Join-Path \$workspace 'node_modules\\@guidepup\\setup\\bin\\guidepup'/);
+});
+
 test("runtime stages are recorded rather than thrown away, and the probe never gates", () => {
   const script = readFileSync("provisioning/provision.ps1", "utf8");
   // Every manifest component is a named stage, so a dependency failure is
@@ -255,7 +271,9 @@ test("runtime manifest agrees with the locked packages and Guidepup NVDA manifes
     guidepup: { version: string; setupVersion: string; nvdaAsset: { id: string; version: string; repository: string; asset: string; sha256: string } };
   };
   const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { dependencies: Record<string, string> };
-  const guidepupManifest = JSON.parse(readFileSync("node_modules/@guidepup/guidepup/manifest.json", "utf8")) as {
+  // Resolved, not joined: npm workspaces install it at the workspace root.
+  const guidepupManifestPath = createRequire(import.meta.url).resolve("@guidepup/guidepup/manifest.json");
+  const guidepupManifest = JSON.parse(readFileSync(guidepupManifestPath, "utf8")) as {
     screenReaders: Array<{ id: string; assets: Array<{ version: string; repository: string; asset: string; sha256: string }> }>;
   };
   const nvda = guidepupManifest.screenReaders.find((screenReader) => screenReader.id === runtime.guidepup.nvdaAsset.id)?.assets[0];

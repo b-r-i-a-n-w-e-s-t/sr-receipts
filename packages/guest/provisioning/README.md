@@ -10,8 +10,10 @@ Before running the Provisioner, a maintainer manually creates an approved
 Windows 11 **ARM64** guest from a CrystalFetch-built official Windows ISO,
 completes Windows first-run and activation, creates and signs into the desktop
 account, and installs/configures UTM guest tools as needed. Clone or otherwise
-copy this repository into that signed-in user's local filesystem before running
-the command below. The inspected rig
+copy this repository into that signed-in user's local filesystem, then change
+into its `packages\guest` directory before running the command below. The
+Provisioner installs the committed lockfile from the repository root, where
+npm workspaces keep it. The inspected rig
 uses 4 vCPUs, 8 GiB RAM, 64 GiB storage, and UTM Shared/NAT networking. On that
 network, the Mac is currently reachable from the guest at `192.168.64.1`; this
 is an operational fact, not discovery or a supported UTM-control contract.

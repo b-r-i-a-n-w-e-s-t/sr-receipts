@@ -32,7 +32,11 @@ export const nvdaTarget: ExecutionTarget = {
       // page, so a stolen foreground stops the sequence instead of typing the
       // rest of it into somebody else's window.
       perform: async (scenario, onStep) => {
-        const result = await runSteps(nvda, speech, scenario.steps, { onStep, watch: watchFocus(speech) });
+        const watch = watchFocus(
+          speech,
+          scenario.focusCheckEvery === undefined ? {} : { every: scenario.focusCheckEvery },
+        );
+        const result = await runSteps(nvda, speech, scenario.steps, { onStep, watch });
         return { ...result, steps: excludeAddressBar(result.steps) };
       },
       stop: stopSession,

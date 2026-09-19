@@ -20,6 +20,7 @@
  *     description: "one line on what question this answers",
  *     modeProbes: ["moveToNextTable"],        // optional; see lib/guard.ts
  *     window: { width: 1120, height: 1000 },  // optional; see lib/firefox.ts
+ *     focusCheckEvery: 3,                     // optional; see lib/session.ts
  *     steps: [ ... ],
  *     checks: [ ... ]                         // optional; see lib/expect.ts
  *   }
@@ -186,6 +187,14 @@ export function compileScenario(scenario: unknown, source = "scenario"): Compile
     throw new Error(`${source}: "checks" must be an array`);
   }
   validateWindow(candidate.window, source);
+  if (
+    candidate.focusCheckEvery !== undefined &&
+    (!Number.isInteger(candidate.focusCheckEvery) || candidate.focusCheckEvery < 1)
+  ) {
+    throw new Error(
+      `${source}: "focusCheckEvery" must be a positive integer, got ${candidate.focusCheckEvery}`,
+    );
+  }
 
   const steps = candidate.steps.flatMap((step, i) => {
     try {
@@ -206,6 +215,7 @@ export function compileScenario(scenario: unknown, source = "scenario"): Compile
   };
   if (candidate.modeProbes !== undefined) compiled.modeProbes = candidate.modeProbes;
   if (candidate.window !== undefined) compiled.window = candidate.window as WindowSize;
+  if (candidate.focusCheckEvery !== undefined) compiled.focusCheckEvery = candidate.focusCheckEvery;
   return compiled;
 }
 

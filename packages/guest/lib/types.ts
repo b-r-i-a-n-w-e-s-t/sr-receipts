@@ -137,6 +137,17 @@ export interface Scenario {
    */
   modeProbes?: NvdaCommand[];
   window?: WindowSize;
+  /**
+   * How often, in steps, to re-check that the keystrokes are still reaching the
+   * page. Defaults to `FOCUS_CHECK_EVERY`.
+   *
+   * Detection happens *after* a step, so up to this many keystrokes can reach a
+   * window that stole the foreground. That is harmless for navigation keys, and
+   * it is not harmless for a scenario that sends activating keys: an `Enter`
+   * into somebody else's window presses whatever it finds. Such a scenario says
+   * so here.
+   */
+  focusCheckEvery?: number;
   steps: AuthoredStep[];
   checks?: Check[];
 }
@@ -156,6 +167,7 @@ export interface CompiledScenario {
   description: string;
   modeProbes?: NvdaCommand[];
   window?: WindowSize;
+  focusCheckEvery?: number;
   steps: CompiledStep[];
   checks: Check[];
 }

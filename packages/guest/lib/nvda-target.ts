@@ -5,7 +5,7 @@
  * `guard.ts` and `steps.ts`. Must be reached from the interactive console
  * session, for the reasons `session.ts` gives.
  */
-import type { ExecutionTarget } from "./execution-target.ts";
+import { requireReader, type ExecutionTarget } from "./execution-target.ts";
 import { excludeAddressBar } from "./firefox.ts";
 import { openTarget, startSession, stopSession, watchFocus, type Session } from "./session.ts";
 import { stamp } from "./stamp.ts";
@@ -25,7 +25,10 @@ export const nvdaTarget: ExecutionTarget = {
     }
     const { nvda, speech } = session;
     return {
-      validate: (scenario) => validateSteps(nvda, scenario.steps),
+      validate: (scenario) => {
+        requireReader(scenario, "nvda");
+        validateSteps(nvda, scenario.steps);
+      },
       open: (target, scenario) =>
         openTarget(speech, target, { modeProbes: scenario.modeProbes, window: scenario.window }),
       // Re-check every few steps that the keystrokes are still reaching the

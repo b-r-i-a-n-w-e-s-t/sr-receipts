@@ -157,17 +157,18 @@ test("a malformed check is rejected at compile time", () => {
 
 test("a bad matcher in a scenario is caught when the scenario compiles", () => {
   assert.throws(
-    () => compileScenario({ steps: [{ press: "Tab", expect: { contains: "x" } }] }, "s"),
+    () => compileScenario({ reader: "nvda", steps: [{ press: "Tab", expect: { contains: "x" } }] }, "s"),
     /unknown matcher/,
   );
   assert.throws(
-    () => compileScenario({ steps: ["press:Tab"], checks: [{ name: "n" }] }, "s"),
+    () => compileScenario({ reader: "nvda", steps: ["press:Tab"], checks: [{ name: "n" }] }, "s"),
     /needs "matches"/,
   );
 });
 
 test("an expectation applies to each step a repeat expands to", () => {
   const compiled = compileScenario({
+    reader: "nvda",
     steps: [{ label: "move", perform: "moveToNextColumn", repeat: 3, expect: { silent: false } }],
   });
   assert.equal(compiled.steps.length, 3);
@@ -303,6 +304,7 @@ const OPENED_OK: OpenResult = {
 };
 
 const EMPTY_SCENARIO: CompiledScenario = {
+  reader: "nvda",
   name: "s",
   description: "",
   steps: [],

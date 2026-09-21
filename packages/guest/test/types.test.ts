@@ -75,6 +75,7 @@ test("a correct scenario compiles", () => {
   assert.equal(
     check(
       scenario(`{
+        reader: "nvda",
         name: "ok",
         modeProbes: ["moveToNextTable"],
         window: { width: 1120, height: 1000 },
@@ -95,34 +96,58 @@ test("a correct scenario compiles", () => {
 test("a misspelled NVDA command does not compile, and tsc names the right one", () => {
   // This is the failure `validateSteps` was written for: nvda.perform(undefined)
   // is silent, and a silence in a transcript reads exactly like a real one.
-  const output = check(scenario(`{ steps: [{ perform: "moveToNextTabel" }] }`));
+  const output = check(scenario(`{ reader: "nvda", steps: [{ perform: "moveToNextTabel" }] }`));
   assert.match(output, /error TS\d+/);
   assert.match(output, /moveToNextTable/, "tsc should name the command that was meant");
+});
+
+test("a scenario that does not name its reader does not compile", () => {
+  const output = check(scenario(`{ steps: ["press:Tab"] }`));
+  assert.match(output, /error TS\d+/);
+  assert.match(output, /reader/);
+});
+
+test("a VoiceOver scenario is checked against VoiceOver's commands, not NVDA's", () => {
+  assert.equal(
+    check(scenario(`{ reader: "voiceover", steps: ["perform:findNextTable", { perform: "interactWithItem" }] }`)),
+    "",
+  );
+  // `moveToNextTable` is a real command, but it is NVDA's. The two readers
+  // share 17 names in all, so only the scenario's reader can say which is meant.
+  assert.match(check(scenario(`{ reader: "voiceover", steps: ["perform:moveToNextTable"] }`)), /error TS\d+/);
+  assert.match(check(scenario(`{ reader: "voiceover", steps: [{ perform: "moveToNextTable" }] }`)), /error TS\d+/);
+  assert.match(check(scenario(`{ reader: "nvda", steps: ["perform:findNextTable"] }`)), /error TS\d+/);
+});
+
+test("mode probes do not compile on a VoiceOver scenario", () => {
+  const output = check(scenario(`{ reader: "voiceover", modeProbes: ["findNextTable"], steps: ["press:Tab"] }`));
+  assert.match(output, /error TS\d+/);
+  assert.match(output, /modeProbes/);
 });
 
 test("a misspelled matcher does not compile", () => {
   // `contains` is the natural slip for `includes`.
   const output = check(
-    scenario(`{ steps: [{ press: "Tab", expect: { contains: "table" } }] }`),
+    scenario(`{ reader: "nvda", steps: [{ press: "Tab", expect: { contains: "table" } }] }`),
   );
   assert.match(output, /error TS\d+/);
   assert.match(output, /contains/);
 });
 
 test("a misspelled mode probe does not compile", () => {
-  const output = check(scenario(`{ modeProbes: ["moveToNextTabel"], steps: ["press:Tab"] }`));
+  const output = check(scenario(`{ reader: "nvda", modeProbes: ["moveToNextTabel"], steps: ["press:Tab"] }`));
   assert.match(output, /error TS\d+/);
 });
 
 test("a window size missing a dimension does not compile", () => {
-  const output = check(scenario(`{ window: { width: 1120 }, steps: ["press:Tab"] }`));
+  const output = check(scenario(`{ reader: "nvda", window: { width: 1120 }, steps: ["press:Tab"] }`));
   assert.match(output, /error TS\d+/);
   assert.match(output, /height/);
 });
 
 test("a bare step spec is checked too, not just the object form", () => {
-  assert.equal(check(scenario(`{ steps: ["perform:reportTitle"] }`)), "");
-  assert.match(check(scenario(`{ steps: ["perform:reportTitel"] }`)), /error TS\d+/);
+  assert.equal(check(scenario(`{ reader: "nvda", steps: ["perform:reportTitle"] }`)), "");
+  assert.match(check(scenario(`{ reader: "nvda", steps: ["perform:reportTitel"] }`)), /error TS\d+/);
 });
 
 test("a check with no bound still compiles, because only the runtime knows", () => {
@@ -131,7 +156,7 @@ test("a check with no bound still compiles, because only the runtime knows", () 
   // readability than it returns. `validateCheck` covers it, and
   // test/expect.test.ts asserts that it does.
   assert.equal(
-    check(scenario(`{ steps: ["press:Tab"], checks: [{ name: "n", matches: "x" }] }`)),
+    check(scenario(`{ reader: "nvda", steps: ["press:Tab"], checks: [{ name: "n", matches: "x" }] }`)),
     "",
   );
 });

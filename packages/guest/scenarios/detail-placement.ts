@@ -54,6 +54,7 @@
 import type { Scenario } from "../lib/types.ts";
 
 const scenario: Scenario = {
+  reader: "nvda",
   name: "detail-placement",
   description:
     "Where the expandable detail goes: the row-count delta across expanding five details, plus orientation, reachability and verbosity at the detail.",

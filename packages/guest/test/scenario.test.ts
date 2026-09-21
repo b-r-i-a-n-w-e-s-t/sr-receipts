@@ -16,7 +16,8 @@ import { readdirSync } from "node:fs";
 import { SCENARIOS, compileScenario, loadScenario } from "../lib/scenario.ts";
 import { validateSteps, normalize } from "../lib/steps.ts";
 import { parseQueue, slugify, DEFAULT_SCENARIO } from "../lib/target.ts";
-import type { CompiledScenario, NvdaCommand, NvdaDriver, StepSpec } from "../lib/types.ts";
+import type { CompiledScenario, NvdaCommand, Reader, ReaderDriver, StepSpec } from "../lib/types.ts";
+import { keyCodeCommands } from "@guidepup/guidepup/lib/macOS/VoiceOver/keyCodeCommands.js";
 
 /**
  * Deliberately-invalid input, cast so it compiles.
@@ -37,9 +38,9 @@ const specs = (compiled: CompiledScenario): string[] =>
 
 test("the three authoring forms compile to the same step", () => {
   const forms = [
-    { steps: ["perform:reportTitle"] },
-    { steps: [["perform:reportTitle", "perform:reportTitle"]] },
-    { steps: [{ label: "perform:reportTitle", perform: "reportTitle" }] },
+    { reader: "nvda", steps: ["perform:reportTitle"] },
+    { reader: "nvda", steps: [["perform:reportTitle", "perform:reportTitle"]] },
+    { reader: "nvda", steps: [{ label: "perform:reportTitle", perform: "reportTitle" }] },
   ];
   for (const form of forms) {
     const compiled = compileScenario(form);
@@ -51,6 +52,7 @@ test("the three authoring forms compile to the same step", () => {
 
 test("repeat numbers labels by appending", () => {
   const compiled = compileScenario({
+    reader: "nvda",
     steps: [{ label: "tab", press: "Tab", repeat: 3 }],
   });
   assert.deepEqual(labels(compiled), ["tab 1", "tab 2", "tab 3"]);
@@ -59,6 +61,7 @@ test("repeat numbers labels by appending", () => {
 
 test("repeat substitutes {n} when the label says where the number goes", () => {
   const compiled = compileScenario({
+    reader: "nvda",
     steps: [{ label: "ctrl+alt+down, row +{n}", perform: "moveToNextRow", repeat: 3 }],
   });
   assert.deepEqual(labels(compiled), [
@@ -69,12 +72,13 @@ test("repeat substitutes {n} when the label says where the number goes", () => {
 });
 
 test("repeat of 1 does not number the label", () => {
-  const compiled = compileScenario({ steps: [{ label: "tab", press: "Tab" }] });
+  const compiled = compileScenario({ reader: "nvda", steps: [{ label: "tab", press: "Tab" }] });
   assert.deepEqual(labels(compiled), ["tab"]);
 });
 
 test("settle rides along on every expanded step", () => {
   const compiled = compileScenario({
+    reader: "nvda",
     steps: [{ label: "expand", press: "Enter", repeat: 2, settle: 1500 }],
   });
   assert.deepEqual(compiled.steps.map((s) => s.settle), [1500, 1500]);
@@ -82,24 +86,43 @@ test("settle rides along on every expanded step", () => {
 
 test("a malformed scenario is rejected, naming the step", () => {
   const cases: [unknown, RegExp][] = [
-    [{ steps: [] }, /non-empty "steps"/],
-    [{ steps: [{ label: "x" }] }, /exactly one of "perform" or "press"/],
-    [{ steps: [{ perform: "a", press: "b" }] }, /exactly one of "perform" or "press"/],
-    [{ steps: [{ press: "Tab", repeat: 0 }] }, /"repeat" must be a positive integer/],
-    [{ steps: [{ press: "Tab", repeat: 2.5 }] }, /"repeat" must be a positive integer/],
-    [{ steps: [{ press: "Tab", settle: -1 }] }, /"settle" must be a non-negative/],
-    [{ steps: [42] }, /expected a string, a tuple or an object/],
-    [{ steps: [["only-a-label"]] }, /tuple step must be/],
-    [{ steps: ["perform:x"], modeProbes: "moveToNextTable" }, /"modeProbes" must be an array/],
+    [{ reader: "nvda", steps: [] }, /non-empty "steps"/],
+    [{ reader: "nvda", steps: [{ label: "x" }] }, /exactly one of "perform" or "press"/],
+    [{ reader: "nvda", steps: [{ perform: "a", press: "b" }] }, /exactly one of "perform" or "press"/],
+    [{ reader: "nvda", steps: [{ press: "Tab", repeat: 0 }] }, /"repeat" must be a positive integer/],
+    [{ reader: "nvda", steps: [{ press: "Tab", repeat: 2.5 }] }, /"repeat" must be a positive integer/],
+    [{ reader: "nvda", steps: [{ press: "Tab", settle: -1 }] }, /"settle" must be a non-negative/],
+    [{ reader: "nvda", steps: [42] }, /expected a string, a tuple or an object/],
+    [{ reader: "nvda", steps: [["only-a-label"]] }, /tuple step must be/],
+    [{ reader: "nvda", steps: ["perform:x"], modeProbes: "moveToNextTable" }, /"modeProbes" must be an array/],
   ];
   for (const [scenario, expected] of cases) {
     assert.throws(() => compileScenario(scenario, "under-test"), expected);
   }
 });
 
+test("a scenario must say which reader its steps are written for", () => {
+  // No default. A guessed reader would hand one reader's commands to another,
+  // and the only symptom would be a transcript of silences.
+  assert.throws(() => compileScenario({ steps: ["press:Tab"] }, "s"), /"reader" must be one of "nvda", "voiceover", got undefined/);
+  assert.throws(() => compileScenario({ reader: "jaws", steps: ["press:Tab"] }, "s"), /got "jaws"/);
+
+  assert.equal(compileScenario({ reader: "nvda", steps: ["press:Tab"] }).reader, "nvda");
+  assert.equal(compileScenario({ reader: "voiceover", steps: ["perform:findNextTable"] }).reader, "voiceover");
+});
+
+test("mode probes are refused on a VoiceOver scenario", () => {
+  // They prove NVDA's browse mode. Accepting them here would look like a guard
+  // that ran, on a reader where there is nothing for it to prove.
+  assert.throws(
+    () => compileScenario({ reader: "voiceover", modeProbes: ["findNextTable"], steps: ["press:Tab"] }, "s"),
+    /"modeProbes" prove NVDA's browse mode, which voiceover does not have/,
+  );
+});
+
 test("the error names the file and the step number", () => {
   assert.throws(
-    () => compileScenario({ steps: ["perform:ok", { label: "bad" }] }, "my-scenario.mjs"),
+    () => compileScenario({ reader: "nvda", steps: ["perform:ok", { label: "bad" }] }, "my-scenario.mjs"),
     /my-scenario\.mjs: step 2/,
   );
 });
@@ -161,9 +184,15 @@ test("every shipped scenario is runnable against the real command list", async (
     .filter((file) => file.endsWith(".ts"))
     .map((file) => file.replace(/.ts$/, ""));
   assert.ok(shipped.length >= 2, "expected the shipped scenarios to be found");
+  // `voiceOver.keyboardCommands` throws unless VoiceOver is running, so its
+  // scenarios are checked against the table that getter returns.
+  const drivers: Record<Reader, ReaderDriver> = {
+    nvda,
+    voiceover: { keyboardCommands: keyCodeCommands, perform: () => {}, press: () => {} },
+  };
   for (const name of shipped) {
     const compiled = await loadScenario(name);
-    validateSteps(nvda, compiled.steps);
+    validateSteps(drivers[compiled.reader], compiled.steps);
     for (const probe of compiled.modeProbes ?? []) {
       assert.ok(nvda.keyboardCommands[probe], `${name}: unknown modeProbe ${probe}`);
     }
@@ -171,7 +200,7 @@ test("every shipped scenario is runnable against the real command list", async (
 });
 
 test("validateSteps reports every bad step at once, not just the first", () => {
-  const nvda: NvdaDriver = {
+  const nvda: ReaderDriver = {
     keyboardCommands: { reportTitle: Symbol("t") } as unknown as Record<NvdaCommand, unknown>,
     perform: () => {},
     press: () => {},
@@ -242,9 +271,10 @@ test("a transcript name survives a URL target and a path-shaped scenario name", 
 });
 
 test("a window size is optional, and survives compilation when given", async () => {
-  assert.equal(compileScenario({ steps: ["perform:reportTitle"] }).window, undefined);
+  assert.equal(compileScenario({ reader: "nvda", steps: ["perform:reportTitle"] }).window, undefined);
 
   const sized = compileScenario({
+    reader: "nvda",
     steps: ["perform:reportTitle"],
     window: { width: 1120, height: 1000 },
   });
@@ -261,7 +291,7 @@ test("a malformed window size is rejected before NVDA starts", () => {
   ];
   for (const [window, message] of bad) {
     assert.throws(
-      () => compileScenario({ steps: ["perform:reportTitle"], window }, "sized"),
+      () => compileScenario({ reader: "nvda", steps: ["perform:reportTitle"], window }, "sized"),
       message,
       `expected ${JSON.stringify(window)} to be rejected`,
     );

@@ -23,12 +23,12 @@ import type {
   CompiledStep,
   FocusWatch,
   NvdaCommand,
-  NvdaDriver,
+  ReaderDriver,
   OpenResult,
   StepResult,
 } from "../lib/types.ts";
 
-const nvda: NvdaDriver = {
+const nvda: ReaderDriver = {
   keyboardCommands: { reportTitle: Symbol("t") } as unknown as Record<NvdaCommand, unknown>,
   perform: () => {},
   press: () => {},
@@ -131,7 +131,7 @@ const OPENED_OK: OpenResult = {
   },
 };
 
-const SCENARIO: CompiledScenario = { name: "survey", description: "", steps: [], checks: [] };
+const SCENARIO: CompiledScenario = { reader: "nvda", name: "survey", description: "", steps: [], checks: [] };
 
 const ran: StepResult[] = [{ label: "tab 1", spec: "press:Tab", heard: "said a" }];
 

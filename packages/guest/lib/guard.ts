@@ -31,7 +31,7 @@ import { windowsActivate } from "@guidepup/guidepup";
 import { delay } from "./system.ts";
 import { FIREFOX } from "./firefox.ts";
 import { SILENCE, type SpeechLog } from "./speech.ts";
-import type { GuardResult, NvdaCommand, NvdaDriver } from "./types.ts";
+import type { GuardResult, NvdaCommand, ReaderDriver } from "./types.ts";
 
 /**
  * Which quick-navigation commands to use when asserting browse mode.
@@ -66,7 +66,7 @@ export interface GuardOptions {
 }
 
 export async function ensureReadyToNavigate(
-  nvda: NvdaDriver,
+  nvda: ReaderDriver,
   speech: SpeechLog,
   { focusAttempts = 8, modeAttempts = 3, modeProbes = MODE_PROBES }: GuardOptions = {},
 ): Promise<GuardResult> {

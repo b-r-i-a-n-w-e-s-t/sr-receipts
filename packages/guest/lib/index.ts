@@ -56,8 +56,9 @@ export {
   executeRun,
   type ExecuteOptions,
 } from "./run.ts";
-export type { ExecutionTarget, ReaderSession } from "./execution-target.ts";
+export { requireReader, type ExecutionTarget, type ReaderSession } from "./execution-target.ts";
 export { nvdaTarget } from "./nvda-target.ts";
+export { createVoiceOverTarget, voiceOverTarget, type VoiceOverDesktop } from "./voiceover-target.ts";
 export {
   DEFAULT_PORT,
   createRigServer,

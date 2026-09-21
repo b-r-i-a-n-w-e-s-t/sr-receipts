@@ -12,6 +12,7 @@
  * supposed to confirm it. One definition, one set of numbers.
  */
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { gitBlobHash } from "./system.ts";
 import type { ResolvedTarget, RunRequest } from "./types.ts";
 
@@ -52,7 +53,7 @@ export function resolveTarget(
   }
   const path = join(FIXTURES, target);
   return {
-    url: "file:///" + path.replace(/\\/g, "/"),
+    url: pathToFileURL(path).href,
     provenance: `fixture git blob: ${gitBlobHash(path)}`,
     settle: settle ?? SETTLE.fixture,
     slug: target,

@@ -4,18 +4,25 @@
  * Written for the person authoring a scenario in another repo rather than for
  * the harness. Two things here earn their keep beyond documentation:
  *
- * - `NvdaCommand` is derived from guidepup's own `keyboardCommands` object, so
- *   it is the exact union of the 160 command names that exist. A misspelled
- *   command used to reach `nvda.perform(undefined)`, which is silent — and a
- *   silence in a transcript is indistinguishable from a real one. `lib/steps.ts`
- *   still checks it at runtime, because a scenario can arrive as JSON from a
- *   repo that never ran tsc, but in TypeScript the typo now fails to compile,
- *   with tsc suggesting the name that was meant.
+ * - `NvdaCommand` and `VoiceOverCommand` are derived from guidepup's own
+ *   `keyboardCommands` objects, so each is the exact union of the command names
+ *   that exist for that reader. A misspelled command used to reach
+ *   `nvda.perform(undefined)`, which is silent — and a silence in a transcript
+ *   is indistinguishable from a real one. `lib/steps.ts` still checks it at
+ *   runtime, because a scenario can arrive as JSON from a repo that never ran
+ *   tsc, but in TypeScript the typo now fails to compile, with tsc suggesting
+ *   the name that was meant.
+ *
+ * - A scenario names its `reader`, and its steps are checked against that
+ *   reader's commands. The two vocabularies share 17 names out of several
+ *   hundred and the readers navigate differently — NVDA by flat quick
+ *   navigation, VoiceOver by interacting with a container and moving inside it
+ *   — so a scenario is written for one reader, in the commands its users press.
  *
  * - `Expectation` is a closed object type, so writing `contains` where
  *   `includes` was meant is a compile error rather than a runtime one.
  */
-import type { nvda } from "@guidepup/guidepup";
+import type { nvda, voiceOver } from "@guidepup/guidepup";
 import type { CheckResult, FailedExpectation, SnapshotStatus } from "@sr-receipts/host";
 
 /**
@@ -37,15 +44,29 @@ export type {
 /** Every NVDA command guidepup exposes, as a union of literal names. */
 export type NvdaCommand = keyof typeof nvda.keyboardCommands;
 
+/** Every VoiceOver keyboard command guidepup exposes, the same way. */
+export type VoiceOverCommand = keyof typeof voiceOver.keyboardCommands;
+
+/** Each reader a scenario can be written for, and the commands it answers to. */
+export interface ReaderCommands {
+  nvda: NvdaCommand;
+  voiceover: VoiceOverCommand;
+}
+
+export type Reader = keyof ReaderCommands;
+
 /**
- * What a step does. `perform` runs an NVDA command, which needs the NVDA
- * modifier that `press` cannot express; `press` sends a key combination.
+ * What a step does. `perform` runs one of the reader's own commands, which
+ * needs the reader's modifier that `press` cannot express; `press` sends a key
+ * combination.
  *
  * Keys are deliberately not a closed union: guidepup parses them from a string
  * grammar wide enough ("Control+Home", "ArrowDown", "Shift+Tab") that
  * enumerating it would be wrong more often than it was useful.
  */
-export type StepSpec = `perform:${NvdaCommand}` | `press:${string}`;
+export type StepSpec<R extends Reader = Reader> =
+  | `perform:${ReaderCommands[R]}`
+  | `press:${string}`;
 
 /** The escape hatch for a step no spec can express. */
 export type StepAction = () => unknown | Promise<unknown>;
@@ -101,10 +122,10 @@ export interface WindowSize {
 }
 
 /** A step as authored: object form, the form that takes repeat and settle. */
-export interface AuthoredStepObject {
+export interface AuthoredStepObject<R extends Reader = Reader> {
   /** Numbered when `repeat` is set: `{n}` is substituted, else appended. */
   label?: string;
-  perform?: NvdaCommand;
+  perform?: ReaderCommands[R];
   press?: string;
   /** Expand to this many steps. */
   repeat?: number;
@@ -122,20 +143,21 @@ export interface AuthoredStepObject {
  *   ["title bar", "perform:reportTitle"]   tuple; the form probe.json uses
  *   { label, perform, repeat, expect }     object
  */
-export type AuthoredStep =
-  | StepSpec
-  | readonly [label: string, spec: StepSpec]
-  | AuthoredStepObject;
+export type AuthoredStep<R extends Reader = Reader> =
+  | StepSpec<R>
+  | readonly [label: string, spec: StepSpec<R>]
+  | AuthoredStepObject<R>;
 
-/** A scenario as authored. */
-export interface Scenario {
+/** What every scenario says, whichever reader it is written for. */
+interface ScenarioFor<R extends Reader> {
+  /**
+   * The reader whose commands the steps are written in. Required: an Execution
+   * Target refuses a scenario written for another reader before it opens
+   * anything.
+   */
+  reader: R;
   name?: string;
   description?: string;
-  /**
-   * How to prove browse mode on this kind of page. Defaults to table, then
-   * heading, then landmark — see `lib/guard.ts`.
-   */
-  modeProbes?: NvdaCommand[];
   window?: WindowSize;
   /**
    * How often, in steps, to re-check that the keystrokes are still reaching the
@@ -148,9 +170,23 @@ export interface Scenario {
    * so here.
    */
   focusCheckEvery?: number;
-  steps: AuthoredStep[];
+  steps: AuthoredStep<R>[];
   checks?: Check[];
 }
+
+export interface NvdaScenario extends ScenarioFor<"nvda"> {
+  /**
+   * How to prove browse mode on this kind of page. Defaults to table, then
+   * heading, then landmark — see `lib/guard.ts`. VoiceOver has no browse mode,
+   * so only an NVDA scenario can say this.
+   */
+  modeProbes?: NvdaCommand[];
+}
+
+export type VoiceOverScenario = ScenarioFor<"voiceover">;
+
+/** A scenario as authored. */
+export type Scenario = NvdaScenario | VoiceOverScenario;
 
 /** One step after compilation: repeats expanded, labels numbered. */
 export interface CompiledStep {
@@ -163,8 +199,10 @@ export interface CompiledStep {
 
 /** A scenario after compilation. Defaults are resolved; `steps` is flat. */
 export interface CompiledScenario {
+  reader: Reader;
   name: string;
   description: string;
+  /** Only ever set for an NVDA scenario. */
   modeProbes?: NvdaCommand[];
   window?: WindowSize;
   focusCheckEvery?: number;
@@ -188,7 +226,7 @@ export interface ResolvedTarget {
 export interface StepResult {
   label: string;
   spec: StepSpec | StepAction;
-  /** What NVDA said, one phrase per line, or "(silence)", or "ERROR ...". */
+  /** What the reader said, one phrase per line, or "(silence)", or "ERROR ...". */
   heard: string;
   error?: string;
   expect?: Expectations;
@@ -258,9 +296,10 @@ export interface GuardResult {
 }
 
 /**
- * The part of guidepup's NVDA the rig actually drives.
+ * The part of a guidepup reader the rig actually drives. Guidepup's `nvda` and
+ * `voiceOver` both have it.
  *
- * Narrower than the real `NVDA` class on purpose, and for the same reason
+ * Narrower than the real classes on purpose, and for the same reason
  * `SpeechSource` in `lib/speech.ts` is narrow: this is the seam the unit tests
  * substitute, and a fake that has to implement thirty unused methods is a fake
  * nobody writes honestly. It also documents exactly what the rig depends on, so
@@ -270,8 +309,8 @@ export interface GuardResult {
  * types stay bivariant and the real driver — whose `perform` takes a narrower
  * command type — remains assignable.
  */
-export interface NvdaDriver {
-  readonly keyboardCommands: Record<NvdaCommand, unknown>;
+export interface ReaderDriver {
+  readonly keyboardCommands: Readonly<Record<string, unknown>>;
   perform(command: unknown): unknown;
   press(key: string): unknown;
 }

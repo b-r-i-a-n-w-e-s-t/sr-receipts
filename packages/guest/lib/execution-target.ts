@@ -9,14 +9,25 @@
  * `results.json` and the event stream. That side must never need to know which
  * target it is driving.
  *
- * Deliberately no wider than the evidence. Both proven targets share this
- * lifecycle: start the reader, record the environment that produced the
- * speech, capture what it said, and stop without masking the failure that came
- * first. NVDA implements it (`nvda-target.ts`). The VoiceOver target does not:
- * it has proven its own smoke run, not transcript scenarios, whose step
- * vocabulary is NVDA's.
+ * Deliberately no wider than the evidence. Both targets share this lifecycle:
+ * start the reader, record the environment that produced the speech, capture
+ * what it said, and stop without masking the failure that came first. NVDA
+ * implements it in `nvda-target.ts` and VoiceOver in `voiceover-target.ts`.
+ *
+ * What the targets do not share is a step vocabulary. A scenario names the
+ * reader it is written for, and each target refuses the other's scenarios in
+ * `validate`.
  */
-import type { CompiledScenario, OpenResult, RunStepsResult, StepResult } from "./types.ts";
+import type { CompiledScenario, OpenResult, Reader, RunStepsResult, StepResult } from "./types.ts";
+
+/** Throw unless the scenario is written in this target's reader's commands. */
+export function requireReader(scenario: CompiledScenario, reader: Reader): void {
+  if (scenario.reader !== reader) {
+    throw new Error(
+      `scenario ${JSON.stringify(scenario.name)} is written for ${scenario.reader}, and this Execution Target drives ${reader}`,
+    );
+  }
+}
 
 export interface ExecutionTarget {
   /**

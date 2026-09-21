@@ -19,12 +19,13 @@
  * line.
  *
  * Exit codes: 0 all requests passed, 1 at least one failed, 2 the run itself
- * broke (NVDA would not start, a scenario would not load). The distinction
+ * broke (the reader would not start, a scenario would not load). The distinction
  * matters to CI: 1 is a result, 2 is an unanswered question.
  *
- * Must be started by the `nvda-run` scheduled task, not over plain SSH: an SSH
- * session has no interactive desktop, so NVDA has no foreground window to
- * describe.
+ * On Windows, must be started by the `nvda-run` scheduled task, not over plain
+ * SSH: an SSH session has no interactive desktop, so NVDA has no foreground
+ * window to describe. On macOS it drives VoiceOver, and must be started from a
+ * terminal holding the manual authorization in `voiceover/README.md`.
  *
  * There is no test knowledge left in this file. What to ask a target lives in
  * `scenarios/`, and what its answer should be lives there and in `snapshots/`.
@@ -35,6 +36,7 @@ import {
   DEFAULT_SCENARIO,
   executeRun,
   nvdaTarget,
+  voiceOverTarget,
   parseQueue,
   type RunEvent,
   type RunRequest,
@@ -138,7 +140,10 @@ try {
   process.exit(2);
 }
 
-const report = await executeRun(nvdaTarget, {
+// One reader per operating system, so the platform says which target this is.
+const target = process.platform === "darwin" ? voiceOverTarget : nvdaTarget;
+
+const report = await executeRun(target, {
   requests,
   updateSnapshots: options.updateSnapshots,
   onEvent: print,

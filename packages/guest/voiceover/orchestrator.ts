@@ -18,7 +18,12 @@ export type VoiceOverDriver = {
  * four failed this way before any capture happened.
  */
 const LAUNCH_RACE = /application isn'?t running|\(-600\)/i;
-export const START_ATTEMPTS = 3;
+/**
+ * Five, from three: on 2026-09-19 two runs in about ten reached the third
+ * attempt before the reader came up, and one more lost race in either would
+ * have broken the run.
+ */
+export const START_ATTEMPTS = 5;
 /** Retrying immediately never recovered the race; a later run always did. */
 export const START_SETTLE_MS = 10_000;
 

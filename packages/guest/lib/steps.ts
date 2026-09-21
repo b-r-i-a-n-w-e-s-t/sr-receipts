@@ -16,7 +16,7 @@ import type {
   CompiledStep,
   FocusWatch,
   NvdaCommand,
-  NvdaDriver,
+  ReaderDriver,
   RunStepsResult,
   StepAction,
   StepResult,
@@ -34,7 +34,7 @@ export function normalize(step: AuthoredStep | CompiledStep): CompiledStep {
 }
 
 /** Turn a `"perform:x"` / `"press:x"` spec into a thunk. Throws on nonsense. */
-export function toAction(nvda: NvdaDriver, spec: StepSpec | StepAction): StepAction {
+export function toAction(nvda: ReaderDriver, spec: StepSpec | StepAction): StepAction {
   if (typeof spec === "function") return spec;
 
   const match = /^(perform|press):(.+)$/.exec(spec);
@@ -48,10 +48,10 @@ export function toAction(nvda: NvdaDriver, spec: StepSpec | StepAction): StepAct
 
   if (kind === "press") return () => nvda.press(name);
 
-  const command = nvda.keyboardCommands[name as NvdaCommand];
+  const command = nvda.keyboardCommands[name];
   if (!command) {
     throw new Error(
-      `unknown NVDA keyboard command ${JSON.stringify(name)}; see nvda.keyboardCommands`,
+      `unknown keyboard command ${JSON.stringify(name)}; it is not in this reader's keyboardCommands`,
     );
   }
   return () => nvda.perform(command);
@@ -67,7 +67,7 @@ export function toAction(nvda: NvdaDriver, spec: StepSpec | StepAction): StepAct
  * three-minute run on the guest desktop followed by a puzzling read.
  */
 export function validateSteps(
-  nvda: NvdaDriver,
+  nvda: ReaderDriver,
   steps: readonly (AuthoredStep | CompiledStep)[],
 ): void {
   const problems: string[] = [];
@@ -120,7 +120,7 @@ export interface RunStepsOptions {
  * fresh guard, which is the real recovery.
  */
 export async function runSteps(
-  nvda: NvdaDriver,
+  nvda: ReaderDriver,
   speech: SpeechLog,
   steps: readonly CompiledStep[],
   { log, onStep, watch }: RunStepsOptions = {},

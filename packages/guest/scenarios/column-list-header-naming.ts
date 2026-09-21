@@ -19,6 +19,7 @@
 import type { Scenario } from "../lib/types.ts";
 
 const scenario: Scenario = {
+  reader: "nvda",
   name: "column-list-header-naming",
   description:
     "Every column announces a name when walking the header row and when entering a cell.",

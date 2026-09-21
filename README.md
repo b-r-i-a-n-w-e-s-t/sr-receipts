@@ -26,7 +26,7 @@ npm test    # every package's tests, then a typecheck of the whole repository
 
 Real-reader runs happen from the guest package. See its README for NVDA on the
 Windows Guest Rig, and [`packages/guest/voiceover`](packages/guest/voiceover/README.md)
-for the local VoiceOver smoke.
+for VoiceOver with Safari on a local Mac.
 
 ## Moving an existing guest to this layout
 

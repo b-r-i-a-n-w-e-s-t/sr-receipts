@@ -19,7 +19,7 @@ import { PROFILE, XULSTORE, excludeAddressBar, writeWindowGeometry } from "../li
 import { toAction } from "../lib/steps.ts";
 import { SpeechLog } from "../lib/speech.ts";
 import type { SpeechSource } from "../lib/speech.ts";
-import type { NvdaCommand, NvdaDriver, RunRequest, Snapshot, StepResult, StepSpec } from "../lib/types.ts";
+import type { NvdaCommand, ReaderDriver, RunRequest, Snapshot, StepResult, StepSpec } from "../lib/types.ts";
 
 /**
  * Deliberately-invalid input, cast so it compiles.
@@ -63,10 +63,10 @@ test("resolveTarget hashes a fixture's bytes the way git does", () => {
 });
 
 /**
- * A fake driver. Possible to write honestly only because `NvdaDriver` is the
+ * A fake driver. Possible to write honestly only because `ReaderDriver` is the
  * three members the rig actually uses, rather than guidepup NVDA class entire.
  */
-interface FakeNvda extends NvdaDriver {
+interface FakeNvda extends ReaderDriver {
   keyboardCommands: Record<NvdaCommand, unknown>;
   performed: unknown[];
   pressed: string[];
@@ -108,7 +108,7 @@ test("toAction rejects a misspelled command instead of silently doing nothing", 
   // system here. The runtime check is what catches them in a JSON scenario.
   assert.throws(
     () => toAction(fakeNvda, invalid<StepSpec>("perform:moveToNextTabel")),
-    /unknown NVDA keyboard command/,
+    /unknown keyboard command/,
   );
   assert.throws(
     () => toAction(fakeNvda, invalid<StepSpec>("moveToNextTable")),

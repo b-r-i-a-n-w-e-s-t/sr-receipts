@@ -107,6 +107,7 @@ test("a run on an Execution Target produces the report, stream and artifacts the
   const target = fakeTarget();
   const { client, paths, dir } = await connect(t, target);
   const scenario = scenarioFile(dir, {
+    reader: "nvda",
     name: "fake",
     steps: [{ label: "first", press: "Tab" }, { label: "second", press: "Tab", expect: { includes: "heard" } }],
   });
@@ -144,7 +145,7 @@ test("a scenario the target cannot perform breaks the run before any target open
     },
   });
   const { client, paths, dir } = await connect(t, target);
-  const scenario = scenarioFile(dir, { name: "fake", steps: ["press:Tab"] });
+  const scenario = scenarioFile(dir, { reader: "nvda", name: "fake", steps: ["press:Tab"] });
 
   await assert.rejects(client.run([{ target: "page.html", scenario }]), (error: RigError) => {
     assert.match(error.message, /run-1 broke: scenario has unrunnable steps/);
@@ -164,7 +165,7 @@ test("a target that loses the page fails the run and records no baseline", async
     }),
   });
   const { client, paths, dir } = await connect(t, target);
-  const scenario = scenarioFile(dir, { name: "fake", steps: ["press:Tab", "press:Tab"] });
+  const scenario = scenarioFile(dir, { reader: "nvda", name: "fake", steps: ["press:Tab", "press:Tab"] });
 
   const report = await client.run([{ target: "page.html", scenario }]);
 
@@ -183,7 +184,7 @@ test("a target that never reaches the page still leaves its diagnosis as the tra
     }),
   });
   const { client, dir } = await connect(t, target);
-  const scenario = scenarioFile(dir, { name: "fake", steps: ["press:Tab"] });
+  const scenario = scenarioFile(dir, { reader: "nvda", name: "fake", steps: ["press:Tab"] });
 
   const report = await client.run([{ target: "page.html", scenario }]);
 

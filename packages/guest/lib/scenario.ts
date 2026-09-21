@@ -16,9 +16,10 @@
  * ## Shape
  *
  *   {
+ *     reader: "nvda",                         // required; whose commands these are
  *     name: "column-list-table",
  *     description: "one line on what question this answers",
- *     modeProbes: ["moveToNextTable"],        // optional; see lib/guard.ts
+ *     modeProbes: ["moveToNextTable"],        // optional, NVDA only; see lib/guard.ts
  *     window: { width: 1120, height: 1000 },  // optional; see lib/firefox.ts
  *     focusCheckEvery: 3,                     // optional; see lib/session.ts
  *     steps: [ ... ],
@@ -68,10 +69,13 @@ import type {
   CompiledScenario,
   CompiledStep,
   Expectations,
-  Scenario,
+  NvdaScenario,
+  Reader,
   StepSpec,
   WindowSize,
 } from "./types.ts";
+
+const READERS: readonly Reader[] = ["nvda", "voiceover"];
 
 export const SCENARIOS = join(import.meta.dirname, "..", "scenarios");
 
@@ -167,7 +171,7 @@ export function validateWindow(window: unknown, source: string): void {
 }
 
 /**
- * Validate and flatten a scenario. Structural only — it does not need NVDA, so
+ * Validate and flatten a scenario. Structural only — it does not need a reader, so
  * a malformed scenario in a consuming repo is caught by `npm test` rather than
  * three minutes into a run on the guest desktop.
  */
@@ -175,13 +179,27 @@ export function compileScenario(scenario: unknown, source = "scenario"): Compile
   if (typeof scenario !== "object" || scenario === null) {
     throw new Error(`${source}: expected an object, got ${typeof scenario}`);
   }
-  const candidate = scenario as Scenario;
+  // Read as the widest shape, because nothing about it has been checked yet.
+  const candidate = scenario as Omit<NvdaScenario, "reader"> & { reader?: unknown };
+
+  // Required rather than defaulted: a scenario's steps mean nothing without
+  // knowing whose commands they are, and a guess would send one reader's
+  // scenario to another.
+  if (!READERS.includes(candidate.reader as Reader)) {
+    throw new Error(
+      `${source}: "reader" must be one of ${READERS.map((r) => JSON.stringify(r)).join(", ")}, got ${JSON.stringify(candidate.reader)}`,
+    );
+  }
+  const reader = candidate.reader as Reader;
 
   if (!Array.isArray(candidate.steps) || candidate.steps.length === 0) {
     throw new Error(`${source}: needs a non-empty "steps" array`);
   }
   if (candidate.modeProbes !== undefined && !Array.isArray(candidate.modeProbes)) {
     throw new Error(`${source}: "modeProbes" must be an array of command names`);
+  }
+  if (candidate.modeProbes !== undefined && reader !== "nvda") {
+    throw new Error(`${source}: "modeProbes" prove NVDA's browse mode, which ${reader} does not have`);
   }
   if (candidate.checks !== undefined && !Array.isArray(candidate.checks)) {
     throw new Error(`${source}: "checks" must be an array`);
@@ -208,6 +226,7 @@ export function compileScenario(scenario: unknown, source = "scenario"): Compile
   checks.forEach((check, i) => validateCheck(check, `${source}: check ${i + 1}`));
 
   const compiled: CompiledScenario = {
+    reader,
     name: candidate.name ?? source,
     description: candidate.description ?? "",
     steps,

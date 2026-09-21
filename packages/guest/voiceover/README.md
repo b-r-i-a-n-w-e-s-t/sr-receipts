@@ -1,9 +1,14 @@
-# Local VoiceOver execution-target smoke
+# Local VoiceOver Execution Target
 
-This is a deliberately narrow, real-reader compatibility spike. It supports
-only **macOS 26.6.x**, the **bundled VoiceOver**, **Safari 26.6.x**, English,
-and **`@guidepup/guidepup` 0.34.0**. It does not replace the existing Windows
-NVDA workflow.
+VoiceOver with Safari on a local Mac, deliberately narrow. It supports only
+**macOS 26.6.x**, the **bundled VoiceOver**, **Safari 26.6.x**, English, and
+**`@guidepup/guidepup` 0.34.0**. It sits beside the Windows NVDA workflow and
+does not replace it.
+
+Two things live here: the smoke, which proves on one fixed fixture that Guidepup
+can drive and hear the real reader, and the mechanics of the
+[Execution Target](../lib/voiceover-target.ts) that runs transcript scenarios.
+Both need the authorization below.
 
 ## One-time human authorization
 
@@ -45,7 +50,80 @@ grant, reset, or bypass TCC permissions.
 The smoke starts and stops VoiceOver, but deliberately leaves Safari open so it
 does not close a maintainer's browser session.
 
-## Run and inspect
+## Running scenarios
+
+On macOS `runner.ts` drives VoiceOver, with the same queue, scenarios,
+snapshots and `runs/<runId>/` artifacts as the NVDA rig:
+
+```bash
+node runner.ts "detail-v1-group-in-rowgroup.html :: voiceover-table-walk"
+```
+
+> [!WARNING]
+> The target has completed real runs of `voiceover-table-walk` against one
+> fixture, on 2026-09-19. What is not yet measured is how repeatable its
+> snapshots are: that takes several runs of that scenario against one baseline.
+> Until then, a snapshot difference on VoiceOver may be the capture's rather
+> than the page's. Nothing has been run against an `http(s)` target, or with
+> more than one target in a queue.
+
+A scenario must say `reader: "voiceover"` and is written in VoiceOver's
+commands, which are not NVDA's under other names. What the spike established:
+
+- `findNextTable`, then `interactWithItem`, then `moveToNext` along a row and
+  `moveDown` down a column, walks a web table cell by cell. Inside it,
+  `readTableColumnHeader`, `readTableRowAndColumnNumbers` and `moveToNextColumn`
+  answer as their names say.
+- How the cursor arrived changes what VoiceOver moves by. `moveToPrevious` from
+  the first cell left the table, and `moveToNext` from there walked the
+  *contents* of cells rather than the cells. Write steps that do not back up.
+- A step takes 5 to 16 seconds, and a silent one about 20. Guidepup decides an
+  announcement is finished by polling until it has not changed 25 times, and
+  those constants are not configurable. A 60-step scenario is over ten minutes
+  per target.
+- A step's announcement is one joined string, not one phrase per line as NVDA's
+  is.
+- VoiceOver's hints ("You are currently on a cell, inside of a table. To
+  navigate…") are stripped from everything the target records. A hint arrives
+  after a pause, and whether Guidepup catches it is a race: two runs moved to
+  the same cell by the same keys, and only one recorded the hint. Every
+  transcript's environment block says hints were stripped. A capture that was
+  only a hint is recorded as silence, and page text that itself begins "You are
+  currently on…" is cut from there. See [`hints.ts`](hints.ts).
+- `readTableColumnHeader` has twice answered "Welcome to Guidepup.. VoiceOver
+  Settings activity" instead of the header, in four uses, and once moved the
+  cursor out of the table. The cause is unknown. Keep it out of scenarios whose
+  later steps depend on where the cursor is.
+- `moveToNext` does not stop at a row's last cell: it wraps to the first cell of
+  the next row. Moving up past the first row leaves the table and announces it.
+- Guidepup on its own cannot tell a silent command from a repeated
+  announcement, because it reads VoiceOver's `last phrase` and compares it
+  with the phrase it recorded last. Four runs showed both failures: a key bound
+  to nothing was recorded as the previous announcement again, and the second of
+  two identical `describeItem` answers was dropped for equalling the first. So
+  before every step the target has VoiceOver speak a sentinel phrase through
+  its own `output` command and has Guidepup take note of it, then strips the
+  sentinel from what is recorded. A silent step is then recorded as silence and
+  a repeat is recorded whole. See [`sentinel.ts`](sentinel.ts). This is the one
+  part of the target that has not yet been proven on the real reader:
+  `voiceover-table-walk` expects its F13 step to be silent and its two
+  `describeItem` answers to match, so its verdict is the proof. `voiceover-table-walk` exists to measure both. Until it has, prefer
+  `expect` and `checks` to exact snapshots for anything that matters.
+
+Before VoiceOver starts, the target runs the doctor's checks and then proves two
+permissions the doctor cannot see, by sending Safari and System Events one
+harmless Apple event each and pressing Control once. A first Apple event raises
+a macOS consent prompt, and an unanswered prompt is indistinguishable from a
+hung application; a terminal missing from Accessibility fails at the first
+keystroke with System Events error 1002, after VoiceOver is already talking.
+Stay at the keyboard until the first step prints, then leave it alone:
+VoiceOver and Safari hold the foreground for the whole run, and the focus watch
+stops the sequence if anything else takes it.
+
+Each target opens in a Safari window of its own, which the run closes by id. It
+never quits Safari or touches another window.
+
+## Run and inspect the smoke
 
 ```bash
 npm run voiceover:doctor
@@ -120,7 +198,9 @@ not-fully-quitting behavior on Tahoe.
 
 Startup now retries this, up to `START_ATTEMPTS` attempts, stopping the reader
 between tries so a half-launched VoiceOver is not left behind and then waiting
-`START_SETTLE_MS` before the next attempt.
+`START_SETTLE_MS` before the next attempt. The limit went from three to five on
+2026-09-19, when two runs in about ten reached the third attempt before the
+reader came up.
 
 **The delay is the part that works, not the retry.** Retrying immediately failed
 all three attempts every time, while a fresh run seconds later always succeeded

@@ -13,6 +13,7 @@
 import type { Scenario } from "../lib/types.ts";
 
 const scenario: Scenario = {
+  reader: "nvda",
   name: "survey",
   description:
     "Structure and keyboard reachability on an unfamiliar target: headings, landmarks, then Tab order.",

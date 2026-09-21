@@ -27,6 +27,7 @@
 import type { Scenario } from "../lib/types.ts";
 
 const scenario: Scenario = {
+  reader: "nvda",
   name: "detail-cell-live",
   description:
     "The detail cell on a live ColumnList: row count across opening three details by their own carets, and what is said on arriving at the Details column collapsed and expanded.",

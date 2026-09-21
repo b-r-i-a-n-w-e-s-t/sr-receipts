@@ -29,6 +29,7 @@
 import type { Scenario } from "../lib/types.ts";
 
 const scenario: Scenario = {
+  reader: "nvda",
   name: "column-list-overflow-header",
   description:
     "The reveal-columns header announces its own name as well as its control's.",

@@ -391,3 +391,32 @@ indistinguishable from a formatting accident.
 - **Phase 6**: done. Split into the private workspace packages
   `@sr-receipts/guest` (this one) and `@sr-receipts/host`, with the Execution
   Target seam in `lib/execution-target.ts`.
+- **Phase 7**: done. VoiceOver with Safari runs transcript scenarios as a second
+  Execution Target, with one committed baseline.
+
+Next is letting a consuming repo ask both readers from its own Playwright
+tests. Playwright is the runner and never the browser driver, because it cannot
+drive Safari or release Firefox; the decisions, their costs and what was
+deferred are in
+[ADR 0001](../../docs/adr/0001-playwright-is-the-runner-not-the-browser-driver.md).
+In order:
+
+1. Two checks on real desktops: the Windows Guest Rig since `pathToFileURL`
+   replaced the hand-built `file:///` URL in `lib/target.ts`, and VoiceOver
+   against an `http(s)` target with more than one target in the queue.
+2. Scenarios accepted inline over the wire, then a first Playwright slice on
+   NVDA against `carbon-svelte`'s `/demo/va`: a `receipts` fixture, no
+   snapshots, measured timeouts.
+3. The VoiceOver project in the same fixture, in-process.
+4. Baselines for a consumer through Playwright's `toMatchSnapshot`.
+5. A VoiceOver twin of `detail-placement` on the same seven fixtures, which is
+   the first cross-reader comparison.
+6. A minimal reproduction of the `readTableColumnHeader` misfire, and a
+   measurement of where a VoiceOver step's 5 to 16 seconds go.
+7. A prototype of Guidepup's Virtual Screen Reader as a third Playwright
+   project, then a decision on whether it belongs. Its output is never a
+   Receipt.
+
+Alongside: the launch-race section of `voiceover/README.md` cites upstream issue
+#101, which has since been closed in favour of #113, and the VoiceOver Mac stays
+on macOS 26 until Guidepup ships a VoiceOver asset for macOS 27.

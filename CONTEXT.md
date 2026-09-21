@@ -44,7 +44,8 @@ the Provisioner.
 The platform and screen-reader runtime that executes an accessibility
 scenario and produces its observed speech.
 
-## Registered Playwright Suite
+## Receipt
 
-A named, guest-local Playwright test suite that sr-receipts is authorized to run
-with its approved configuration and artifact location.
+What one request to a real screen reader produced: the verdict, the transcript,
+the environment that explains it, and what was heard at each step. A simulated
+reader never produces one.

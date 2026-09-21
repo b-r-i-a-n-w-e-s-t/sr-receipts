@@ -8,16 +8,9 @@
  *
  * Guidepup records one joined string per captured command, deciding a phrase
  * is finished by polling until it stops changing and deciding it is new by
- * comparing it with the last one. Three things strain that technique, and all
- * three are here on purpose:
+ * comparing it with the last one. Two things strain that technique, and both
+ * are here on purpose:
  *
- * - **The same announcement twice running.** `describeItem` is asked twice of
- *   one cell. Without the sentinel, four runs on 2026-09-19 all lost the second
- *   answer and kept only the cell's description, which VoiceOver speaks a
- *   moment after the item: a phrase equal to the last one is what Guidepup
- *   cannot tell from no phrase at all. With the sentinel
- *   (`voiceover/sentinel.ts`) both answers are expected to match, and the check
- *   below fails the run if they do not.
  * - **Hints.** "You are currently on a cell, inside of a table…" arrives after
  *   a pause, and two runs caught it on different steps. The target now strips
  *   hints (`voiceover/hints.ts`), so what the snapshot shows is whether the
@@ -30,7 +23,23 @@
  *   key that is bound to nothing, straight after the one step that is known to
  *   draw no hint. Without the sentinel, four runs recorded it as the previous
  *   phrase again, "column 1, row 4", putting words in the reader's mouth. With
- *   the sentinel it is expected to be silence, and the step says so.
+ *   the sentinel it was recorded as silence, and the step expects that.
+ *
+ * Two things are deliberately not here:
+ *
+ * - **The same announcement twice running.** A phrase equal to the last one is
+ *   what Guidepup cannot tell from no phrase at all. The sentinel closes that
+ *   by construction: the phrase Guidepup compares against is always the
+ *   sentinel or nothing, so it can never equal an announcement. It cannot be
+ *   measured with a VoiceOver command, because VoiceOver answers a consecutive
+ *   second press of a read command with the next level of detail: VO-F3 with
+ *   the item's description, VO-Shift-T with the table's dimensions. A scenario
+ *   that wants those can ask twice on purpose.
+ * - **`readTableColumnHeader`.** In 3 of 11 uses it answered with VoiceOver's
+ *   own startup greeting and "VoiceOver Settings activity" instead of the
+ *   header, and once moved the cursor out of the table. Its cause is unknown,
+ *   and a step that fails one run in four cannot sit in a repeatability
+ *   baseline.
  *
  * The walk itself is the sequence a spike proved: `findNextTable`, then
  * `interactWithItem`, then `moveToNext` along a row and `moveDown` down a
@@ -49,7 +58,7 @@ const scenario: Scenario = {
   reader: "voiceover",
   name: "voiceover-table-walk",
   description:
-    "A table walk that wraps a row, asks one question twice and runs off the top, to measure how repeatable VoiceOver capture is.",
+    "A table walk that wraps a row, presses a key VoiceOver ignores and runs off the top, to measure how repeatable VoiceOver capture is.",
 
   steps: [
     { label: "find the table", perform: "findNextTable", expect: { matches: "table \\d+ columns, \\d+ rows" } },
@@ -64,19 +73,9 @@ const scenario: Scenario = {
     // hint, the target would strip it, and the step would read as silence for
     // the wrong reason, which is what happened when this step came last.
     { label: "a key with nothing to announce", press: "F13", expect: { silent: true } },
-    { label: "column header", perform: "readTableColumnHeader", expect: { not: { silent: true } } },
     { label: "describe the cell", perform: "describeItem", expect: { includes: "is in the VoiceOver cursor" } },
-    { label: "describe the cell again", perform: "describeItem", expect: { includes: "is in the VoiceOver cursor" } },
     { label: "up the first column, move", perform: "moveUp", repeat: 3 },
     { label: "up past the first row", perform: "moveUp" },
-  ],
-
-  checks: [
-    {
-      name: "describing one cell twice is heard the same way twice",
-      matches: "is in the VoiceOver cursor",
-      equals: 2,
-    },
   ],
 };
 

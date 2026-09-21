@@ -1,0 +1,96 @@
+{
+  "target": "detail-v1-group-in-rowgroup.html",
+  "scenario": "voiceover-table-walk",
+  "provenance": "fixture git blob: fd73bd921bb7025953dad8ef6443a43b5dbcc929",
+  "recordedWith": [
+    "macos: 26.6.2 build 25G83 arm64",
+    "safari: 26.6.2",
+    "voiceover: bundled with macOS",
+    "guidepup: 0.34.0",
+    "node: v24.14.1",
+    "voiceover settings: guidepup portable preferences, capture=true, sentinel spoken before each step, hints stripped from recorded speech"
+  ],
+  "recordedAt": "2026-09-21T14:11:03.540Z",
+  "steps": [
+    {
+      "label": "find the table",
+      "heard": "Historical Structures table 9 columns, 16 rows"
+    },
+    {
+      "label": "interact with it",
+      "heard": "In Historical Structures table No selection. select all select all row 1 of 16 column 1 of 9"
+    },
+    {
+      "label": "right along the header, move 1",
+      "heard": "Expand column 2 of 9"
+    },
+    {
+      "label": "right along the header, move 2",
+      "heard": "Last Survey column 3 of 9"
+    },
+    {
+      "label": "right along the header, move 3",
+      "heard": "Description column 4 of 9"
+    },
+    {
+      "label": "right along the header, move 4",
+      "heard": "Style column 5 of 9"
+    },
+    {
+      "label": "right along the header, move 5",
+      "heard": "Condition column 6 of 9"
+    },
+    {
+      "label": "right along the header, move 6",
+      "heard": "Region Code column 7 of 9"
+    },
+    {
+      "label": "right along the header, move 7",
+      "heard": "Actions column 8 of 9"
+    },
+    {
+      "label": "right along the header, move 8",
+      "heard": "Columns column 9 of 9"
+    },
+    {
+      "label": "right past the last column",
+      "heard": "row 2 of 16 select all and select all select row Norman keep with distinctive crenellations unchecked checkbox column 1 of 9"
+    },
+    {
+      "label": "down the first column, move 1",
+      "heard": "row 3 of 16 select row Romanesque fortress with moat unchecked checkbox"
+    },
+    {
+      "label": "down the first column, move 2",
+      "heard": "row 4 of 16 select row Tudor gatehouse with spiral towers unchecked checkbox"
+    },
+    {
+      "label": "row and column numbers",
+      "heard": "column 1, row 4"
+    },
+    {
+      "label": "a key with nothing to announce",
+      "heard": "(silence)"
+    },
+    {
+      "label": "describe the cell",
+      "heard": "select row Tudor gatehouse with spiral towers unchecked checkbox is in the VoiceOver cursor"
+    },
+    {
+      "label": "up the first column, move 1",
+      "heard": "row 3 of 16 select row"
+    },
+    {
+      "label": "up the first column, move 2",
+      "heard": "row 2 of 16 select row"
+    },
+    {
+      "label": "up the first column, move 3",
+      "heard": "row 1 of 16 select all"
+    },
+    {
+      "label": "up past the first row",
+      "heard": "Historical Structures table 9 columns, 16 rows"
+    }
+  ]
+}

@@ -90,24 +90,28 @@ commands, which are not NVDA's under other names. What the spike established:
   transcript's environment block says hints were stripped. A capture that was
   only a hint is recorded as silence, and page text that itself begins "You are
   currently on…" is cut from there. See [`hints.ts`](hints.ts).
-- `readTableColumnHeader` has twice answered "Welcome to Guidepup.. VoiceOver
-  Settings activity" instead of the header, in four uses, and once moved the
-  cursor out of the table. The cause is unknown. Keep it out of scenarios whose
-  later steps depend on where the cursor is.
+- `readTableColumnHeader` (VO-C) has answered with VoiceOver's own startup
+  greeting and "VoiceOver Settings activity" instead of the header in 3 of 11
+  uses, and once moved the cursor out of the table. The cause is unknown. Keep
+  it out of baselines, and out of any scenario whose later steps depend on
+  where the cursor is.
 - `moveToNext` does not stop at a row's last cell: it wraps to the first cell of
   the next row. Moving up past the first row leaves the table and announces it.
 - Guidepup on its own cannot tell a silent command from a repeated
   announcement, because it reads VoiceOver's `last phrase` and compares it
-  with the phrase it recorded last. Four runs showed both failures: a key bound
-  to nothing was recorded as the previous announcement again, and the second of
-  two identical `describeItem` answers was dropped for equalling the first. So
-  before every step the target has VoiceOver speak a sentinel phrase through
-  its own `output` command and has Guidepup take note of it, then strips the
-  sentinel from what is recorded. A silent step is then recorded as silence and
-  a repeat is recorded whole. See [`sentinel.ts`](sentinel.ts). This is the one
-  part of the target that has not yet been proven on the real reader:
-  `voiceover-table-walk` expects its F13 step to be silent and its two
-  `describeItem` answers to match, so its verdict is the proof. `voiceover-table-walk` exists to measure both. Until it has, prefer
+  with the phrase it recorded last. Four runs recorded a key bound to nothing
+  as the previous announcement again. So before every step the target has
+  VoiceOver speak a sentinel phrase through its own `output` command and has
+  Guidepup take note of it, then strips the sentinel from what is recorded.
+  With it, that key is recorded as silence. See [`sentinel.ts`](sentinel.ts).
+  The same sentinel is what lets an announcement identical to the previous
+  step's survive: the phrase Guidepup compares against is now always the
+  sentinel or nothing.
+- VoiceOver answers a consecutive second press of a read command with the next
+  level of detail, not the same words: VO-F3 (`describeItem`) with the item's
+  description, VO-Shift-T (`readTableRowAndColumnNumbers`) with the table's
+  dimensions. That looked like a capture fault until the sentinel ruled capture
+  out. A scenario that wants the detail can ask twice on purpose. `voiceover-table-walk` exists to measure both. Until it has, prefer
   `expect` and `checks` to exact snapshots for anything that matters.
 
 Before VoiceOver starts, the target runs the doctor's checks and then proves two

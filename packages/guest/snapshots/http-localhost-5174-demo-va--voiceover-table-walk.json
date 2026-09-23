@@ -1,0 +1,96 @@
+{
+  "target": "http://localhost:5174/demo/va",
+  "scenario": "voiceover-table-walk",
+  "provenance": "url, no local bytes to hash: http://localhost:5174/demo/va",
+  "recordedWith": [
+    "macos: 26.6.2 build 25G83 arm64",
+    "safari: 26.6.2",
+    "voiceover: bundled with macOS",
+    "guidepup: 0.34.0",
+    "node: v24.14.1",
+    "voiceover settings: guidepup portable preferences, capture=true, sentinel spoken before each step, hints stripped from recorded speech"
+  ],
+  "recordedAt": "2026-09-21T21:29:24.444Z",
+  "steps": [
+    {
+      "label": "find the table",
+      "heard": "All Requests table 12 columns, 19 rows"
+    },
+    {
+      "label": "interact with it",
+      "heard": "In All Requests table No selection. select all row 1 of 19 column 1 of 12"
+    },
+    {
+      "label": "right along the header, move 1",
+      "heard": "Request # column 3 of 12"
+    },
+    {
+      "label": "right along the header, move 2",
+      "heard": "TXST ID column 4 of 12"
+    },
+    {
+      "label": "right along the header, move 3",
+      "heard": "Name column 5 of 12"
+    },
+    {
+      "label": "right along the header, move 4",
+      "heard": "Date Submitted column 6 of 12"
+    },
+    {
+      "label": "right along the header, move 5",
+      "heard": "Benefit column 7 of 12"
+    },
+    {
+      "label": "right along the header, move 6",
+      "heard": "Status column 8 of 12"
+    },
+    {
+      "label": "right along the header, move 7",
+      "heard": "Alerts column 9 of 12"
+    },
+    {
+      "label": "right along the header, move 8",
+      "heard": "Actions column 10 of 12"
+    },
+    {
+      "label": "right past the last column",
+      "heard": "Columns column 11 of 12"
+    },
+    {
+      "label": "down the first column, move 1",
+      "heard": "row 2 of 19 blank column 11 of 12"
+    },
+    {
+      "label": "down the first column, move 2",
+      "heard": "row 3 of 19 blank column 11 of 12"
+    },
+    {
+      "label": "row and column numbers",
+      "heard": "(silence)"
+    },
+    {
+      "label": "a key with nothing to announce",
+      "heard": "(silence)"
+    },
+    {
+      "label": "describe the cell",
+      "heard": "blank Columns row 3 of 19 is in the VoiceOver cursor"
+    },
+    {
+      "label": "up the first column, move 1",
+      "heard": "row 2 of 19 blank column 11 of 12"
+    },
+    {
+      "label": "up the first column, move 2",
+      "heard": "row 1 of 19 menu"
+    },
+    {
+      "label": "up the first column, move 3",
+      "heard": "row 19 of 19 Actions menu 1 item"
+    },
+    {
+      "label": "up past the first row",
+      "heard": "row 18 of 19 menu 1 item"
+    }
+  ]
+}

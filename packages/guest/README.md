@@ -356,7 +356,7 @@ Three behaviours worth knowing before you build on it:
 
 | | |
 |---|---|
-| `POST /runs` | `{ requests }` or `{ queue }` — the text of a queue file, parsed by the same parser — plus `scenario` and `updateSnapshots`. Streams NDJSON. |
+| `POST /runs` | `{ requests }` or `{ queue }` — the text of a queue file, parsed by the same parser — plus `scenario` and `snapshots` (`"compare"`, the default, `"update"` or `"off"`). Streams NDJSON. |
 | `GET /health` | `{ ok, busy, runId, rig }`, where `rig` is the environment stamp. |
 | `GET /runs/:runId` | that run's `results.json`; `202` if it is still going |
 | `GET /runs/:runId/events` | the event stream, replayed |

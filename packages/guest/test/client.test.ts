@@ -29,7 +29,7 @@ const report = (runId: string, overrides: Partial<RunReport> = {}): RunReport =>
   finishedAt: "2026-09-15T00:00:00.000Z",
   ok: true,
   broke: null,
-  updatedSnapshots: false,
+  snapshots: "compare",
   total: 1,
   failed: 0,
   results: [],

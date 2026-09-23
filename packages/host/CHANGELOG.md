@@ -5,6 +5,11 @@ the contract.
 
 ## Unreleased (0.2.0)
 
+- **Breaking:** `updateSnapshots: boolean` is replaced by `snapshots:
+  "compare" | "update" | "off"`, in `DaemonRunBody` and in the client's
+  `RunOptions`, defaulting to `compare`. `off` neither reads nor writes the
+  guest's own baselines, for a host that keeps its baselines elsewhere.
+  `RunReport.updatedSnapshots` is `RunReport.snapshots`, the mode the run used.
 - **Breaking:** `RunResult` is now `Receipt`, the glossary's name for what one
   request to a real screen reader produced. It carries the evidence itself:
   `environment`, the stamp that heads the transcript; `heard`, every step's

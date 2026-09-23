@@ -134,6 +134,19 @@ export interface RunRequest {
 
 export type SnapshotStatus = "new" | "match" | "differs";
 
+/**
+ * What a run does with the guest's own baselines, in its `snapshots/`.
+ *
+ * - `compare`: diff against the saved baseline, fail on a difference, and save
+ *   one where there is none. What the guest's runner does.
+ * - `update`: save what this run heard as the baseline, and do not fail on
+ *   differences, because the operator has accepted it.
+ * - `off`: neither read nor write one. For a caller that keeps its baselines
+ *   somewhere else, such as a consuming repo's own Playwright snapshots, so its
+ *   runs leave nothing behind in the guest.
+ */
+export type SnapshotMode = "compare" | "update" | "off";
+
 /** The result of running one check against a transcript. */
 export interface CheckResult {
   name: string;
@@ -197,7 +210,7 @@ export interface RunReport {
   ok: boolean;
   /** Non-null when the run itself broke, rather than a request failing. */
   broke: string | null;
-  updatedSnapshots: boolean;
+  snapshots: SnapshotMode;
   total: number;
   failed: number;
   results: Receipt[];
@@ -242,7 +255,8 @@ export interface DaemonRunBody {
   queue?: string;
   /** Overrides the scenario on every request, as the guest's `runner.ts --scenario` does. */
   scenario?: string | Scenario;
-  updateSnapshots?: boolean;
+  /** Defaults to `compare`. */
+  snapshots?: SnapshotMode;
 }
 
 /** `GET /health`. `busy` is the one thing a host needs before it posts. */

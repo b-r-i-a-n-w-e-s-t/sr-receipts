@@ -202,6 +202,57 @@ test("a malformed inline scenario breaks the run before the reader starts", asyn
   assert.deepEqual(target.calls, []);
 });
 
+test("with snapshots off, a run neither reads nor writes the guest's baselines", async (t) => {
+  const target = fakeTarget();
+  const { client, paths, dir } = await connect(t, target);
+  const scenario = scenarioFile(dir, { reader: "nvda", name: "fake", steps: [{ label: "first", press: "Tab" }] });
+  const baseline = join(paths.snapshots, "page.html--fake.json");
+
+  // No baseline yet: compare would have written one.
+  const events: string[] = [];
+  const first = await client.run([{ target: "page.html", scenario }], {
+    snapshots: "off",
+    onEvent: (event) => events.push(event.type),
+  });
+  assert.equal(first.ok, true);
+  assert.equal(first.snapshots, "off");
+  assert.equal(first.results[0]?.snapshot.status, "not compared");
+  assert.equal(events.includes("snapshot"), false);
+  assert.equal(existsSync(baseline), false);
+
+  // A baseline that differs: compare would have failed on it.
+  await client.run([{ target: "page.html", scenario }]);
+  const saved = JSON.parse(readFileSync(baseline, "utf8"));
+  saved.steps[0].heard = "something else";
+  writeFileSync(baseline, JSON.stringify(saved), "utf8");
+
+  const second = await client.run([{ target: "page.html", scenario }], { snapshots: "off" });
+  assert.equal(second.ok, true);
+  assert.doesNotMatch(second.results[0]!.transcript.text, /update-snapshots|snapshot/);
+  assert.equal(JSON.parse(readFileSync(baseline, "utf8")).steps[0].heard, "something else");
+});
+
+test("update accepts what the run heard over a differing baseline, and compare then matches it", async (t) => {
+  const target = fakeTarget();
+  const { client, paths, dir } = await connect(t, target);
+  const scenario = scenarioFile(dir, { reader: "nvda", name: "fake", steps: [{ label: "first", press: "Tab" }] });
+  const baseline = join(paths.snapshots, "page.html--fake.json");
+
+  await client.run([{ target: "page.html", scenario }]);
+  const saved = JSON.parse(readFileSync(baseline, "utf8"));
+  saved.steps[0].heard = "something else";
+  writeFileSync(baseline, JSON.stringify(saved), "utf8");
+
+  const differs = await client.run([{ target: "page.html", scenario }]);
+  assert.equal(differs.ok, false);
+  assert.equal(differs.results[0]?.snapshot.status, "differs");
+
+  const updated = await client.run([{ target: "page.html", scenario }], { snapshots: "update" });
+  assert.equal(updated.ok, true);
+  assert.equal(JSON.parse(readFileSync(baseline, "utf8")).steps[0].heard, "heard first");
+  assert.equal((await client.run([{ target: "page.html", scenario }])).results[0]?.snapshot.status, "match");
+});
+
 test("a target that loses the page fails the run and records no baseline", async (t) => {
   const target = fakeTarget({
     perform: (scenario) => ({

@@ -54,6 +54,7 @@ export type {
   RunEvent,
   RunReport,
   RunRequest,
+  SnapshotMode,
   SnapshotStatus,
   WindowSize,
 } from "@sr-receipts/host";

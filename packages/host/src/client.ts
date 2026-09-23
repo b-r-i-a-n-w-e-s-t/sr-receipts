@@ -8,7 +8,7 @@
  * the guest's daemon, which implements `./protocol.ts`. `fetch` and nothing
  * else, so it has no dependency and runs on whatever Node the host has.
  */
-import type { DaemonHealth, RunEvent, RunReport, RunRequest } from "./protocol.ts";
+import type { DaemonHealth, RunEvent, RunReport, RunRequest, SnapshotMode } from "./protocol.ts";
 
 export interface ClientOptions {
   /** The daemon's base URL, e.g. `http://192.168.64.7:8765`. */
@@ -17,7 +17,8 @@ export interface ClientOptions {
 }
 
 export interface RunOptions {
-  updateSnapshots?: boolean | undefined;
+  /** Defaults to `compare` on the guest. */
+  snapshots?: SnapshotMode | undefined;
   /**
    * Every event as it happens, which for a three-minute run is the difference
    * between watching it and waiting for it.
@@ -97,13 +98,13 @@ export function createClient({ url, token }: ClientOptions): RigClient {
       return (await get("/health")).json() as Promise<DaemonHealth>;
     },
 
-    async run(requests, { updateSnapshots, onEvent, signal } = {}) {
+    async run(requests, { snapshots, onEvent, signal } = {}) {
       const response = await fetch(`${base}/runs`, {
         method: "POST",
         headers: { ...headers, "content-type": "application/json" },
         body: JSON.stringify({
           requests,
-          ...(updateSnapshots !== undefined && { updateSnapshots }),
+          ...(snapshots !== undefined && { snapshots }),
         }),
         ...(signal && { signal }),
       });

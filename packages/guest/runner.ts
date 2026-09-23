@@ -145,7 +145,7 @@ const target = process.platform === "darwin" ? voiceOverTarget : nvdaTarget;
 
 const report = await executeRun(target, {
   requests,
-  updateSnapshots: options.updateSnapshots,
+  snapshots: options.updateSnapshots ? "update" : "compare",
   onEvent: print,
 });
 

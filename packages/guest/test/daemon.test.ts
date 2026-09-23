@@ -36,7 +36,7 @@ const report = (runId: string): RunReport => ({
   finishedAt: "2026-09-15T00:00:00.000Z",
   ok: true,
   broke: null,
-  updatedSnapshots: false,
+  snapshots: "compare",
   total: 1,
   failed: 0,
   results: [],
@@ -285,6 +285,13 @@ test("a body that will not parse is a 400 naming what was wrong, not a stream", 
   const response = await post(url, { requests: [{ scenario: "survey" }] });
   assert.equal(response.status, 400);
   assert.match(((await response.json()) as { error: string }).error, /names no target/);
+});
+
+test("a snapshot mode the daemon does not know is a 400, not a comparison", async (t) => {
+  const { url } = await harness(t);
+  const response = await post(url, { requests: [{ target: "a.html", scenario: "survey" }], snapshots: "yes" });
+  assert.equal(response.status, 400);
+  assert.match(((await response.json()) as { error: string }).error, /`snapshots` must be one of "compare", "update", "off", got "yes"/);
 });
 
 /* -------------------------------------------------------------- run readout */

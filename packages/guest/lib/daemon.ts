@@ -32,12 +32,15 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseQueue } from "./target.ts";
-import type { DaemonHealth, DaemonRunBody, RunEvent, RunReport, RunRequest } from "./types.ts";
+import type { DaemonHealth, DaemonRunBody, RunEvent, RunReport, RunRequest, SnapshotMode } from "./types.ts";
 import type { ExecuteOptions } from "./run.ts";
 
 export const DEFAULT_PORT = 8765;
 
-/** Bodies are a handful of queue lines. Anything larger is a mistake or an attack. */
+/**
+ * Bodies are a handful of queue lines, or a few inline scenarios. Anything
+ * larger is a mistake or an attack.
+ */
 const MAX_BODY = 1024 * 256;
 
 export interface TokenResolution {
@@ -136,6 +139,8 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("error", reject);
   });
 }
+
+const SNAPSHOT_MODES: readonly SnapshotMode[] = ["compare", "update", "off"];
 
 /**
  * Turn a request body into run requests.
@@ -248,6 +253,11 @@ export function createRigServer({
       const text = await readBody(req);
       body = text ? (JSON.parse(text) as DaemonRunBody) : {};
       requests = toRequests(body);
+      if (body.snapshots !== undefined && !SNAPSHOT_MODES.includes(body.snapshots)) {
+        throw new Error(
+          `\`snapshots\` must be one of ${SNAPSHOT_MODES.map((mode) => JSON.stringify(mode)).join(", ")}, got ${JSON.stringify(body.snapshots)}`,
+        );
+      }
     } catch (error) {
       inFlight = null;
       json(res, 400, { error: (error as Error).message });
@@ -284,7 +294,7 @@ export function createRigServer({
     try {
       await execute({
         requests,
-        ...(body.updateSnapshots !== undefined && { updateSnapshots: body.updateSnapshots }),
+        ...(body.snapshots !== undefined && { snapshots: body.snapshots }),
         onEvent: emit,
         runId,
       });

@@ -5,6 +5,11 @@ the contract.
 
 ## Unreleased
 
+- **Breaking:** `executeRun` takes `snapshots: "compare" | "update" | "off"`
+  instead of `updateSnapshots`. With `off` a run leaves nothing in
+  `snapshots/`, so a consumer's runs no longer write baselines into this
+  package or fail on the ones there. The daemon refuses a mode it does not
+  know with a 400. `runner.ts --update-snapshots` is unchanged.
 - **Breaking:** `toResult` is now `toReceipt`, and produces the host's
   `Receipt`, which carries the environment, every step heard, and the
   transcript text. `results.json` grows by the transcript text of each request.

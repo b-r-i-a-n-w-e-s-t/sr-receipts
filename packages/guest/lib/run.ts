@@ -28,7 +28,7 @@ import { loadScenario } from "./scenario.ts";
 import { SNAPSHOTS } from "./snapshot.ts";
 import { slugify } from "./target.ts";
 import type { ExecutionTarget, ReaderSession } from "./execution-target.ts";
-import type { CompiledScenario, Receipt, RunEvent, RunReport, RunRequest } from "./types.ts";
+import type { CompiledScenario, Receipt, RunEvent, RunReport, RunRequest, SnapshotMode } from "./types.ts";
 
 const RIG = join(import.meta.dirname, "..");
 
@@ -60,8 +60,8 @@ export const newRunId = (): string =>
 
 export interface ExecuteOptions {
   requests: RunRequest[];
-  /** Accept whatever this run heard as the new baseline. */
-  updateSnapshots?: boolean | undefined;
+  /** What to do with the guest's own baselines. Defaults to `compare`. */
+  snapshots?: SnapshotMode | undefined;
   /**
    * Progress, as it happens. Called synchronously from inside the run, so a
    * slow handler slows the run down — the daemon's writes the frame and
@@ -78,8 +78,8 @@ async function runRequest(
   request: RunRequest,
   scenario: CompiledScenario,
   outDir: string,
-  snapshots: string,
-  updateSnapshots: boolean,
+  snapshotDir: string,
+  snapshots: SnapshotMode,
   emit: (event: RunEvent) => void,
 ): Promise<Receipt> {
   const opened = await session.open(request.target, scenario);
@@ -118,15 +118,16 @@ async function runRequest(
     provenance: opened.target.provenance,
   });
 
-  const path = snapshotPath(opened.target.slug, scenario.name, snapshots);
+  const path = snapshotPath(opened.target.slug, scenario.name, snapshotDir);
   // Comparing a run that never reached the page — or lost it part way — against
   // a saved snapshot would report every remaining step as removed, which buries
   // the one thing that actually went wrong. Leaving `comparison` null also stops
   // a truncated run being written out as a new baseline.
-  const comparison = opened.ok && !focusLost ? compareSnapshot(fresh, readSnapshot(path)) : null;
+  const comparison =
+    snapshots !== "off" && opened.ok && !focusLost ? compareSnapshot(fresh, readSnapshot(path)) : null;
 
   if (comparison) {
-    const written = updateSnapshots || comparison.status === "new";
+    const written = snapshots === "update" || comparison.status === "new";
     if (written) writeSnapshot(path, fresh);
     emit({
       type: "snapshot",
@@ -136,9 +137,9 @@ async function runRequest(
     });
   }
 
-  // An explicit --update-snapshots means the operator has accepted this run, so
+  // An explicit update means the operator has accepted this run, so
   // differences must not also fail it.
-  const judged = updateSnapshots ? null : comparison;
+  const judged = snapshots === "update" ? null : comparison;
   const verdict = judge({ opened, scenario, steps, comparison: judged, focusLost, focusLostAfter });
 
   const outcome = {
@@ -172,7 +173,7 @@ async function runRequest(
  */
 export async function executeRun(
   target: ExecutionTarget,
-  { requests, updateSnapshots = false, onEvent, runId = newRunId() }: ExecuteOptions,
+  { requests, snapshots = "compare", onEvent, runId = newRunId() }: ExecuteOptions,
   paths: RunPaths = RUN_PATHS,
 ): Promise<RunReport> {
   const outDir = join(paths.runs, runId);
@@ -234,7 +235,7 @@ export async function executeRun(
         scenario,
         outDir,
         paths.snapshots,
-        updateSnapshots,
+        snapshots,
         emit,
       );
       results.push(result);
@@ -258,7 +259,7 @@ export async function executeRun(
     finishedAt: new Date().toISOString(),
     ok: !broke && failed.length === 0,
     broke: broke ? (broke.message ?? String(broke)) : null,
-    updatedSnapshots: updateSnapshots,
+    snapshots,
     total: results.length,
     failed: failed.length,
     results,

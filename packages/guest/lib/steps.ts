@@ -14,14 +14,61 @@ import type { SpeechLog } from "./speech.ts";
 import type {
   AuthoredStep,
   CompiledStep,
-  FocusWatch,
   NvdaCommand,
-  ReaderDriver,
-  RunStepsResult,
   StepAction,
   StepResult,
   StepSpec,
 } from "./types.ts";
+
+/**
+ * The part of a guidepup reader the rig actually drives. Guidepup's `nvda` and
+ * `voiceOver` both have it.
+ *
+ * Narrower than the real classes on purpose, and for the same reason
+ * `SpeechSource` in `lib/speech.ts` is narrow: this is the seam the unit tests
+ * substitute, and a fake that has to implement thirty unused methods is a fake
+ * nobody writes honestly. It also documents exactly what the rig depends on, so
+ * a guidepup upgrade has a small surface to check rather than a large one.
+ *
+ * Declared with method syntax rather than property-arrow syntax so parameter
+ * types stay bivariant and the real driver — whose `perform` takes a narrower
+ * command type — remains assignable.
+ */
+export interface ReaderDriver {
+  readonly keyboardCommands: Readonly<Record<string, unknown>>;
+  perform(command: unknown): unknown;
+  press(key: string): unknown;
+}
+
+/**
+ * A mid-run check that keystrokes are still reaching the target.
+ *
+ * The focus guard runs once, before the sequence. Nothing used to re-check it,
+ * so when something stole the foreground mid-run — a Windows Update restart
+ * dialog, in the case that prompted this — the rig sent the rest of the
+ * scenario into whatever had focus. Because NVDA's quick-navigation commands
+ * are bare letters, `T` and `H` and `D` were typed in as text: one run filled
+ * the Windows Search box with "ttttddddddddhhhhhhhhhhhh" and recorded 45 steps
+ * of the desktop as though they were the page under test.
+ */
+export interface FocusWatch {
+  /** Steps between checks. The last step is always checked. */
+  every: number;
+  /** `null` while focus is still on the target; otherwise what has it instead. */
+  check(): Promise<string | null>;
+}
+
+/** What a sequence produced, and whether it got to finish. */
+export interface RunStepsResult {
+  steps: StepResult[];
+  /**
+   * Set when focus left the target mid-sequence; names what had it instead.
+   * Any remaining steps were deliberately not run.
+   */
+  focusLost?: string;
+  /** How many steps had run when focus was found to be gone. */
+  focusLostAfter?: number;
+}
 
 /** Tuples and bare specs in; `{ label, spec }` out. */
 export function normalize(step: AuthoredStep | CompiledStep): CompiledStep {

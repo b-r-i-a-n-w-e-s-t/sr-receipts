@@ -16,7 +16,8 @@ import { FIREFOX, ensureProfile, launch } from "./firefox.ts";
 import { SpeechLog } from "./speech.ts";
 import { ensureReadyToNavigate } from "./guard.ts";
 import { resolveTarget } from "./target.ts";
-import type { FocusWatch, NvdaCommand, OpenResult, WindowSize } from "./types.ts";
+import type { FocusWatch } from "./steps.ts";
+import type { NvdaCommand, OpenResult, WindowSize } from "./types.ts";
 
 /**
  * `capture: true` keeps whole announcements; the default `"initial"` truncates

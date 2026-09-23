@@ -93,6 +93,32 @@ test("a correct scenario compiles", () => {
   );
 });
 
+test("a typed scenario can be sent to a daemon as it stands", () => {
+  // The guest's types narrow the host's structural Scenario, so anything that
+  // compiles against them is already a valid request body.
+  assert.equal(
+    check(`
+import type { Scenario } from "../lib/types.ts";
+import type { RunRequest } from "@sr-receipts/host";
+const nvda: Scenario = {
+  reader: "nvda",
+  modeProbes: ["moveToNextTable"],
+  steps: [{ perform: "reportTitle", expect: { matches: "x" } }, ["tuple", "press:Tab"], "perform:reportTitle"],
+  checks: [{ name: "n", matches: "x", equals: 1 }],
+};
+const voiceOver: Scenario = { reader: "voiceover", steps: ["perform:findNextTable"] };
+const requests: RunRequest[] = [{ target: "a.html", scenario: nvda }, { target: "a.html", scenario: voiceOver }];
+void requests;
+`),
+    "",
+  );
+});
+
+test("a RegExp pattern does not compile, since it cannot cross the wire", () => {
+  const output = check(scenario(`{ reader: "nvda", steps: [{ press: "Tab", expect: { matches: /x/i } }] }`));
+  assert.match(output, /error TS\d+/);
+});
+
 test("a misspelled NVDA command does not compile, and tsc names the right one", () => {
   // This is the failure `validateSteps` was written for: nvda.perform(undefined)
   // is silent, and a silence in a transcript reads exactly like a real one.

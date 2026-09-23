@@ -5,6 +5,23 @@ the contract.
 
 ## Unreleased
 
+- A request's scenario can be the scenario itself, not only a name or a path.
+  `loadScenario` compiles it with `compileScenario`, the same as a file, and
+  every scenario in a run is still compiled before the reader starts.
+- **Breaking:** `matches` in an expectation or a check must be a string. A
+  RegExp no longer compiles, and one that reaches the guest anyway, as the `{}`
+  JSON turns it into, is refused when the scenario compiles. Write
+  `matches: "with \\d+ rows"` for `/with \d+ rows/i`.
+- The authoring types in `lib/types.ts` narrow the host's structural
+  `Scenario`, so a typed scenario is a valid request body as it stands.
+  `Check`, `Expectation`, `Expectations`, `Reader` and `WindowSize` are now the
+  host's, re-exported.
+- **Breaking:** `ReaderDriver`, `FocusWatch` and `RunStepsResult` moved to
+  `lib/steps.ts`, and `GuardResult` to `lib/guard.ts`. None of them is
+  exported from the package any longer.
+- **Breaking:** the doctor's `Check` in `voiceover/evidence.ts` is now
+  `DoctorCheck`, so the package has one `Check`.
+
 - **Breaking:** a scenario must name its `reader`, `"nvda"` or `"voiceover"`.
   There is no default. Its steps are type-checked against that reader's
   commands, `modeProbes` is NVDA-only, and each Execution Target refuses a

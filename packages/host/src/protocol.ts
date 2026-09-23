@@ -2,11 +2,118 @@
  * The wire between a host and a guest daemon.
  *
  * Owned here, by the side that consumes it, and deliberately free of any screen
- * reader's vocabulary: nothing below names an NVDA command or imports guidepup.
- * The guest implements this contract and depends on this package for it; the
- * host never depends on the guest. A step's spec therefore crosses the wire as
- * the string it was authored as, which is also the only form JSON can carry.
+ * reader's commands: nothing below names an NVDA or VoiceOver command or imports
+ * guidepup. The readers themselves are named, because a scenario has to say
+ * whose commands its steps are. The guest implements this contract and depends
+ * on this package for it; the host never depends on the guest. A step's spec
+ * therefore crosses the wire as the string it was authored as, which is also the
+ * only form JSON can carry.
  */
+
+/* ---------------------------------------------------------------- scenarios */
+
+/*
+ * The structural shape of a scenario: everything in it is plain JSON, so it
+ * crosses the wire unchanged. The guest's `lib/types.ts` narrows it, checking
+ * each step's command against its reader's own command names, and documents
+ * what every field means.
+ */
+
+/** Each reader a scenario can be written for. */
+export type Reader = "nvda" | "voiceover";
+
+/**
+ * Browser window size in pixels, for a scenario whose question only exists at a
+ * particular width.
+ */
+export interface WindowSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * What must be true of one announcement, whatever the target.
+ *
+ * Several matchers in one object all have to hold. Exact wording belongs in a
+ * snapshot instead: an expectation naming "Historical Structures" would make
+ * its scenario runnable against one fixture and nothing else.
+ */
+export interface Expectation {
+  /** Case-insensitive substring. */
+  includes?: string;
+  /**
+   * Regular expression source, matched case-insensitively. A string rather than
+   * a RegExp, because a RegExp serialises to `{}` and would cross the wire as a
+   * pattern that matches the wrong thing without saying so.
+   */
+  matches?: string;
+  /** The whole announcement, exactly. */
+  equals?: string;
+  /** Whether this announcement is "(silence)". */
+  silent?: boolean;
+  /** Any of the above, negated. */
+  not?: Expectation;
+}
+
+/** One expectation, or several that all have to hold. */
+export type Expectations = Expectation | Expectation[];
+
+/**
+ * An assertion across the whole transcript rather than one step. This is how
+ * "the detail heading is announced once, not twice" gets asked.
+ */
+export interface Check {
+  /** Shown in the verdict, so write it as the claim being made. */
+  name: string;
+  /** Steps whose announcement matches this regular expression source are counted. */
+  matches: string;
+  equals?: number;
+  atLeast?: number;
+  atMost?: number;
+}
+
+/** A step as authored: object form, the form that takes repeat and settle. */
+export interface AuthoredStepObject {
+  /** Numbered when `repeat` is set: `{n}` is substituted, else appended. */
+  label?: string;
+  perform?: string;
+  press?: string;
+  /** Expand to this many steps. */
+  repeat?: number;
+  /** Wait this many ms before reading the speech log, for a slow step. */
+  settle?: number;
+  expect?: Expectations;
+  /** `false` records the step without putting it in the snapshot. */
+  snapshot?: boolean;
+}
+
+/** A bare `perform:x` or `press:y` spec, a `[label, spec]` tuple, or an object. */
+export type AuthoredStep = string | readonly [label: string, spec: string] | AuthoredStepObject;
+
+/** A scenario as authored, in the form that can cross the wire. */
+export interface Scenario {
+  reader: Reader;
+  name?: string;
+  description?: string;
+  /** NVDA only. */
+  modeProbes?: string[];
+  window?: WindowSize;
+  /**
+   * How often, in steps, to re-check that the keystrokes are still reaching the
+   * page. Defaults to the Execution Target's own interval.
+   *
+   * Detection happens *after* a step, so up to this many keystrokes can reach a
+   * window that stole the foreground. That is harmless for navigation keys, and
+   * it is not harmless for a scenario that sends activating keys: an `Enter`
+   * into somebody else's window presses whatever it finds. Such a scenario says
+   * so here.
+   */
+  focusCheckEvery?: number;
+  steps: AuthoredStep[];
+  checks?: Check[];
+}
+
+/* --------------------------------------------------------------------- runs */
 
 /**
  * One thing to do: a target, and the question to ask it.
@@ -18,8 +125,11 @@
 export interface RunRequest {
   /** A fixture file name resolved under the guest's `fixtures/`, or an http(s) URL. */
   target: string;
-  /** A name in the guest's `scenarios/`, or a path to a scenario file. */
-  scenario: string;
+  /**
+   * A name in the guest's `scenarios/`, a path to a scenario file, or the
+   * scenario itself. All three compile the same way, before the reader starts.
+   */
+  scenario: string | Scenario;
 }
 
 export type SnapshotStatus = "new" | "match" | "differs";
@@ -109,10 +219,10 @@ export interface DaemonRunBody {
    * `scenario` override that will fill it in. The daemon rejects a request
    * that would otherwise have no question to ask.
    */
-  requests?: Array<{ target: string; scenario?: string }>;
+  requests?: Array<{ target: string; scenario?: string | Scenario }>;
   queue?: string;
   /** Overrides the scenario on every request, as the guest's `runner.ts --scenario` does. */
-  scenario?: string;
+  scenario?: string | Scenario;
   updateSnapshots?: boolean;
 }
 

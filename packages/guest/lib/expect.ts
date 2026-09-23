@@ -20,8 +20,21 @@
 import { SILENCE } from "./speech.ts";
 import type { Check, CheckResult, Expectation, Expectations, StepResult } from "./types.ts";
 
-const asRegExp = (value: string | RegExp): RegExp =>
-  value instanceof RegExp ? value : new RegExp(value, "i");
+/**
+ * A pattern is a string of regular expression source, always case-insensitive.
+ * Checked at run time as well as by the type, because a RegExp object in a
+ * scenario sent as JSON arrives as `{}`, and `new RegExp({})` is a valid
+ * pattern that matches the wrong thing.
+ */
+const asRegExp = (value: unknown): RegExp => {
+  if (typeof value !== "string") {
+    const got = value instanceof RegExp ? `the RegExp ${value}` : JSON.stringify(value);
+    throw new Error(
+      `"matches" must be a string of regular expression source, matched case-insensitively; got ${got}`,
+    );
+  }
+  return new RegExp(value, "i");
+};
 
 /** A short, quotable form of an announcement, for a failure message. */
 export const quote = (text: string): string => {
@@ -37,7 +50,7 @@ const MATCHERS: { [K in MatcherName]: (heard: string, value: never) => string | 
       ? null
       : `expected to include ${JSON.stringify(value)}`,
 
-  matches: (heard: string, value: string | RegExp) =>
+  matches: (heard: string, value: string) =>
     asRegExp(value).test(heard) ? null : `expected to match ${asRegExp(value)}`,
 
   equals: (heard: string, value: string) =>

@@ -3,6 +3,20 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
+## Unreleased (0.2.0)
+
+- The protocol owns the structural `Scenario` type and its parts: `Reader`,
+  `WindowSize`, `Expectation`, `Expectations`, `Check`, `AuthoredStep` and
+  `AuthoredStepObject`. Everything in it is plain JSON. The protocol names the
+  readers but still none of their commands.
+- `RunRequest.scenario`, and the per-request and override `scenario` in
+  `DaemonRunBody`, accept a `Scenario` as well as a name or path, so a host can
+  send a scenario it never wrote to a file.
+- **Breaking:** `Expectation.matches` and `Check.matches` are strings of
+  regular expression source, always case-insensitive. A RegExp serialises to
+  `{}`, which would have crossed the wire as a pattern that matches the wrong
+  thing.
+
 ## 0.1.0
 
 First version as its own package, extracted from the single-repository NVDA

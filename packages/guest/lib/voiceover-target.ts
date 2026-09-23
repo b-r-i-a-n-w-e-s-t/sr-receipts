@@ -32,9 +32,10 @@ import { SpeechLog, type SpeechSource } from "./speech.ts";
 import { runSteps, validateSteps } from "./steps.ts";
 import { delay } from "./system.ts";
 import { resolveTarget } from "./target.ts";
-import type { FocusWatch, ReaderDriver, WindowSize } from "./types.ts";
+import type { FocusWatch, ReaderDriver } from "./steps.ts";
+import type { WindowSize } from "./types.ts";
 import { inspect } from "../voiceover/doctor.ts";
-import { errorChain, type Check, type Outcome } from "../voiceover/evidence.ts";
+import { errorChain, type DoctorCheck, type Outcome } from "../voiceover/evidence.ts";
 import { stripHint } from "../voiceover/hints.ts";
 import { speakSentinel, stripSentinel } from "../voiceover/sentinel.ts";
 import { launchWithRetry } from "../voiceover/orchestrator.ts";
@@ -50,7 +51,7 @@ import {
 /** Everything the target asks of the real desktop. The seam the tests fake. */
 export interface VoiceOverDesktop {
   /** The doctor's read-only prerequisite checks. */
-  checks(): Check[];
+  checks(): DoctorCheck[];
   /** Why this process cannot drive the desktop; empty when it can. */
   automationProblems(): Promise<string[]>;
   reader: ReaderDriver & SpeechSource;

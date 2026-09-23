@@ -19,7 +19,8 @@ import { PROFILE, XULSTORE, excludeAddressBar, writeWindowGeometry } from "../li
 import { toAction } from "../lib/steps.ts";
 import { SpeechLog } from "../lib/speech.ts";
 import type { SpeechSource } from "../lib/speech.ts";
-import type { NvdaCommand, ReaderDriver, RunRequest, Snapshot, StepResult, StepSpec } from "../lib/types.ts";
+import type { ReaderDriver } from "../lib/steps.ts";
+import type { NvdaCommand, RunRequest, Snapshot, StepResult, StepSpec } from "../lib/types.ts";
 
 /**
  * Deliberately-invalid input, cast so it compiles.

@@ -248,6 +248,24 @@ test("toRequests applies a scenario override to every request, as --scenario doe
   );
 });
 
+test("toRequests passes an inline scenario through, as a request or as the override", () => {
+  const scenario = { reader: "nvda" as const, name: "inline", steps: ["press:Tab"] };
+  assert.deepEqual(toRequests({ requests: [{ target: "a.html", scenario }] }), [
+    { target: "a.html", scenario },
+  ]);
+  assert.deepEqual(toRequests({ queue: "a.html\nb.html :: survey", scenario }), [
+    { target: "a.html", scenario },
+    { target: "b.html", scenario },
+  ]);
+});
+
+test("toRequests rejects a scenario that is neither a reference nor an object", () => {
+  assert.throws(
+    () => toRequests({ requests: [{ target: "a.html", scenario: 7 as unknown as string }] }),
+    /must be a scenario name, a path, or a scenario object/,
+  );
+});
+
 test("toRequests rejects a request with no scenario and no override", () => {
   assert.throws(() => toRequests({ requests: [{ target: "a.html" }] }), /names no scenario/);
 });

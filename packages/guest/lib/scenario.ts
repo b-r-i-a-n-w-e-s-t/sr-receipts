@@ -61,6 +61,7 @@
 import { readFileSync } from "node:fs";
 import { extname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { Scenario as WireScenario } from "@sr-receipts/host";
 import { validateCheck, validateExpectation } from "./expect.ts";
 import type {
   AuthoredStep,
@@ -239,7 +240,10 @@ export function compileScenario(scenario: unknown, source = "scenario"): Compile
 }
 
 /**
- * Load a scenario by name or path.
+ * Load a scenario by name or path, or compile one handed over whole.
+ *
+ * The one place a request's scenario is resolved, whichever form it arrived in,
+ * so an inline scenario from the host is validated exactly as a file is.
  *
  * A bare name resolves to `scenarios/<name>.ts` in this repo. Anything with a
  * path separator or an extension is resolved against the current directory,
@@ -252,7 +256,10 @@ export function compileScenario(scenario: unknown, source = "scenario"): Compile
  * types from an imported `.ts` the same way it does for an entry point — and
  * hands back `default` when the file has one.
  */
-export async function loadScenario(ref: string): Promise<CompiledScenario> {
+export async function loadScenario(ref: string | WireScenario): Promise<CompiledScenario> {
+  if (typeof ref !== "string") {
+    return compileScenario(ref, ref.name ?? "inline scenario");
+  }
   const looksLikePath = /[\\/]/.test(ref) || extname(ref) !== "";
   const path = looksLikePath
     ? isAbsolute(ref)

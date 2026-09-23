@@ -21,7 +21,8 @@ import { createClient, RigError, type RigClient } from "@sr-receipts/host";
 import { createRigServer } from "../lib/daemon.ts";
 import { executeRun, type RunPaths } from "../lib/run.ts";
 import type { ExecutionTarget, ReaderSession } from "../lib/execution-target.ts";
-import type { CompiledScenario, OpenResult, RunStepsResult } from "../lib/types.ts";
+import type { RunStepsResult } from "../lib/steps.ts";
+import type { CompiledScenario, OpenResult } from "../lib/types.ts";
 
 const TOKEN = "test-token";
 const ENVIRONMENT = ["reader: fake 1.0", "browser: fake 2.0"];
@@ -154,6 +155,42 @@ test("a scenario the target cannot perform breaks the run before any target open
   assert.deepEqual(target.calls, ["start", "validate fake", "stop"]);
   assert.equal(existsSync(join(paths.runs, "run-1", "results.json")), true);
   assert.match(readFileSync(join(paths.runs, "run-1", "ERROR.txt"), "utf8"), /unrunnable steps/);
+});
+
+test("a scenario sent inline crosses the wire and runs as a file would", async (t) => {
+  const target = fakeTarget();
+  const { client } = await connect(t, target);
+  const scenario = {
+    reader: "nvda" as const,
+    name: "inline",
+    steps: [{ label: "first", press: "Tab", expect: { matches: "HEARD \\w+" } }],
+  };
+
+  const report = await client.run([
+    { target: "a.html", scenario },
+    { target: "b.html", scenario },
+  ]);
+
+  assert.equal(report.ok, true);
+  assert.deepEqual(report.results.map((result) => result.scenario), ["inline", "inline"]);
+  // Each request's copy is validated, all of them before the first target opens.
+  assert.deepEqual(target.calls, [
+    "start", "validate inline", "validate inline", "open a.html", "perform inline", "open b.html", "perform inline", "stop",
+  ]);
+});
+
+test("a malformed inline scenario breaks the run before the reader starts", async (t) => {
+  const target = fakeTarget();
+  const { client } = await connect(t, target);
+
+  await assert.rejects(
+    client.run([{ target: "a.html", scenario: { reader: "nvda", name: "inline", steps: [] } }]),
+    (error: RigError) => {
+      assert.match(error.message, /broke: inline: needs a non-empty "steps" array/);
+      return true;
+    },
+  );
+  assert.deepEqual(target.calls, []);
 });
 
 test("a target that loses the page fails the run and records no baseline", async (t) => {

@@ -209,7 +209,10 @@ export async function executeRun(
     // Load and compile every scenario before the reader starts. A typo in a
     // scenario should cost a second, not a three-minute run that ends in a
     // transcript full of silences that look exactly like real ones.
-    const scenarios = new Map<string, CompiledScenario>();
+    // Keyed by the reference, or by the inline object itself. An inline
+    // scenario that arrived over HTTP is a separate object in each request, so
+    // it compiles once per request, which costs nothing worth saving.
+    const scenarios = new Map<RunRequest["scenario"], CompiledScenario>();
     for (const { scenario } of requests) {
       if (!scenarios.has(scenario)) {
         scenarios.set(scenario, await loadScenario(scenario));

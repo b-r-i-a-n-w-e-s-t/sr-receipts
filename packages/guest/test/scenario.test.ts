@@ -16,7 +16,8 @@ import { readdirSync } from "node:fs";
 import { SCENARIOS, compileScenario, loadScenario } from "../lib/scenario.ts";
 import { validateSteps, normalize } from "../lib/steps.ts";
 import { parseQueue, slugify, DEFAULT_SCENARIO } from "../lib/target.ts";
-import type { CompiledScenario, NvdaCommand, Reader, ReaderDriver, StepSpec } from "../lib/types.ts";
+import type { ReaderDriver } from "../lib/steps.ts";
+import type { CompiledScenario, NvdaCommand, Reader, StepSpec } from "../lib/types.ts";
 import { keyCodeCommands } from "@guidepup/guidepup/lib/macOS/VoiceOver/keyCodeCommands.js";
 
 /**
@@ -137,6 +138,13 @@ test("loadScenario resolves a path, which is how a consuming repo brings its own
   const path = join(import.meta.dirname, "..", "scenarios", "column-list-table.ts");
   const compiled = await loadScenario(path);
   assert.equal(compiled.name, "column-list-table");
+});
+
+test("loadScenario compiles a scenario handed over whole, as one arrives inline", async () => {
+  const compiled = await loadScenario({ reader: "nvda", name: "inline", steps: ["perform:reportTitle"] });
+  assert.equal(compiled.name, "inline");
+  assert.deepEqual(compiled.steps, [{ label: "perform:reportTitle", spec: "perform:reportTitle" }]);
+  await assert.rejects(loadScenario({ reader: "nvda", steps: [] }), /inline scenario: needs a non-empty/);
 });
 
 test("loadScenario explains itself when the file is not there", async () => {

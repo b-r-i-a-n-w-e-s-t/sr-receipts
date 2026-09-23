@@ -41,3 +41,6 @@ screen.png
 daemon.out
 voiceover-runs/
 packages/guest/voiceover/doctor.json
+
+# The guest daemon's URL and token, for driving the rig from the host.
+.env.rig

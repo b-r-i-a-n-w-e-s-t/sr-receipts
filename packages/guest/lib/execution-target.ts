@@ -18,7 +18,8 @@
  * reader it is written for, and each target refuses the other's scenarios in
  * `validate`.
  */
-import type { CompiledScenario, OpenResult, Reader, RunStepsResult, StepResult } from "./types.ts";
+import type { RunStepsResult } from "./steps.ts";
+import type { CompiledScenario, OpenResult, Reader, StepResult } from "./types.ts";
 
 /** Throw unless the scenario is written in this target's reader's commands. */
 export function requireReader(scenario: CompiledScenario, reader: Reader): void {

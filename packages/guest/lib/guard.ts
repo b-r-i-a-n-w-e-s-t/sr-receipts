@@ -31,7 +31,8 @@ import { windowsActivate } from "@guidepup/guidepup";
 import { delay } from "./system.ts";
 import { FIREFOX } from "./firefox.ts";
 import { SILENCE, type SpeechLog } from "./speech.ts";
-import type { GuardResult, NvdaCommand, ReaderDriver } from "./types.ts";
+import type { ReaderDriver } from "./steps.ts";
+import type { NvdaCommand } from "./types.ts";
 
 /**
  * Which quick-navigation commands to use when asserting browse mode.
@@ -58,6 +59,15 @@ export const MODE_PROBES: NvdaCommand[] = [
   "moveToNextHeading",
   "moveToNextLandmark",
 ];
+
+/** The readiness guard's outcome. */
+export interface GuardResult {
+  ok: boolean;
+  /** One line per attempt, for the transcript. */
+  seen: string[];
+  /** Which mode probe answered, when one did. */
+  provedBy?: NvdaCommand;
+}
 
 export interface GuardOptions {
   focusAttempts?: number | undefined;

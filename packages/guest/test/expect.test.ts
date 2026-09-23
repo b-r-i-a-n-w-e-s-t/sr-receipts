@@ -47,7 +47,7 @@ test("the matchers hold and fail as stated", () => {
   assert.deepEqual(evaluate(TABLE, { includes: "table" }), []);
   assert.deepEqual(evaluate(TABLE, { includes: "TABLE" }), [], "includes is case-insensitive");
   assert.deepEqual(evaluate(TABLE, { matches: "with \\d+ rows" }), []);
-  assert.deepEqual(evaluate(TABLE, { matches: /WITH \d+ ROWS/i }), []);
+  assert.deepEqual(evaluate(TABLE, { matches: "WITH \\d+ ROWS" }), [], "matches is case-insensitive");
   assert.deepEqual(evaluate(TABLE, { equals: TABLE }), []);
   assert.deepEqual(evaluate("(silence)", { silent: true }), []);
   assert.deepEqual(evaluate(TABLE, { silent: false }), []);
@@ -163,6 +163,25 @@ test("a bad matcher in a scenario is caught when the scenario compiles", () => {
   assert.throws(
     () => compileScenario({ reader: "nvda", steps: ["press:Tab"], checks: [{ name: "n" }] }, "s"),
     /needs "matches"/,
+  );
+});
+
+test("a pattern that is not a string is refused, as a RegExp sent over the wire arrives", () => {
+  // JSON.stringify turns a RegExp into `{}`, and `new RegExp({})` is the valid
+  // pattern "[object Object]": a silent wrong answer rather than an error.
+  const overTheWire = JSON.parse(JSON.stringify({ matches: /with \d+ rows/i })) as unknown;
+  assert.throws(
+    () => compileScenario({ reader: "nvda", steps: [{ press: "Tab", expect: overTheWire }] }, "s"),
+    /"matches" must be a string .*got \{\}/,
+  );
+  assert.throws(
+    () => validateCheck({ name: "n", matches: {}, equals: 1 }, "here"),
+    /"matches" must be a string/,
+  );
+  // From a JavaScript author who never ran tsc, the object itself.
+  assert.throws(
+    () => compileScenario({ reader: "nvda", steps: [{ press: "Tab", expect: { matches: /x/i } }] }, "s"),
+    /got the RegExp \/x\/i/,
   );
 });
 

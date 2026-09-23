@@ -154,22 +154,24 @@ export function toRequests(body: DaemonRunBody): RunRequest[] {
   let parsed: RunRequest[];
   if (queue !== undefined) {
     if (typeof queue !== "string") throw new Error("`queue` must be the text of a queue file");
-    parsed = parseQueue(queue, scenario ? { defaultScenario: scenario } : {});
+    // An inline override replaces every line's scenario below, so only a named
+    // one needs to reach the parser as the default.
+    parsed = parseQueue(queue, typeof scenario === "string" ? { defaultScenario: scenario } : {});
   } else if (Array.isArray(requests)) {
     parsed = requests.map((request, index) => {
       const { target, scenario: named } = (request ?? {}) as Partial<RunRequest>;
       if (typeof target !== "string" || !target.trim()) {
         throw new Error(`requests[${index}] names no target`);
       }
-      if (named !== undefined && typeof named !== "string") {
-        throw new Error(`requests[${index}].scenario must be a string`);
+      if (named !== undefined && typeof named !== "string" && (typeof named !== "object" || named === null)) {
+        throw new Error(`requests[${index}].scenario must be a scenario name, a path, or a scenario object`);
       }
       // An unnamed scenario is only legal when the body supplies the override
       // that would have filled it in.
       if (named === undefined && scenario === undefined) {
         throw new Error(`requests[${index}] names no scenario, and no \`scenario\` override was sent`);
       }
-      return { target: target.trim(), scenario: (named ?? scenario) as string };
+      return { target: target.trim(), scenario: (named ?? scenario) as RunRequest["scenario"] };
     });
   } else {
     throw new Error("send `requests` (an array) or `queue` (the text of a queue file)");

@@ -23,22 +23,38 @@
  *   `includes` was meant is a compile error rather than a runtime one.
  */
 import type { nvda, voiceOver } from "@guidepup/guidepup";
-import type { CheckResult, FailedExpectation, SnapshotStatus } from "@sr-receipts/host";
+import type {
+  AuthoredStepObject as WireStepObject,
+  Check,
+  CheckResult,
+  Expectations,
+  FailedExpectation,
+  Reader,
+  Scenario as WireScenario,
+  SnapshotStatus,
+  WindowSize,
+} from "@sr-receipts/host";
 
 /**
  * The wire types are owned by `@sr-receipts/host`, which consumes them, and
- * re-exported here so a guest author has one place to import from.
+ * re-exported here so a guest author has one place to import from. The parts
+ * of a scenario that do not depend on a reader's commands are among them.
  */
 export type {
+  Check,
   CheckResult,
   DaemonHealth,
   DaemonRunBody,
+  Expectation,
+  Expectations,
   FailedExpectation,
+  Reader,
   RunEvent,
   RunReport,
   RunRequest,
   RunResult,
   SnapshotStatus,
+  WindowSize,
 } from "@sr-receipts/host";
 
 /** Every NVDA command guidepup exposes, as a union of literal names. */
@@ -52,8 +68,6 @@ export interface ReaderCommands {
   nvda: NvdaCommand;
   voiceover: VoiceOverCommand;
 }
-
-export type Reader = keyof ReaderCommands;
 
 /**
  * What a step does. `perform` runs one of the reader's own commands, which
@@ -71,69 +85,18 @@ export type StepSpec<R extends Reader = Reader> =
 /** The escape hatch for a step no spec can express. */
 export type StepAction = () => unknown | Promise<unknown>;
 
-/* ------------------------------------------------------------- expectations */
-
-/**
- * What must be true of one announcement, whatever the target.
- *
- * Several matchers in one object all have to hold. Exact wording belongs in a
- * snapshot instead — an expectation naming "Historical Structures" would make
- * its scenario runnable against one fixture and nothing else.
- */
-export interface Expectation {
-  /** Case-insensitive substring. */
-  includes?: string;
-  /** Regular expression, as a string or a RegExp. Strings are case-insensitive. */
-  matches?: string | RegExp;
-  /** The whole announcement, exactly. */
-  equals?: string;
-  /** Whether this announcement is "(silence)". */
-  silent?: boolean;
-  /** Any of the above, negated. */
-  not?: Expectation;
-}
-
-/** One expectation, or several that all have to hold. */
-export type Expectations = Expectation | Expectation[];
-
-/**
- * An assertion across the whole transcript rather than one step. This is how
- * "the detail heading is announced once, not twice" gets asked.
- */
-export interface Check {
-  /** Shown in the verdict, so write it as the claim being made. */
-  name: string;
-  /** Steps whose announcement matches this are counted. */
-  matches: string | RegExp;
-  equals?: number;
-  atLeast?: number;
-  atMost?: number;
-}
-
 /* ---------------------------------------------------------------- scenarios */
 
-/**
- * Browser window size in pixels, for a scenario whose question only exists at a
- * particular width.
+/*
+ * The typed forms below narrow the host's structural `Scenario`: each is
+ * assignable to it, so a scenario written against these types can be sent to a
+ * daemon unchanged. What they add is the check that every command is one the
+ * scenario's reader has.
  */
-export interface WindowSize {
-  width: number;
-  height: number;
-}
 
 /** A step as authored: object form, the form that takes repeat and settle. */
-export interface AuthoredStepObject<R extends Reader = Reader> {
-  /** Numbered when `repeat` is set: `{n}` is substituted, else appended. */
-  label?: string;
+export interface AuthoredStepObject<R extends Reader = Reader> extends Omit<WireStepObject, "perform"> {
   perform?: ReaderCommands[R];
-  press?: string;
-  /** Expand to this many steps. */
-  repeat?: number;
-  /** Wait this many ms before reading the speech log, for a slow step. */
-  settle?: number;
-  expect?: Expectations;
-  /** `false` records the step without putting it in the snapshot. */
-  snapshot?: boolean;
 }
 
 /**
@@ -149,29 +112,14 @@ export type AuthoredStep<R extends Reader = Reader> =
   | AuthoredStepObject<R>;
 
 /** What every scenario says, whichever reader it is written for. */
-interface ScenarioFor<R extends Reader> {
+interface ScenarioFor<R extends Reader> extends Omit<WireScenario, "reader" | "modeProbes" | "steps"> {
   /**
    * The reader whose commands the steps are written in. Required: an Execution
    * Target refuses a scenario written for another reader before it opens
    * anything.
    */
   reader: R;
-  name?: string;
-  description?: string;
-  window?: WindowSize;
-  /**
-   * How often, in steps, to re-check that the keystrokes are still reaching the
-   * page. Defaults to `FOCUS_CHECK_EVERY`.
-   *
-   * Detection happens *after* a step, so up to this many keystrokes can reach a
-   * window that stole the foreground. That is harmless for navigation keys, and
-   * it is not harmless for a scenario that sends activating keys: an `Enter`
-   * into somebody else's window presses whatever it finds. Such a scenario says
-   * so here.
-   */
-  focusCheckEvery?: number;
   steps: AuthoredStep<R>[];
-  checks?: Check[];
 }
 
 export interface NvdaScenario extends ScenarioFor<"nvda"> {
@@ -284,63 +232,4 @@ export interface SnapshotComparison {
   provenanceChanged?: boolean;
   savedEnvironment?: string[];
   savedProvenance?: string;
-}
-
-/** The readiness guard's outcome. */
-export interface GuardResult {
-  ok: boolean;
-  /** One line per attempt, for the transcript. */
-  seen: string[];
-  /** Which mode probe answered, when one did. */
-  provedBy?: NvdaCommand;
-}
-
-/**
- * The part of a guidepup reader the rig actually drives. Guidepup's `nvda` and
- * `voiceOver` both have it.
- *
- * Narrower than the real classes on purpose, and for the same reason
- * `SpeechSource` in `lib/speech.ts` is narrow: this is the seam the unit tests
- * substitute, and a fake that has to implement thirty unused methods is a fake
- * nobody writes honestly. It also documents exactly what the rig depends on, so
- * a guidepup upgrade has a small surface to check rather than a large one.
- *
- * Declared with method syntax rather than property-arrow syntax so parameter
- * types stay bivariant and the real driver — whose `perform` takes a narrower
- * command type — remains assignable.
- */
-export interface ReaderDriver {
-  readonly keyboardCommands: Readonly<Record<string, unknown>>;
-  perform(command: unknown): unknown;
-  press(key: string): unknown;
-}
-
-/**
- * A mid-run check that keystrokes are still reaching the target.
- *
- * The focus guard runs once, before the sequence. Nothing used to re-check it,
- * so when something stole the foreground mid-run — a Windows Update restart
- * dialog, in the case that prompted this — the rig sent the rest of the
- * scenario into whatever had focus. Because NVDA's quick-navigation commands
- * are bare letters, `T` and `H` and `D` were typed in as text: one run filled
- * the Windows Search box with "ttttddddddddhhhhhhhhhhhh" and recorded 45 steps
- * of the desktop as though they were the page under test.
- */
-export interface FocusWatch {
-  /** Steps between checks. The last step is always checked. */
-  every: number;
-  /** `null` while focus is still on the target; otherwise what has it instead. */
-  check(): Promise<string | null>;
-}
-
-/** What a sequence produced, and whether it got to finish. */
-export interface RunStepsResult {
-  steps: StepResult[];
-  /**
-   * Set when focus left the target mid-sequence; names what had it instead.
-   * Any remaining steps were deliberately not run.
-   */
-  focusLost?: string;
-  /** How many steps had run when focus was found to be gone. */
-  focusLostAfter?: number;
 }

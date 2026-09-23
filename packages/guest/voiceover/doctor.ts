@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { checkExact, checkVersion, SUPPORTED, type Check } from "./evidence.ts";
+import { checkExact, checkVersion, SUPPORTED, type DoctorCheck } from "./evidence.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -46,7 +46,7 @@ export function voiceOverPreferenceDirectory(home = homedir()): string {
  * while control looks healthy. That combination is the whole failure, so check
  * it before a run rather than diagnosing it afterwards.
  */
-export function appleScriptControlCheck(plist = join(voiceOverPreferenceDirectory(), "com.apple.VoiceOver4", "default.plist")): Check {
+export function appleScriptControlCheck(plist = join(voiceOverPreferenceDirectory(), "com.apple.VoiceOver4", "default.plist")): DoctorCheck {
   const actual = existsSync(plist)
     ? command("plutil", ["-extract", "SCREnableAppleScript", "raw", "-o", "-", plist])
     : `no VoiceOver preferences at ${plist}`;
@@ -58,7 +58,7 @@ export function appleScriptControlCheck(plist = join(voiceOverPreferenceDirector
   };
 }
 
-export function preferenceAccessCheck(path: string): Check {
+export function preferenceAccessCheck(path: string): DoctorCheck {
   try {
     // Guidepup mounts portable preferences and updates the local plist here.
     // This access check is non-mutating, unlike the smoke's eventual use.
@@ -69,7 +69,7 @@ export function preferenceAccessCheck(path: string): Check {
   }
 }
 
-export function inspect(): Check[] {
+export function inspect(): DoctorCheck[] {
   const safari = "/Applications/Safari.app";
   const safariVersion = existsSync(safari)
     ? command("mdls", ["-name", "kMDItemVersion", "-raw", safari]).replaceAll('"', "")
@@ -92,7 +92,7 @@ export function inspect(): Check[] {
   ];
 }
 
-export function writeDoctorReport(checks: Check[], output = join(import.meta.dirname, "doctor.json")): void {
+export function writeDoctorReport(checks: DoctorCheck[], output = join(import.meta.dirname, "doctor.json")): void {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify({ checkedAt: new Date().toISOString(), checks }, null, 2) + "\n");
 }

@@ -14,7 +14,7 @@ export const SUPPORTED = {
   heading: "Dogwalk VoiceOver smoke heading: MarigoldComet48291",
 } as const;
 
-export type Check = {
+export type DoctorCheck = {
   name: string;
   actual: string;
   expected: string;
@@ -53,7 +53,7 @@ export function containsFixtureToken(values: string[]): boolean {
   return values.some((value) => normalizeVoiceOverText(value).includes(token));
 }
 
-export function checkExact(name: string, actual: string, expected: string): Check {
+export function checkExact(name: string, actual: string, expected: string): DoctorCheck {
   return { name, actual, expected, ok: actual === expected };
 }
 
@@ -61,7 +61,7 @@ export function checkVersion(
   name: string,
   actual: string,
   expected: RegExp,
-): Check {
+): DoctorCheck {
   return { name, actual, expected: expected.source, ok: expected.test(actual) };
 }
 

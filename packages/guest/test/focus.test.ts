@@ -18,12 +18,11 @@ import assert from "node:assert/strict";
 import { runSteps } from "../lib/steps.ts";
 import { judge, formatTranscript, toResult } from "../lib/report.ts";
 import { SpeechLog } from "../lib/speech.ts";
+import type { FocusWatch, ReaderDriver } from "../lib/steps.ts";
 import type {
   CompiledScenario,
   CompiledStep,
-  FocusWatch,
   NvdaCommand,
-  ReaderDriver,
   OpenResult,
   StepResult,
 } from "../lib/types.ts";

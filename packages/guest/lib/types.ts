@@ -48,11 +48,12 @@ export type {
   Expectation,
   Expectations,
   FailedExpectation,
+  HeardStep,
   Reader,
+  Receipt,
   RunEvent,
   RunReport,
   RunRequest,
-  RunResult,
   SnapshotStatus,
   WindowSize,
 } from "@sr-receipts/host";

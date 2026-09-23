@@ -16,7 +16,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { runSteps } from "../lib/steps.ts";
-import { judge, formatTranscript, toResult } from "../lib/report.ts";
+import { judge, formatTranscript, toReceipt } from "../lib/report.ts";
 import { SpeechLog } from "../lib/speech.ts";
 import type { FocusWatch, ReaderDriver } from "../lib/steps.ts";
 import type {
@@ -180,15 +180,36 @@ test("a truncated run carries the cause into results.json for CI", () => {
     focusLost: "Select a time to restart",
     focusLostAfter: 1,
   };
-  const result = toResult({
+  const result = toReceipt({
     ...input,
     verdict: judge(input),
-    transcriptFile: "control.html--survey.txt",
+    transcript: { file: "control.html--survey.txt", text: "" },
   });
   assert.equal(result.ok, false);
   assert.equal(result.focusLost, "Select a time to restart");
   // Not compared, not "match" — the difference matters to anyone reading this.
   assert.equal(result.snapshot.status, "not compared");
+});
+
+test("a function step is named as the wire names it, in the transcript and the Receipt", () => {
+  const steps: StepResult[] = [{ label: "custom", spec: () => "a step's own source", heard: "heard custom" }];
+  const input = {
+    request: { target: "control.html" },
+    scenario: SCENARIO,
+    stamp: ["firefox: 156.0"],
+    opened: OPENED_OK,
+    steps,
+    comparison: null,
+  };
+  const verdict = judge(input);
+  const text = formatTranscript({ ...input, verdict });
+  assert.match(text, /### custom \[action\]\nheard custom/);
+  assert.doesNotMatch(text, /own source/);
+
+  const receipt = toReceipt({ ...input, verdict, transcript: { file: "t.txt", text } });
+  assert.deepEqual(receipt.heard, [{ label: "custom", spec: "action", heard: "heard custom" }]);
+  assert.deepEqual(receipt.environment, ["firefox: 156.0"]);
+  assert.deepEqual(receipt.transcript, { file: "t.txt", text });
 });
 
 test("a clean run records focusLost as null rather than omitting it", () => {
@@ -200,10 +221,10 @@ test("a clean run records focusLost as null rather than omitting it", () => {
     steps: ran,
     comparison: null,
   };
-  const result = toResult({
+  const result = toReceipt({
     ...input,
     verdict: judge(input),
-    transcriptFile: "t.txt",
+    transcript: { file: "t.txt", text: "" },
   });
   assert.equal(result.focusLost, null);
   assert.equal(result.ok, true);

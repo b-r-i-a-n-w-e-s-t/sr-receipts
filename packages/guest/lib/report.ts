@@ -14,8 +14,8 @@ import type {
   StepAction,
   StepSpec,
   OpenResult,
+  Receipt,
   RunRequest,
-  RunResult,
   SnapshotComparison,
   StepResult,
   Verdict,
@@ -205,7 +205,7 @@ export function formatTranscript({
   ];
 
   for (const step of steps) {
-    lines.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
+    lines.push(`### ${step.label} [${wireSpec(step.spec)}]`, step.heard, "");
     const failures = evaluate(step.heard, step.expect);
     if (failures.length) {
       lines.push("EXPECTATION FAILED", indent(failures.join("\n")), "");
@@ -237,21 +237,22 @@ export function formatTranscript({
   return lines.join("\n");
 }
 
-export interface ToResultInput extends TranscriptInput {
-  transcriptFile: string;
+export interface ToReceiptInput extends TranscriptInput {
+  transcript: Receipt["transcript"];
 }
 
-/** What CI reads. One entry per run request. */
-export function toResult({
+/** The Receipt for one request: what CI reads, and everything that explains it. */
+export function toReceipt({
   request,
   scenario,
+  stamp,
   opened,
   steps,
   verdict,
   comparison,
   focusLost,
-  transcriptFile,
-}: ToResultInput): RunResult {
+  transcript,
+}: ToReceiptInput): Receipt {
   return {
     target: request.target,
     scenario: scenario.name,
@@ -259,7 +260,9 @@ export function toResult({
     reasons: verdict.reasons,
     openedOk: opened.ok,
     provenance: opened.target.provenance,
-    transcript: transcriptFile,
+    environment: stamp,
+    transcript,
+    heard: steps.map((step) => ({ label: step.label, spec: wireSpec(step.spec), heard: step.heard })),
     steps: steps.length,
     silentSteps: steps.filter((step) => step.heard === SILENCE).length,
     erroredSteps: steps.filter((step) => step.error).length,

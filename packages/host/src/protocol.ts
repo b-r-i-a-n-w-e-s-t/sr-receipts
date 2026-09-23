@@ -152,15 +152,34 @@ export interface FailedExpectation {
   failures: string[];
 }
 
-/** What CI reads. One entry per run request. */
-export interface RunResult {
+/** One step, as the reader answered it. */
+export interface HeardStep {
+  label: string;
+  /** The step as authored, e.g. `perform:moveToNextTable`; `action` for a function step. */
+  spec: string;
+  /** What the reader said, one phrase per line, or "(silence)", or "ERROR ...". */
+  heard: string;
+}
+
+/**
+ * What one request to a real screen reader produced: the verdict, the
+ * transcript, the environment that explains it, and what was heard at each
+ * step. One per run request, and complete on its own, so a caller never has
+ * to fetch the transcript or the environment separately to have the evidence.
+ */
+export interface Receipt {
   target: string;
   scenario: string;
   ok: boolean;
   reasons: string[];
   openedOk: boolean;
   provenance: string;
-  transcript: string;
+  /** The Execution Target's environment block, which heads the transcript. */
+  environment: string[];
+  /** The transcript, and the name it has in the run's directory on the guest. */
+  transcript: { file: string; text: string };
+  /** Every step that ran, in order, including those kept out of the snapshot. */
+  heard: HeardStep[];
   steps: number;
   silentSteps: number;
   erroredSteps: number;
@@ -181,7 +200,7 @@ export interface RunReport {
   updatedSnapshots: boolean;
   total: number;
   failed: number;
-  results: RunResult[];
+  results: Receipt[];
 }
 
 /**
@@ -200,7 +219,7 @@ export type RunEvent =
   | { type: "step"; target: string; index: number; label: string; spec: string; heard: string }
   | { type: "focus-lost"; target: string; after: number; thief: string }
   | { type: "snapshot"; target: string; status: SnapshotStatus; written: boolean }
-  | { type: "request-finished"; target: string; result: RunResult }
+  | { type: "request-finished"; target: string; result: Receipt }
   /** The run itself broke, rather than a request failing. Exit code 2, not 1. */
   | { type: "broke"; message: string }
   | { type: "run-finished"; report: RunReport };

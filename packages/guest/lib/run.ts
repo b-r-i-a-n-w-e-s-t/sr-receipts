@@ -23,12 +23,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareSnapshot, readSnapshot, snapshotPath, toSnapshot, writeSnapshot } from "./snapshot.ts";
-import { formatTranscript, judge, toResult, wireSpec } from "./report.ts";
+import { formatTranscript, judge, toReceipt, wireSpec } from "./report.ts";
 import { loadScenario } from "./scenario.ts";
 import { SNAPSHOTS } from "./snapshot.ts";
 import { slugify } from "./target.ts";
 import type { ExecutionTarget, ReaderSession } from "./execution-target.ts";
-import type { CompiledScenario, RunEvent, RunReport, RunRequest, RunResult } from "./types.ts";
+import type { CompiledScenario, Receipt, RunEvent, RunReport, RunRequest } from "./types.ts";
 
 const RIG = join(import.meta.dirname, "..");
 
@@ -81,7 +81,7 @@ async function runRequest(
   snapshots: string,
   updateSnapshots: boolean,
   emit: (event: RunEvent) => void,
-): Promise<RunResult> {
+): Promise<Receipt> {
   const opened = await session.open(request.target, scenario);
   emit({ type: "opened", target: request.target, ok: opened.ok, lines: opened.lines });
 
@@ -141,25 +141,7 @@ async function runRequest(
   const judged = updateSnapshots ? null : comparison;
   const verdict = judge({ opened, scenario, steps, comparison: judged, focusLost, focusLostAfter });
 
-  const transcriptFile = `${opened.target.slug}--${slugify(scenario.name)}.txt`;
-  writeFileSync(
-    join(outDir, transcriptFile),
-    formatTranscript({
-      request,
-      scenario,
-      stamp: environment,
-      opened,
-      steps,
-      verdict,
-      comparison: judged,
-      focusLost,
-      focusLostAfter,
-      plannedSteps: scenario.steps.length,
-    }),
-    "utf8",
-  );
-
-  return toResult({
+  const outcome = {
     request,
     scenario,
     stamp: environment,
@@ -168,8 +150,16 @@ async function runRequest(
     verdict,
     comparison: judged,
     focusLost,
-    transcriptFile,
-  });
+    focusLostAfter,
+    plannedSteps: scenario.steps.length,
+  };
+  const transcript = {
+    file: `${opened.target.slug}--${slugify(scenario.name)}.txt`,
+    text: formatTranscript(outcome),
+  };
+  writeFileSync(join(outDir, transcript.file), transcript.text, "utf8");
+
+  return toReceipt({ ...outcome, transcript });
 }
 
 /**
@@ -199,7 +189,7 @@ export async function executeRun(
     }
   };
 
-  const results: RunResult[] = [];
+  const results: Receipt[] = [];
   let broke: Error | undefined;
   let session: ReaderSession | undefined;
 

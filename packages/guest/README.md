@@ -329,7 +329,7 @@ const report = await rig.run([{ target: "http://192.168.64.1:5173/docs/column-li
 });
 
 if (!report.ok) process.exit(1);
-console.log(await rig.transcript(report.runId, report.results[0].transcript));
+console.log(report.results[0].transcript.text);
 ```
 
 `POST /runs` streams: one NDJSON frame per event, ending with the report. That

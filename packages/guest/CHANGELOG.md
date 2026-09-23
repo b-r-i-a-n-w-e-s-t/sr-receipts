@@ -5,6 +5,11 @@ the contract.
 
 ## Unreleased
 
+- **Breaking:** `toResult` is now `toReceipt`, and produces the host's
+  `Receipt`, which carries the environment, every step heard, and the
+  transcript text. `results.json` grows by the transcript text of each request.
+- A step authored as a function is printed as `[action]` in the transcript, as
+  the wire already named it, rather than as the function's source.
 - A request's scenario can be the scenario itself, not only a name or a path.
   `loadScenario` compiles it with `compileScenario`, the same as a file, and
   every scenario in a run is still compiled before the reader starts.

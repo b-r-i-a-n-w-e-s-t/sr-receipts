@@ -29,12 +29,16 @@ const report = await rig.run([{ target: "control.html", scenario: "survey" }], {
 });
 
 if (!report.ok) process.exit(1);
-console.log(await rig.transcript(report.runId, report.results[0].transcript));
+console.log(report.results[0].transcript.text);
 ```
 
 A request's `scenario` is a name or path the guest resolves, or the scenario
 itself, typed by `Scenario` in `src/protocol.ts`, for a host that keeps its
 scenarios in code rather than in the guest's files.
+
+Each entry in `report.results` is a Receipt: the verdict, the transcript, the
+environment that explains it, and what was heard at each step. `rig.transcript`
+still reads a transcript back by name from a finished run.
 
 A wrong answer resolves with `ok: false`. A run that broke rejects with a
 `RigError`. The guest README documents the routes, the one-run-at-a-time rule,

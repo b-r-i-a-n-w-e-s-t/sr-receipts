@@ -5,6 +5,12 @@ the contract.
 
 ## Unreleased (0.2.0)
 
+- **Breaking:** `RunResult` is now `Receipt`, the glossary's name for what one
+  request to a real screen reader produced. It carries the evidence itself:
+  `environment`, the stamp that heads the transcript; `heard`, every step's
+  label, spec and announcement; and `transcript`, now `{ file, text }` rather
+  than a file name. A host no longer needs `transcript()` or `health()` to
+  have a request's evidence.
 - The protocol owns the structural `Scenario` type and its parts: `Reader`,
   `WindowSize`, `Expectation`, `Expectations`, `Check`, `AuthoredStep` and
   `AuthoredStepObject`. Everything in it is plain JSON. The protocol names the

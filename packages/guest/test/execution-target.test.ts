@@ -130,6 +130,15 @@ test("a run on an Execution Target produces the report, stream and artifacts the
 
   const transcript = await client.transcript("run-1", "page.html--fake.txt");
   assert.match(transcript, /^# page\.html\n/);
+
+  // The Receipt carries the evidence itself, so the host need not fetch it.
+  const receipt = report.results[0]!;
+  assert.deepEqual(receipt.transcript, { file: "page.html--fake.txt", text: transcript });
+  assert.deepEqual(receipt.environment, ENVIRONMENT);
+  assert.deepEqual(receipt.heard, [
+    { label: "first", spec: "press:Tab", heard: "heard first" },
+    { label: "second", spec: "press:Tab", heard: "heard second" },
+  ]);
   assert.match(transcript, /## PASS/);
   assert.match(transcript, /reader: fake 1\.0\nbrowser: fake 2\.0\nfake provenance/);
   assert.match(transcript, /### first \[press:Tab\]\nheard first/);

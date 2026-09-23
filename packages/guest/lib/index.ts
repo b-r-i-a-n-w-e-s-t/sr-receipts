@@ -43,11 +43,11 @@ export {
   judge,
   formatVerdict,
   formatTranscript,
-  toResult,
+  toReceipt,
   wireSpec,
   type JudgeInput,
   type TranscriptInput,
-  type ToResultInput,
+  type ToReceiptInput,
 } from "./report.ts";
 export {
   RUNS,

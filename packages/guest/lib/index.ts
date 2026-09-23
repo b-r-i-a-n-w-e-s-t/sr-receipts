@@ -1,6 +1,7 @@
 /**
  * The guest's core. Everything `runner.ts`, `probe.ts`, `smoke.ts` and
- * `daemon.ts` are built from. The host-side client lives in `@sr-receipts/host`,
+ * `daemon.ts` are built from. How NVDA is started and how a page is reached
+ * are the NVDA target's business, behind `WindowsDesktop`, and not exported. The host-side client lives in `@sr-receipts/host`,
  * which owns the wire types re-exported through `./types.ts`.
  *
  * Re-exported explicitly rather than spread from each module, so the published
@@ -19,7 +20,6 @@ export {
   resolveTarget,
   parseQueue,
 } from "./target.ts";
-export { MODE_PROBES, ensureReadyToNavigate, type GuardOptions } from "./guard.ts";
 export {
   SCENARIOS,
   compileStep,
@@ -57,7 +57,7 @@ export {
   type ExecuteOptions,
 } from "./run.ts";
 export { requireReader, type ExecutionTarget, type ReaderSession } from "./execution-target.ts";
-export { nvdaTarget } from "./nvda-target.ts";
+export { createNvdaTarget, nvdaTarget, type WindowsDesktop } from "./nvda-target.ts";
 export { createVoiceOverTarget, voiceOverTarget, type VoiceOverDesktop } from "./voiceover-target.ts";
 export {
   DEFAULT_PORT,
@@ -69,13 +69,3 @@ export {
   type RigServerOptions,
   type TokenResolution,
 } from "./daemon.ts";
-export {
-  NVDA_OPTIONS,
-  FOCUS_CHECK_EVERY,
-  startSession,
-  stopSession,
-  watchFocus,
-  openTarget,
-  type Session,
-  type OpenTargetOptions,
-} from "./session.ts";

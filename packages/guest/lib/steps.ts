@@ -132,14 +132,11 @@ export function validateSteps(
 }
 
 export interface RunStepsOptions {
-  log?: ((line: string) => void) | undefined;
   /**
-   * The same announcements as `log`, unformatted.
-   *
-   * `log` flattens a step to one printable line, which is all `smoke.ts` and
-   * `probe.ts` ever wanted. A run being watched over a wire wants the label and
-   * the announcement apart, and wants the newlines inside a multi-phrase
-   * announcement left alone, so it gets the `StepResult` itself.
+   * Each step as it is heard. The `StepResult` itself rather than a printable
+   * line, because a run being watched over a wire wants the label and the
+   * announcement apart, and wants the newlines inside a multi-phrase
+   * announcement left alone.
    */
   onStep?: ((step: StepResult, index: number) => void) | undefined;
   /**
@@ -170,12 +167,11 @@ export async function runSteps(
   nvda: ReaderDriver,
   speech: SpeechLog,
   steps: readonly CompiledStep[],
-  { log, onStep, watch }: RunStepsOptions = {},
+  { onStep, watch }: RunStepsOptions = {},
 ): Promise<RunStepsResult> {
   const results: StepResult[] = [];
   for (const [index, step] of steps.entries()) {
     const { label, spec, settle, expect, snapshot } = step;
-    const shown = typeof spec === "string" ? `${label} [${spec}]` : label;
     try {
       const action = toAction(nvda, spec);
       await speech.discard();
@@ -192,7 +188,6 @@ export async function runSteps(
         ...(snapshot !== undefined && { snapshot }),
       };
       results.push(result);
-      log?.(`${shown} :: ${heard.replace(/\n/g, " / ")}`);
       onStep?.(result, index);
     } catch (error) {
       const message = (error as Error)?.message;
@@ -205,7 +200,6 @@ export async function runSteps(
         ...(snapshot !== undefined && { snapshot }),
       };
       results.push(result);
-      log?.(`${shown} :: ERROR ${message}`);
       onStep?.(result, index);
     }
 
@@ -215,7 +209,6 @@ export async function runSteps(
     if (watch && (done % watch.every === 0 || done === steps.length)) {
       const thief = await watch.check();
       if (thief !== null) {
-        log?.(`FOCUS LOST after step ${done}: ${thief}`);
         return { steps: results, focusLost: thief, focusLostAfter: done };
       }
     }

@@ -1,4 +1,5 @@
 {
+  "reader": "nvda",
   "name": "probe",
   "description": "Scratch. Working out a key sequence before it earns a file in scenarios/.",
   "modeProbes": ["moveToNextTable"],

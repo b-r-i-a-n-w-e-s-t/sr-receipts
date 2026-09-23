@@ -69,7 +69,7 @@ lib/          the rig core — everything above, encoded once
   report.ts     the verdict, the transcript, and results.json
   run.ts        a whole run as a function: executeRun(), and runs/<runId>/
   execution-target.ts  the seam between that run and any one screen reader
-  nvda-target.ts       NVDA with headed Firefox, as an Execution Target
+  nvda-target.ts       NVDA with headed Firefox, as an Execution Target, behind WindowsDesktop
   voiceover-target.ts  the bundled VoiceOver with Safari, as an Execution Target
   daemon.ts     the run layer behind a port — routing, auth, one run at a time
   stamp.ts      the environment block at the head of every transcript

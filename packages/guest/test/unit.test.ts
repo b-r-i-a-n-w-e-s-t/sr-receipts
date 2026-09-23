@@ -5,8 +5,9 @@
  *
  * These cover the logic the Phase 1 extraction moved or changed: queue parsing,
  * target resolution, step-spec parsing, and the speech-log cursor that replaced
- * `.at(-1)`. The guards and the session lifecycle can only be exercised against
- * a real NVDA on the interactive desktop; that is what `npm run smoke` is for.
+ * `.at(-1)`. The guards' and the session lifecycle's sequencing is tested
+ * against a fake desktop in test/nvda-target.test.ts; whether the real desktop
+ * behaves as the fake does is what `npm run smoke` is for.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

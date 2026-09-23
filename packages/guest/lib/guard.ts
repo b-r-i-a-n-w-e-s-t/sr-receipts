@@ -27,10 +27,8 @@
  * The guard leaves the caret at the top of the document, so a sequence always
  * starts from a known position.
  */
-import { windowsActivate } from "@guidepup/guidepup";
-import { delay } from "./system.ts";
-import { FIREFOX } from "./firefox.ts";
 import { SILENCE, type SpeechLog } from "./speech.ts";
+import type { WindowsDesktop } from "./nvda-target.ts";
 import type { ReaderDriver } from "./steps.ts";
 import type { NvdaCommand } from "./types.ts";
 
@@ -75,23 +73,34 @@ export interface GuardOptions {
   modeProbes?: NvdaCommand[] | undefined;
 }
 
-export async function ensureReadyToNavigate(
-  nvda: ReaderDriver,
-  speech: SpeechLog,
-  { focusAttempts = 8, modeAttempts = 3, modeProbes = MODE_PROBES }: GuardOptions = {},
-): Promise<GuardResult> {
-  const k = nvda.keyboardCommands;
-  const seen: string[] = [];
-
-  // A misspelled probe would reach `nvda.perform(undefined)`, which is silent —
-  // and this guard reads silence as "wrong mode". The result would be a
-  // focus-guard failure that looks exactly like a real one. In TypeScript a
-  // literal typo no longer compiles, but a scenario can still arrive as JSON
-  // from a repo that never ran tsc, so the check stays.
-  const unknown = modeProbes.filter((name) => !k[name]);
+/**
+ * Throw unless every mode probe is a command NVDA has.
+ *
+ * A misspelled probe would reach `nvda.perform(undefined)`, which is silent —
+ * and the guard reads silence as "wrong mode". The result would be a
+ * focus-guard failure that looks exactly like a real one. In TypeScript a
+ * literal typo no longer compiles, but a scenario can still arrive as JSON
+ * from a repo that never ran tsc, so the check stays. The NVDA target makes it
+ * when it validates a scenario, before any target opens; the guard makes it
+ * again for a caller that did not.
+ */
+export function validateModeProbes(nvda: ReaderDriver, modeProbes: readonly string[] = MODE_PROBES): void {
+  const unknown = modeProbes.filter((name) => !nvda.keyboardCommands[name]);
   if (unknown.length) {
     throw new Error(`unknown NVDA keyboard command(s) in modeProbes: ${unknown.join(", ")}`);
   }
+}
+
+export async function ensureReadyToNavigate(
+  desktop: WindowsDesktop,
+  speech: SpeechLog,
+  { focusAttempts = 8, modeAttempts = 3, modeProbes = MODE_PROBES }: GuardOptions = {},
+): Promise<GuardResult> {
+  const { reader: nvda, delay } = desktop;
+  const k = nvda.keyboardCommands;
+  const seen: string[] = [];
+
+  validateModeProbes(nvda, modeProbes);
 
   let inDocument = false;
   for (let attempt = 1; attempt <= focusAttempts; attempt++) {
@@ -110,7 +119,7 @@ export async function ensureReadyToNavigate(
     // First recover by bringing the window forward, in case something else took
     // the foreground; after that, cycle Firefox's own focus into the content.
     if (attempt === 1) {
-      await windowsActivate(FIREFOX, "Mozilla Firefox");
+      await desktop.activateBrowser();
       await delay(2000);
     } else {
       await nvda.press("F6");

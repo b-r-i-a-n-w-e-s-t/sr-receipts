@@ -5,6 +5,24 @@ the contract.
 
 ## Unreleased
 
+- The NVDA target reaches the desktop through `WindowsDesktop`, the way the
+  VoiceOver target does through `VoiceOverDesktop`, so the focus guard, the
+  browse-mode guard, the focus watch and the session lifecycle are tested
+  against a fake desktop. `createNvdaTarget(desktop)` takes one; `nvdaTarget`
+  is the real one. What they do on the rig is unchanged.
+- The NVDA target's `validate` checks `modeProbes`, so a misspelled probe fails
+  before any target opens, as the Execution Target interface promises, rather
+  than when a target opens part way through a queue.
+- `smoke.ts` and `probe.ts` run through `nvdaTarget`, so a passing smoke proves
+  the path real runs take, and both now validate their steps and keep the
+  address bar out of snapshots. A function step prints as `[action]`.
+- `probe.json` as a bare array is NVDA's commands. It failed on the required
+  `reader` before; `probe.example.json` names it.
+- **Breaking:** `startSession`, `stopSession`, `openTarget`, `watchFocus`,
+  `ensureReadyToNavigate`, `MODE_PROBES`, `NVDA_OPTIONS`, `FOCUS_CHECK_EVERY`
+  and their option types are no longer exported. `runSteps` no longer takes
+  `log`; `onStep` carries the same announcements.
+
 - **Breaking:** `executeRun` takes `snapshots: "compare" | "update" | "off"`
   instead of `updateSnapshots`. With `off` a run leaves nothing in
   `snapshots/`, so a consumer's runs no longer write baselines into this

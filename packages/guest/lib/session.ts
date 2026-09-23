@@ -9,58 +9,44 @@
  * it over plain SSH does not work — an SSH session has no interactive desktop,
  * so NVDA has no foreground window to describe. That is what the `nvda-run`,
  * `nvda-probe` and `nvda-smoke` scheduled tasks are for.
+ *
+ * Everything here reaches the desktop through a `WindowsDesktop`, so the
+ * sequencing is tested against a fake one. See `lib/nvda-target.ts`.
  */
-import { nvda, windowsActivate } from "@guidepup/guidepup";
-import { delay, taskkill, windowList } from "./system.ts";
-import { FIREFOX, ensureProfile, launch } from "./firefox.ts";
 import { SpeechLog } from "./speech.ts";
 import { ensureReadyToNavigate } from "./guard.ts";
 import { resolveTarget } from "./target.ts";
+import type { WindowsDesktop } from "./nvda-target.ts";
 import type { FocusWatch } from "./steps.ts";
 import type { NvdaCommand, OpenResult, WindowSize } from "./types.ts";
 
-/**
- * `capture: true` keeps whole announcements; the default `"initial"` truncates
- * at the first phrase. The speechViewer override stops NVDA's own viewer window
- * from opening and taking focus away from the browser.
- */
-export const NVDA_OPTIONS = {
-  capture: true,
-  settings: { speechViewer: { showSpeechViewerAtStartup: false } },
-} as const;
+export async function startSession(desktop: WindowsDesktop): Promise<SpeechLog> {
+  desktop.kill("firefox.exe");
+  desktop.kill("nvda.exe");
+  await desktop.delay(3000);
+  desktop.ensureProfile();
 
-export interface Session {
-  nvda: typeof nvda;
-  speech: SpeechLog;
-}
+  await desktop.startReader();
+  await desktop.delay(2000);
 
-export async function startSession(): Promise<Session> {
-  taskkill("firefox.exe");
-  taskkill("nvda.exe");
-  await delay(3000);
-  ensureProfile();
-
-  await nvda.start(NVDA_OPTIONS);
-  await delay(2000);
-
-  const speech = new SpeechLog(nvda);
+  const speech = new SpeechLog(desktop.reader);
   await speech.discard();
-  return { nvda, speech };
+  return speech;
 }
 
 /** Never throws: a failed teardown must not mask the error that caused it. */
-export async function stopSession(): Promise<void> {
+export async function stopSession(desktop: WindowsDesktop): Promise<void> {
   try {
-    await nvda.stop();
+    await desktop.stopReader();
   } catch {
     // already gone
   }
-  taskkill("firefox.exe");
+  desktop.kill("firefox.exe");
 }
 
-async function focusedTitle(speech: SpeechLog): Promise<string> {
+async function focusedTitle(desktop: WindowsDesktop, speech: SpeechLog): Promise<string> {
   await speech.discard();
-  await nvda.perform(nvda.keyboardCommands.reportTitle);
+  await desktop.reader.perform(desktop.reader.keyboardCommands.reportTitle);
   return await speech.heard();
 }
 
@@ -88,13 +74,14 @@ export const FOCUS_CHECK_EVERY = 5;
  * than only that something did.
  */
 export function watchFocus(
+  desktop: WindowsDesktop,
   speech: SpeechLog,
   { every = FOCUS_CHECK_EVERY }: { every?: number | undefined } = {},
 ): FocusWatch {
   return {
     every,
     async check() {
-      const title = await focusedTitle(speech);
+      const title = await focusedTitle(desktop, speech);
       return /Mozilla Firefox/i.test(title) ? null : title;
     },
   };
@@ -119,6 +106,7 @@ export interface OpenTargetOptions {
  * only exists at a particular width. See lib/firefox.ts.
  */
 export async function openTarget(
+  desktop: WindowsDesktop,
   speech: SpeechLog,
   entry: string,
   { settle, modeProbes, window }: OpenTargetOptions = {},
@@ -126,26 +114,26 @@ export async function openTarget(
   const target = resolveTarget(entry, { settle });
   const lines: string[] = [];
 
-  taskkill("firefox.exe");
-  await delay(3000);
-  launch(target.url, { window });
-  await delay(target.settle);
+  desktop.kill("firefox.exe");
+  await desktop.delay(3000);
+  desktop.launch(target.url, window);
+  await desktop.delay(target.settle);
 
-  const title = await focusedTitle(speech);
+  const title = await focusedTitle(desktop, speech);
   if (!/Mozilla Firefox/i.test(title)) {
-    await windowsActivate(FIREFOX, "Mozilla Firefox");
-    await delay(3000);
-    const retry = await focusedTitle(speech);
+    await desktop.activateBrowser();
+    await desktop.delay(3000);
+    const retry = await focusedTitle(desktop, speech);
     if (!/Mozilla Firefox/i.test(retry)) {
       lines.push("### FOCUS FAILED", `title reported: ${retry}`, "");
-      lines.push("### windows on screen", windowList(), "");
+      lines.push("### windows on screen", desktop.windowList(), "");
       return { ok: false, lines, target };
     }
   }
 
   // The window is Firefox; now make sure the keystrokes will reach its content
   // and that quick navigation actually answers.
-  const focus = await ensureReadyToNavigate(nvda, speech, { modeProbes });
+  const focus = await ensureReadyToNavigate(desktop, speech, { modeProbes });
   lines.push(
     focus.ok
       ? `### focus guard: in the document, in browse mode (proved by ${focus.provedBy})`
@@ -154,7 +142,7 @@ export async function openTarget(
     "",
   );
   if (!focus.ok) {
-    lines.push("### windows on screen", windowList(), "");
+    lines.push("### windows on screen", desktop.windowList(), "");
     lines.push(
       "Never reached a state where quick navigation works, so the sequence",
       "would only record meaningless silences. Sequence not run.",

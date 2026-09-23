@@ -3,8 +3,9 @@
  * navigation command on this machine right now?
  *
  * This is the only check that exercises the guards, the Firefox launch and the
- * NVDA lifecycle for real — `npm test` deliberately covers only the parts that
- * need no desktop. Run it after touching anything in `lib/`.
+ * NVDA lifecycle for real. `npm test` covers their sequencing against a fake
+ * desktop, and nothing that needs a real one. Run it after touching anything in
+ * `lib/`.
  *
  *   node smoke.ts [target]
  *
@@ -18,13 +19,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   SILENCE,
-  openTarget,
-  runSteps,
-  stamp,
-  startSession,
-  stopSession,
-  watchFocus,
+  nvdaTarget,
+  wireSpec,
+  type CompiledScenario,
   type CompiledStep,
+  type ReaderSession,
 } from "./lib/index.ts";
 import {
   SMOKE_CONTROL_FIXTURE,
@@ -36,7 +35,8 @@ import {
 /**
  * Kept inline rather than moved to `scenarios/`, deliberately. The smoke test
  * has to be able to say "the rig itself is fine" when a scenario is broken, so
- * it must not depend on scenario loading.
+ * it must not depend on scenario loading. It does go through the NVDA target,
+ * so a passing smoke proves the path every real run takes.
  */
 const STEPS: CompiledStep[] = [
   { label: "title bar (NVDA+T)", spec: "perform:reportTitle" },
@@ -44,6 +44,8 @@ const STEPS: CompiledStep[] = [
   { label: "next table (T)", spec: "perform:moveToNextTable" },
   { label: "next table again (T)", spec: "perform:moveToNextTable" },
 ];
+
+const SCENARIO: CompiledScenario = { reader: "nvda", name: "smoke", description: "", steps: STEPS, checks: [] };
 
 function smokeRequest(): SmokeRequest | undefined {
   const path = process.env.RIG_SMOKE_REQUEST ?? "artifacts/smoke-request.json";
@@ -57,25 +59,26 @@ function smokeRequest(): SmokeRequest | undefined {
 
 const request = smokeRequest();
 const target = process.argv[2] ?? SMOKE_CONTROL_FIXTURE;
-const out = [`# smoke on ${target}`, "", ...stamp(), ""];
+const out = [`# smoke on ${target}`, "", ...nvdaTarget.environment(), ""];
 let ok = false;
 let completedSteps = 0;
 let speechCaptured = false;
 let focusLost: string | null = null;
 let failure: string | null = null;
+let session: ReaderSession | undefined;
 
 try {
-  const { nvda, speech } = await startSession();
-  const opened = await openTarget(speech, target);
+  session = await nvdaTarget.start();
+  session.validate(SCENARIO);
+  const opened = await session.open(target, SCENARIO);
   out.push(opened.target.provenance, "", ...opened.lines);
 
   if (opened.ok) {
-    const { steps, focusLost: lostFocus } = await runSteps(nvda, speech, STEPS, {
-      log: (line) => console.log(line),
-      watch: watchFocus(speech),
-    });
+    const { steps, focusLost: lostFocus } = await session.perform(SCENARIO, (step) =>
+      console.log(`${step.label} [${wireSpec(step.spec)}] :: ${step.heard.replace(/\n/g, " / ")}`),
+    );
     for (const step of steps) {
-      out.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
+      out.push(`### ${step.label} [${wireSpec(step.spec)}]`, step.heard, "");
     }
     completedSteps = steps.length;
     speechCaptured = steps.some((step) => step.heard !== SILENCE);
@@ -105,7 +108,7 @@ try {
   mkdirSync(dirname(artifact), { recursive: true });
   writeFileSync(artifact, out.join("\n") + "\n", "utf8");
   try {
-    await stopSession();
+    await session?.stop();
   } catch (error) {
     failure ??= (error as Error).message;
     ok = false;

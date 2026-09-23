@@ -17,14 +17,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   compileScenario,
-  openTarget,
-  runSteps,
-  startSession,
-  stopSession,
-  watchFocus,
+  nvdaTarget,
   windowList,
+  wireSpec,
   type AuthoredStep,
   type CompiledScenario,
+  type ReaderSession,
 } from "./lib/index.ts";
 
 const RIG = import.meta.dirname;
@@ -34,11 +32,14 @@ const RIG = import.meta.dirname;
  * form it has always had — or a whole scenario object, which is how a probe gets
  * at `repeat`, `window` and `modeProbes` without being promoted to a file in
  * `scenarios/` first. Both compile to the same thing.
+ *
+ * The probe only runs NVDA, so a bare array is NVDA's commands. A scenario
+ * object says whose commands it is written in, like any other.
  */
 function readProbe(raw: string): CompiledScenario {
   const parsed = JSON.parse(raw) as unknown;
   return compileScenario(
-    Array.isArray(parsed) ? { name: "probe", steps: parsed as AuthoredStep[] } : parsed,
+    Array.isArray(parsed) ? { reader: "nvda", name: "probe", steps: parsed as AuthoredStep[] } : parsed,
     "probe.json",
   );
 }
@@ -46,14 +47,13 @@ function readProbe(raw: string): CompiledScenario {
 const target = readFileSync(join(RIG, "probe-fixture.txt"), "utf8").trim();
 const scenario = readProbe(readFileSync(join(RIG, "probe.json"), "utf8"));
 const out = [`# probe on ${target}`, `# scenario: ${scenario.name}`, ""];
+let session: ReaderSession | undefined;
 
 try {
-  const { nvda, speech } = await startSession();
+  session = await nvdaTarget.start();
+  session.validate(scenario);
 
-  const opened = await openTarget(speech, target, {
-    modeProbes: scenario.modeProbes,
-    window: scenario.window,
-  });
+  const opened = await session.open(target, scenario);
   out.push(`# url: ${opened.target.url}`, opened.target.provenance, "");
 
   // What is actually on the screen, rather than what we assume is.
@@ -67,15 +67,14 @@ try {
       "",
     );
   } else {
-    const { steps, focusLost, focusLostAfter } = await runSteps(nvda, speech, scenario.steps, {
-      log: (line) => console.log(line),
-      watch: watchFocus(speech),
-    });
+    const { steps, focusLost, focusLostAfter } = await session.perform(scenario, (step) =>
+      console.log(`${step.label} [${wireSpec(step.spec)}] :: ${step.heard.replace(/\n/g, " / ")}`),
+    );
     // The probe stays deliberately unjudged: it is for finding out what a target
     // says, not for asserting it. Expectations and snapshots belong to the
     // runner, once a sequence is worth keeping.
     for (const step of steps) {
-      out.push(`### ${step.label} [${String(step.spec)}]`, step.heard, "");
+      out.push(`### ${step.label} [${wireSpec(step.spec)}]`, step.heard, "");
     }
     if (focusLost) {
       out.push(
@@ -90,6 +89,6 @@ try {
   out.push("### fatal", `${failure?.message} / ${(failure?.cause as Error)?.message ?? ""}`);
 } finally {
   writeFileSync(join(RIG, "probe-out.txt"), out.join("\n") + "\n", "utf8");
-  await stopSession();
+  await session?.stop();
   writeFileSync(join(RIG, "probe-done.txt"), new Date().toISOString(), "utf8");
 }

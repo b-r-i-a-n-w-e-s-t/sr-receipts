@@ -77,19 +77,30 @@ commands, which are not NVDA's under other names. What the spike established:
 - How the cursor arrived changes what VoiceOver moves by. `moveToPrevious` from
   the first cell left the table, and `moveToNext` from there walked the
   *contents* of cells rather than the cells. Write steps that do not back up.
-- A step takes 5 to 16 seconds, and a silent one about 20. Guidepup decides an
-  announcement is finished by polling until it has not changed 25 times, and
-  those constants are not configurable. A 60-step scenario is over ten minutes
-  per target.
+- A step takes about 5 to 7.5 seconds. Guidepup decides an announcement is
+  finished by reading VoiceOver's last phrase until it has not changed 25 times
+  in a row, and each read is a 50 ms pause plus an AppleScript call of about
+  125 ms, so no step is shorter than about 4.4 seconds. A new phrase also costs
+  a pause Guidepup sizes from its word count at a fixed 7.5 words a second,
+  whatever VoiceOver's speech rate. Those constants are not configurable, which
+  is why raising the rate would not shorten a run. The 20-step table walk takes
+  about three minutes, VoiceOver's start included.
 - A step's announcement is one joined string, not one phrase per line as NVDA's
   is.
 - VoiceOver's hints ("You are currently on a cell, inside of a table. To
-  navigate…") are stripped from everything the target records. A hint arrives
-  after a pause, and whether Guidepup catches it is a race: two runs moved to
-  the same cell by the same keys, and only one recorded the hint. Every
-  transcript's environment block says hints were stripped. A capture that was
-  only a hint is recorded as silence, and page text that itself begins "You are
-  currently on…" is cut from there. See [`hints.ts`](hints.ts).
+  navigate…") are turned off, with `SCRShouldOutputVOInstructions: false` in
+  the settings the target passes to Guidepup, and stripped from anything that
+  gets through. A hint arrives about a second after the announcement, and
+  whether Guidepup catches it is a race: two runs moved to the same cell by the
+  same keys, and only one recorded the hint. A caught hint also restarts
+  Guidepup's wait for speech to settle; on 2026-09-23, with hints on, 15 of 21
+  steps took 8.5 to 15 seconds instead of 5 to 7.5, and turning them off cut
+  the table walk from 4 min 25 s to 3 min 1 s. The key was found in VoiceOver's
+  framework strings, not documentation; the first run with it off recorded no
+  hint. Every transcript's environment block names the settings and says hints
+  are stripped. A capture that was only a hint is recorded as silence, and page
+  text that itself begins "You are currently on…" is cut from there. See
+  [`hints.ts`](hints.ts).
 - `readTableColumnHeader` (VO-C) has answered with VoiceOver's own startup
   greeting and "VoiceOver Settings activity" instead of the header in 3 of 11
   uses, and once moved the cursor out of the table. The cause is unknown. Keep

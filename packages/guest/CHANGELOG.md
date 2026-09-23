@@ -5,6 +5,13 @@ the contract.
 
 ## Unreleased
 
+- The VoiceOver target starts VoiceOver with hints off
+  (`SCRShouldOutputVOInstructions: false`). A hint arrived as a second phrase
+  and restarted Guidepup's wait for speech to settle, so it cost 2 to 8 seconds
+  on most steps for text the target then stripped. The table walk went from
+  4 min 25 s to 3 min 1 s, with its snapshot unchanged. The environment stamp
+  names the setting, so baselines recorded before it report a changed
+  environment.
 - The NVDA target reaches the desktop through `WindowsDesktop`, the way the
   VoiceOver target does through `VoiceOverDesktop`, so the focus guard, the
   browse-mode guard, the focus watch and the session lifecycle are tested

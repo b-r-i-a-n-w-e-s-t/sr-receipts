@@ -18,8 +18,9 @@
  *   leaving web content while Safari keeps the foreground.
  * - A sentinel is spoken before every step, so silence and repeated
  *   announcements are recorded as what they are. See `voiceover/sentinel.ts`.
- * - VoiceOver's hints are stripped from what is recorded, because whether one
- *   is captured is a race. See `voiceover/hints.ts`.
+ * - VoiceOver's hints are turned off, and any that get through are stripped
+ *   from what is recorded, because whether one is captured is a race. See
+ *   `voiceover/hints.ts`.
  * - Each target gets a Safari window of its own, closed by id, because this
  *   desktop is somebody's working machine and their Safari is not the run's to
  *   quit.
@@ -78,6 +79,15 @@ function command(file: string, args: string[]): string {
   }
 }
 
+/**
+ * Merged into Guidepup's portable preferences before VoiceOver starts. Hints
+ * are off because each one arrives as a second phrase about a second after the
+ * announcement, restarting Guidepup's wait for speech to settle, and they are
+ * stripped from what the target records anyway. The key comes from VoiceOver's
+ * framework strings, not documentation; see `voiceover/README.md`.
+ */
+const VOICEOVER_SETTINGS = { SCRShouldOutputVOInstructions: false };
+
 function environment(): string[] {
   const guidepup = require("@guidepup/guidepup/package.json") as { version: string };
   return [
@@ -86,7 +96,7 @@ function environment(): string[] {
     "voiceover: bundled with macOS",
     `guidepup: ${guidepup.version}`,
     `node: ${process.version}`,
-    "voiceover settings: guidepup portable preferences, capture=true, sentinel spoken before each step, hints stripped from recorded speech",
+    `voiceover settings: guidepup portable preferences with ${JSON.stringify(VOICEOVER_SETTINGS)}, capture=true, sentinel spoken before each step, hints stripped from recorded speech`,
   ];
 }
 
@@ -96,7 +106,7 @@ const realDesktop: VoiceOverDesktop = {
   reader: voiceOver as unknown as ReaderDriver & SpeechSource,
   speakSentinel,
   startReader: (attempts) =>
-    launchWithRetry(() => voiceOver.start({ capture: true }), () => voiceOver.stop(), attempts)(),
+    launchWithRetry(() => voiceOver.start({ capture: true, settings: VOICEOVER_SETTINGS }), () => voiceOver.stop(), attempts)(),
   stopReader: () => voiceOver.stop(),
   openWindow: openSafariWindow,
   enterWebContent: enterSafariWebContent,

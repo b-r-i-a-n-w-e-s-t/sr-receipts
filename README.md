@@ -47,15 +47,17 @@ questions are scenarios a consuming repo can keep in its own tree.
  node runner.ts (on the Mac)  ──────────▶    VoiceOver + Safari, in-process
 ```
 
-Two packages, split by which side of the wire they live on:
+Three packages: two split by which side of the wire they live on, and a
+Playwright fixture on the host's side:
 
 | Package | Owns | Runs on |
 |---|---|---|
 | [`@sr-receipts/host`](packages/host/README.md) | Connecting to a guest daemon with a URL and bearer token, starting runs, reading back Receipts. Owns the wire protocol and knows nothing about any screen reader. | The Mac you develop on |
 | [`@sr-receipts/guest`](packages/guest/README.md) | The daemon, scenarios, verdicts, snapshots, transcripts, every Execution Target, and the Provisioner for the Windows Guest Rig | The machine the screen reader runs on |
+| [`@sr-receipts/playwright`](packages/playwright/README.md) | The `receipts` fixture, so a consuming repo asks a real reader from its own `playwright test`. Depends on the host. | The Mac you develop on |
 
 The guest depends on the host for the protocol, never the other way round, so
-nothing Mac-facing carries a screen reader's vocabulary. Both are private
+nothing Mac-facing carries a screen reader's vocabulary. All three are private
 workspace packages, versioned and changelogged separately, and not published.
 
 An **Execution Target** is one screen reader with its browser on its own
@@ -101,7 +103,7 @@ a browser update that changed the wording.
 
 ## Using it
 
-Three ways in today, all described in more detail elsewhere:
+Four ways in today, all described in more detail elsewhere:
 
 - **From the Mac, against NVDA.** Start the guest daemon, then call
   `createClient({ url, token }).run(requests)` from a script or a test. This is
@@ -113,12 +115,12 @@ Three ways in today, all described in more detail elsewhere:
   runs.
 - **On the guest, against NVDA.** A queue file and the `nvda-run` scheduled
   task, for working inside the virtual machine.
-
-Next is a Playwright fixture, so a consuming repo can ask both readers from its
-own `playwright test`. Playwright is the runner and reporter only, never the
-browser driver, because it cannot drive Safari or release Firefox. See
-[ADR 0001](docs/adr/0001-playwright-is-the-runner-not-the-browser-driver.md)
-and the [roadmap](docs/roadmap.md).
+- **From a consuming repo's Playwright tests, against NVDA.** The `receipts`
+  fixture in `@sr-receipts/playwright`. Playwright is the runner and reporter
+  only, never the browser driver, because it cannot drive Safari or release
+  Firefox. See
+  [ADR 0001](docs/adr/0001-playwright-is-the-runner-not-the-browser-driver.md).
+  VoiceOver in the same fixture is next on the [roadmap](docs/roadmap.md).
 
 ## Where to read next
 
@@ -129,6 +131,7 @@ and the [roadmap](docs/roadmap.md).
 | Run VoiceOver on a Mac, and what is known about capturing it | [`packages/guest/voiceover/README.md`](packages/guest/voiceover/README.md) |
 | Understand the NVDA rig's internals and the daemon's routes | [`packages/guest/README.md`](packages/guest/README.md) |
 | Call the daemon from code | [`packages/host/README.md`](packages/host/README.md) |
+| Ask a reader from a consuming repo's Playwright tests | [`packages/playwright/README.md`](packages/playwright/README.md) |
 | Provision a new Windows Guest Rig | [`packages/guest/provisioning/README.md`](packages/guest/provisioning/README.md) |
 | See what is planned and why | [`docs/roadmap.md`](docs/roadmap.md), [`docs/adr/`](docs/adr/) |
 | Look up a term | [`CONTEXT.md`](CONTEXT.md) |
@@ -136,7 +139,7 @@ and the [roadmap](docs/roadmap.md).
 ## Working in the repository
 
 ```bash
-npm ci      # at the repository root: installs both packages from one lockfile
+npm ci      # at the repository root: installs every package from one lockfile
 npm test    # every package's tests, then a typecheck of the whole repository
 ```
 

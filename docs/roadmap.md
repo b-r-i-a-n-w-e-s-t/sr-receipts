@@ -24,6 +24,10 @@ file is the working list and changes as items land.
   request returns a Receipt, a run chooses whether to use the guest's
   snapshots at all, and the NVDA target's desktop is behind a seam that tests
   can fake.
+- **A first Playwright slice on NVDA.** `@sr-receipts/playwright` and its
+  `receipts` fixture, linked into `carbon-svelte` by `file:`, asking NVDA about
+  `/demo/96` and reproducing carbon-svelte#382 in 75 to 88 seconds a test.
+  What it changed in ADR 0001, and the timings it measured, are in the ADR.
 - **Faster VoiceOver runs.** Where a VoiceOver step's time goes was measured,
   and turning VoiceOver's hints off cut a 20-step run by about 30%.
 
@@ -38,13 +42,10 @@ Playwright decisions, their costs, and what was deferred are in
 Further work on the rig itself, including the items under "Known, not yet
 decided", waits until a consumer shows which of them matter.
 
-1. **A first Playwright slice on NVDA** against `carbon-svelte`'s `/demo/va`: a
-   `receipts` fixture in a new `@sr-receipts/playwright` package, no snapshots,
-   and timeouts measured rather than guessed.
-2. **The VoiceOver project in the same fixture**, running in-process on the Mac.
-3. **Baselines for a consumer** through Playwright's `toMatchSnapshot`, so they
+1. **The VoiceOver project in the same fixture**, running in-process on the Mac.
+2. **Baselines for a consumer** through Playwright's `toMatchSnapshot`, so they
    live in the consuming repo.
-4. **A second consuming app**: a TXST app other than carbon-svelte, with a
+3. **A second consuming app**: a TXST app other than carbon-svelte, with a
    handful of scenarios in its own repository. This is what shows sr-receipts
    is useful beyond the library it grew up with, and what its setup costs
    someone who did not build it.

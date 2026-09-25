@@ -1,6 +1,7 @@
 ---
 status: accepted
 date: 2026-09-21
+amended: 2026-09-25
 ---
 
 # Playwright is the runner, not the browser driver
@@ -56,12 +57,19 @@ and [`research/guidepup-playwright-dogwalk.md`](../../research/guidepup-playwrig
 6. **A third workspace package, `@sr-receipts/playwright`.** `@playwright/test`
    is a peer dependency, the host a dependency, and the guest an optional peer
    imported only by a VoiceOver project, so an NVDA-only consumer never
-   installs Guidepup.
+   installs Guidepup. The package exports `receiptsFixtures` for the
+   consumer's own `base.extend(receiptsFixtures)` rather than a ready-made
+   `test`, and imports only types from `@playwright/test`. A linked package
+   resolves its imports from where it really lives, so a runtime import of
+   `@playwright/test` loads a second copy, which Playwright refuses to run
+   with. (Amended 2026-09-25, from the first slice.)
 7. **Verdict mapping.** `run()` fails the test on findings by default and lists
    them, throws when the run broke, and returns the Receipt. `{ assert: false }`
    is for an investigation that wants the transcript whatever the verdict.
 8. **One Playwright project per reader**, configured as
-   `use: { receipts: { reader, url, token, baseURL } }`, with a
+   `use: { receiptsOptions: { reader, url, token, baseURL } }`, because a
+   Playwright option cannot share its name with the `receipts` fixture it
+   configures, with a
    `*.nvda.spec.ts` and `*.voiceover.spec.ts` convention. A scenario written for
    the other reader is a broken run, never a skip. The shipped configuration
    sets `workers: 1` and `retries: 0`, because a retry that turns a finding
@@ -70,6 +78,10 @@ and [`research/guidepup-playwright-dogwalk.md`](../../research/guidepup-playwrig
 9. **Timeouts are derived from the scenario**: an open budget plus a per-reader
    budget for each step, overridable. Starting guesses are 90 seconds to open,
    10 seconds a step on NVDA and 25 on VoiceOver. The first slice corrects them.
+   It measured, on NVDA, an open of 41 to 55 seconds including the reader's
+   start, and steps of 1.3 to 3.8 seconds with a 1 second settle; a six-step
+   test took 75 to 88 seconds against a derived 155. The guesses stand until a
+   suite with more than one scenario shows the spread.
 10. **The report** gets the transcript, the environment stamp and the
     `RunResult` JSON as attachments. Live `test.step` entries wait until the
     report is shown to need them.
@@ -78,7 +90,10 @@ and [`research/guidepup-playwright-dogwalk.md`](../../research/guidepup-playwrig
     host by. Fixture-file targets stay a runner concept.
 12. **Distribution is npm, eventually.** The first consumer is
     `txstate-etc/carbon-svelte`, linked by `file:`, uncommitted, with its own
-    `playwright.receipts.config.ts`. Whether the packages need a build step is
+    `playwright.receipts.config.ts`. A `file:` link is a symlink, and
+    Playwright compiles the linked TypeScript because its real path is outside
+    `node_modules`; an installed copy would be inside it, which is part of
+    what the build-step question below has to answer. Whether the packages need a build step is
     decided when publishing is real.
 13. **A simulated reader never produces a Receipt.** Guidepup's Virtual Screen
     Reader is a candidate for a third project with a real `page`, undecided and

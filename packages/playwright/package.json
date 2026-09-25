@@ -1,0 +1,19 @@
+{
+  "name": "@sr-receipts/playwright",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A receipts fixture for Playwright Test: ask a real screen reader from a consuming repo's own tests.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@sr-receipts/host": "0.1.0"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

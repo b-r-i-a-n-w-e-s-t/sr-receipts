@@ -60,12 +60,12 @@ node runner.ts "detail-v1-group-in-rowgroup.html :: voiceover-table-walk"
 ```
 
 > [!WARNING]
-> The target has completed real runs of `voiceover-table-walk` against one
-> fixture, on 2026-09-19. What is not yet measured is how repeatable its
-> snapshots are: that takes several runs of that scenario against one baseline.
-> Until then, a snapshot difference on VoiceOver may be the capture's rather
-> than the page's. Nothing has been run against an `http(s)` target, or with
-> more than one target in a queue.
+> `voiceover-table-walk` has matched its committed baseline on repeated runs
+> against one fixture, including three on 2026-09-23, and a live page served
+> over `http` has a baseline of its own. That is one scenario's worth of
+> evidence, so a snapshot difference on VoiceOver may still be the capture's
+> rather than the page's. Nothing has been run with more than one target in a
+> queue.
 
 A scenario must say `reader: "voiceover"` and is written in VoiceOver's
 commands, which are not NVDA's under other names. What the spike established:
@@ -122,8 +122,10 @@ commands, which are not NVDA's under other names. What the spike established:
   level of detail, not the same words: VO-F3 (`describeItem`) with the item's
   description, VO-Shift-T (`readTableRowAndColumnNumbers`) with the table's
   dimensions. That looked like a capture fault until the sentinel ruled capture
-  out. A scenario that wants the detail can ask twice on purpose. `voiceover-table-walk` exists to measure both. Until it has, prefer
-  `expect` and `checks` to exact snapshots for anything that matters.
+  out. A scenario that wants the detail can ask twice on purpose.
+- Until more scenarios than `voiceover-table-walk` have shown their snapshots
+  repeat, prefer `expect` and `checks` to exact snapshots for anything that
+  matters.
 
 Before VoiceOver starts, the target runs the doctor's checks and then proves two
 permissions the doctor cannot see, by sending Safari and System Events one
@@ -155,7 +157,7 @@ The AppleScript-control check reads `SCREnableAppleScript` from
 `~/Library/Group Containers/group.com.apple.VoiceOver/Library/Preferences/com.apple.VoiceOver4/default.plist`.
 Sequoia moved these preferences into that group container, so `defaults` can no
 longer read them. When the setting is off, Guidepup still starts, stops, and
-sends keystrokes — those go through System Events, not VoiceOver — but every
+sends keystrokes (those go through System Events, not VoiceOver), but every
 message to VoiceOver's own scripting dictionary fails: property reads with
 AppleScript `-1728` and commands with `-1708`. Capture therefore returns empty
 strings while control looks perfectly healthy, which is why the doctor checks
@@ -181,8 +183,8 @@ speaks the name of the heading it is choosing, so speech alone can hold the
 token while the cursor is still on the enclosing landmark.
 
 Two details of this sequence are specific to macOS 26. The Item Chooser is
-announced only as a generic VoiceOver menu — VoiceOver never speaks the words
-"Item Chooser" — so the adapter matches that announcement instead of the
+announced only as a generic VoiceOver menu (VoiceOver never speaks the words
+"Item Chooser"), so the adapter matches that announcement instead of the
 feature's name. And every wait in the sequence is bounded by an attempt count
 that reports the phrase VoiceOver actually spoke, because a stage timeout alone
 reports only elapsed time and hides why the sequence stalled.
@@ -190,11 +192,11 @@ reports only elapsed time and hides why the sequence stalled.
 It writes an ignored, timestamped `voiceover-runs/<run-id>/` directory even if
 startup, Safari control, navigation, capture, or cleanup fails:
 
-- `environment.json` — pinned environment declaration, read-only checks, failed
+- `environment.json`: pinned environment declaration, read-only checks, failed
   stage, and every VoiceOver start attempt
-- `speech.json` — complete captured VoiceOver phrase log available at cleanup
-- `cursor.json` — VoiceOver cursor text observed after heading navigation
-- `result.json` — pass/fail, original failed stage, cleanup outcomes, expected
+- `speech.json`: complete captured VoiceOver phrase log available at cleanup
+- `cursor.json`: VoiceOver cursor text observed after heading navigation
+- `result.json`: pass/fail, original failed stage, cleanup outcomes, expected
   token, error, and completion time
 
 A successful result is the required proof that Guidepup controlled real
@@ -218,17 +220,17 @@ between tries so a half-launched VoiceOver is not left behind and then waiting
 reader came up.
 
 **The delay is the part that works, not the retry.** Retrying immediately failed
-all three attempts every time, while a fresh run seconds later always succeeded
-— so the race needs macOS to finish tearing the reader down, not another
+all three attempts every time, while a fresh run seconds later always succeeded,
+so the race needs macOS to finish tearing the reader down, not another
 immediate attempt. With the settle delay, 8 of 8 consecutive runs passed, one of
 them by recovering on its second attempt. Shortening or removing the delay
 returns the whole retry to useless; measure before changing it.
 
 Two further properties make the retry safe to trust:
 
-- **Only this error is retried.** Anything else — a missing permission, a reader
-  that cannot start at all — fails on the first attempt. A passing result still
-  has to mean VoiceOver really was driven.
+- **Only this error is retried.** Anything else, such as a missing permission
+  or a reader that cannot start at all, fails on the first attempt. A passing
+  result still has to mean VoiceOver really was driven.
 - **Every attempt is disclosed.** `environment.json` records `startAttempts`,
   including the successful one, so a run that needed a retry says so instead of
   passing silently. Watch that field: if retries become common, the race has
@@ -240,7 +242,7 @@ Two further properties make the retry safe to trust:
 npm run voiceover:capture-probe
 ```
 
-The probe is the smallest thing that exercises capture — no Safari, no fixture,
+The probe is the smallest thing that exercises capture: no Safari, no fixture,
 no Item Chooser, only start, one cursor move, and the capture queries. Use it
 when the smoke reports empty speech, to separate a capture problem from a
 navigation problem. It is what identified `SCREnableAppleScript` as the cause of
@@ -255,9 +257,9 @@ the direct reading distinguishes a swallowed wrapper result from VoiceOver
 exposing no `last phrase` object at all.
 
 The probe prints one redacted JSON report to stdout, writes no artifacts, and
-like the smoke it starts and stops VoiceOver — so it needs the same manual
+like the smoke it starts and stops VoiceOver, so it needs the same manual
 authorization above. See
-[`../research/guidepup-voiceover-capture-macos26.md`](../research/guidepup-voiceover-capture-macos26.md)
+[`research/guidepup-voiceover-capture-macos26.md`](../../../research/guidepup-voiceover-capture-macos26.md)
 for what upstream Guidepup does and does not document about this failure.
 
 > [!IMPORTANT]

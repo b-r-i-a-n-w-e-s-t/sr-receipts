@@ -1,23 +1,25 @@
 # @sr-receipts/guest
 
-Drives NVDA and Firefox to capture screen-reader transcripts, so an
-accessibility question can be answered with evidence rather than recollection.
+The guest half of sr-receipts: the side that runs a real screen reader on its
+own interactive desktop and records what it said. The host half,
+[`@sr-receipts/host`](../host/README.md), connects to this package's daemon
+from the Mac.
 
-This is the guest half of sr-receipts: the side that runs a real screen reader
-on its own interactive desktop, behind an authenticated daemon. The host half,
-[`@sr-receipts/host`](../host/README.md), connects to that daemon from the Mac.
+It holds two Execution Targets: NVDA with headed Firefox on the Windows Guest
+Rig, which is what most of this document is about, and the bundled
+[VoiceOver with Safari on a local Mac](voiceover/README.md).
 
-Two Execution Targets run transcript scenarios: NVDA with Firefox on the
-Windows Guest Rig, which is what most of this document describes, and the
-bundled [VoiceOver with Safari on a local Mac](voiceover/README.md). A scenario
-is written for one reader, in that reader's commands, and says which.
+This README is about how the rig works and why. For the rest:
+
+- what sr-receipts is for, and how a request flows through it:
+  [the repository README](../../README.md)
+- writing scenarios, and what fails a run:
+  [`docs/scenarios.md`](../../docs/scenarios.md)
+- setting up, running and driving the Windows Guest Rig:
+  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md)
 
 Commands below run from this directory, `packages/guest`, after `npm ci` at the
 repository root.
-
-Runs inside a Windows 11 **ARM64** guest under UTM on a Mac. Targets are either
-local fixtures or `http(s)` URLs — the URL form is how a Vite dev server on the
-host gets driven from inside the guest.
 
 ## Four things that are not obvious
 
@@ -26,14 +28,14 @@ These cost real time to discover. They are why this repo exists.
 1. **A run must be started by a scheduled task, not over SSH.** An SSH session
    has no interactive desktop, so NVDA has no foreground window to describe.
    Tasks `nvda-smoke`, `nvda-probe` and `nvda-run` are registered with an
-   interactive logon type so they land in the logged-in console session — see
-   `tasks/register.ps1`. The same applies to the daemon, which is why it is
-   started from a terminal on that desktop rather than being a service: it is
-   reachable over the network and still has to run on the console.
+   interactive logon type so they land in the logged-in console session (see
+   `tasks/register.ps1`). The same applies to the daemon, which is why it runs
+   from a terminal or a logon task on that desktop rather than as a service: it
+   is reachable over the network and still has to run on the console.
 
 2. **Do not call `windowsActivate` unconditionally after launching Firefox.**
    Its VBScript ends in `SetForegroundWindow`, which Windows refuses from a
-   non-elevated process while an elevated window holds the foreground — and the
+   non-elevated process while an elevated window holds the foreground, and the
    guest desktop runs an elevated VS Code and PowerShell. About half the time it
    leaves focus on Firefox's hidden menu bar: NVDA reports `menu, off screen`
    while the page reports `document.activeElement === body`. The title still
@@ -56,11 +58,11 @@ These cost real time to discover. They are why this repo exists.
 ## Layout
 
 ```
-lib/          the rig core — everything above, encoded once
+lib/          the rig core: everything above, encoded once
   session.ts    NVDA lifecycle, openTarget(): launch, focus guard, mode guard
-  guard.ts      ensureReadyToNavigate() — points 2, 3 and 4
+  guard.ts      ensureReadyToNavigate(): points 2, 3 and 4
   firefox.ts    hermetic profile, launch
-  speech.ts     SpeechLog — reads NVDA's cumulative log without dropping phrases
+  speech.ts     SpeechLog: reads NVDA's cumulative log without dropping phrases
   target.ts     fixture-or-URL resolution, provenance, settle timings, queue parsing
   scenario.ts   the scenario authoring format, its compiler and loader
   steps.ts      step specs ("perform:x" / "press:y") and the step loop
@@ -70,21 +72,21 @@ lib/          the rig core — everything above, encoded once
   run.ts        a whole run as a function: executeRun(), and runs/<runId>/
   execution-target.ts  the seam between that run and any one screen reader
   nvda-target.ts       NVDA with headed Firefox, as an Execution Target, behind WindowsDesktop
-  voiceover-target.ts  the bundled VoiceOver with Safari, as an Execution Target
-  daemon.ts     the run layer behind a port — routing, auth, one run at a time
+  voiceover-target.ts  the bundled VoiceOver with Safari, as an Execution Target, behind VoiceOverDesktop
+  daemon.ts     the run layer behind a port: routing, auth, one run at a time
   stamp.ts      the environment block at the head of every transcript
   system.ts     delay, taskkill, powershell, git blob hash, window list
 
-scenarios/    what to ask a target — no harness knowledge, and vice versa
+scenarios/    what to ask a target: no harness knowledge, and vice versa
 snapshots/    what each target said last time, committed
 runner.ts     the command line: parse a queue, run it, print it, exit
 daemon.ts     the daemon's entry point: wire the server to the rig and listen
 probe.ts      reads probe.json + probe-fixture.txt, writes probe-out.txt
 smoke.ts      one target, four steps: does the rig work on this machine right now?
-tasks/        register.ps1 — the scheduled tasks, and the daemon's firewall rule
+tasks/        register.ps1: the scheduled tasks, and the daemon's firewall rule
 fixtures/     generated by build-fixtures.mjs; committed so their hashes mean something
 provisioning/ the idempotent Provisioner for the Windows Guest Rig
-voiceover/    VoiceOver's mechanics: Safari control, launch retry, doctor, smoke, capture probe
+voiceover/    VoiceOver's mechanics: Safari control, launch retry, sentinel, hints, doctor, smoke, capture probe
 test/         the parts that need no desktop
 ```
 
@@ -96,121 +98,9 @@ this package re-exports from `lib/types.ts`.
 runner hands it `voiceOverTarget` on macOS and `nvdaTarget` everywhere else.
 Nothing in the run, the verdict, the snapshots or the artifacts knows which
 Execution Target it was given: a run started over HTTP writes the same
-`runs/<runId>/` — transcripts, `results.json`, `DONE` — as one started by the
+`runs/<runId>/` (transcripts, `results.json`, `DONE`) as one started by the
 `nvda-run` task, so nothing that reads a run's output has to know which asked
 for it.
-
-## Scenarios
-
-A scenario is what to ask a target. The harness knows nothing about any of them,
-so a consuming repo can bring its own without forking the rig:
-
-```js
-// a11y/scenarios/data-table.mjs
-export default {
-  reader: 'nvda',                        // required: whose commands these are
-  name: 'data-table',
-  description: 'Is every cell reachable and correctly framed?',
-  modeProbes: ['moveToNextTable'],       // how to prove browse mode here
-  steps: [
-    { label: 'title bar', perform: 'reportTitle' },
-    { label: 'T table framing', perform: 'moveToNextTable' },
-    { label: 'enter the table', press: 'ArrowDown' },
-    { label: 'ctrl+alt+right, move', perform: 'moveToNextColumn', repeat: 11 },
-    { label: 'expand row {n}', press: 'Enter', repeat: 3, settle: 1500 },
-  ],
-}
-```
-
-- `reader` is `'nvda'` or `'voiceover'`, and is required. The two readers share
-  17 command names out of several hundred and navigate differently, so a
-  scenario is written for one of them, and an Execution Target refuses the
-  other's before it opens anything. To ask both readers the same question, write
-  two scenarios with different names against the same fixture: a snapshot is
-  named for its fixture and scenario, so the names are what keep the two
-  baselines apart. `expect` and `checks` mean the same thing for both.
-- `perform` runs one of the reader's own commands (it needs the reader's
-  modifier, which `press` cannot express); `press` sends a key.
-- `repeat` expands to numbered steps — `{n}` is substituted where it appears,
-  otherwise the number is appended.
-- `settle` waits before reading the speech log, for a step whose effect is not
-  instant. Most steps do not need it.
-- `modeProbes` tells the guard how to prove browse mode on this kind of page.
-  Default is table → heading → landmark, so a page with any of those works
-  untouched. NVDA only: VoiceOver has no browse mode, and a VoiceOver scenario
-  that sets this does not compile.
-- `window: { width, height }` sizes the browser before the target opens, for a
-  responsive component whose question only exists at a particular width. Firefox
-  has no flag for this (`--window-size` sizes a *screenshot*, and `-width` /
-  `-height` are gone), so the rig writes `xulstore.json` into the hermetic
-  profile, which is where Firefox persists window geometry. Omit it and the
-  browser opens at whatever size it likes, as every run did before this existed.
-
-Point the rig at one by name or path:
-
-```
-node runner.ts --scenario survey
-node runner.ts "http://192.168.64.1:5173/docs/column-list :: ./a11y/scenarios/data-table.mjs"
-```
-
-Scenarios are validated structurally by `npm test` and their command names are
-checked before NVDA opens the first target, so a typo costs a second rather than
-a three-minute run ending in silences that read exactly like real ones.
-
-Four ship with the rig: `column-list-table` (this rig's current investigation),
-`column-list-header-naming` and `column-list-overflow-header` (Q4 of that
-investigation, the second of which is the one that sizes its window), and
-`survey`, which assumes nothing about the page and is the one to point at a
-component you have not tested before.
-
-## Failing a build
-
-A run is judged, and the verdict is the first thing in the transcript. Three
-things can fail it, and they answer different questions.
-
-**Step expectations** say what must be true of an announcement *whatever the
-target*. They live in the scenario, because they are the scenario's intent:
-
-```js
-{ label: 'T table framing', perform: 'moveToNextTable',
-  expect: { matches: 'table, with \\d+ rows and \\d+ columns' } }
-```
-
-Matchers are `includes`, `matches`, `equals`, `silent`, and `not` around any of
-them. Several in one object all have to hold.
-
-**Scenario checks** assert across the whole transcript rather than one step,
-which is how the question this rig was built for gets asked:
-
-```js
-checks: [
-  { name: 'detail heading announced once, not twice',
-    matches: 'Additional Details', atMost: 1 },
-]
-```
-
-**Snapshots** hold the exact wording one target produced. Exact wording does
-*not* belong in a scenario — `equals: 'Historical Structures, table, with 16
-rows'` would make that scenario runnable against one fixture and nothing else.
-It belongs in `snapshots/<target>--<scenario>.json`, committed.
-
-A snapshot holds only `label -> heard`. The environment stamp, timestamps, the
-run id and the focus-guard block are all excluded, because a snapshot that fails
-on every Firefox update is a snapshot nobody reads. The stamp is still written
-into the transcript and recorded inside the snapshot, because it is what
-*explains* a diff — and a diff is not automatically a regression. A Firefox
-upgrade genuinely did change a toolbar announcement between 155.0.1 and 156.0
-during this rig's development. When a diff is right, accept it:
-
-```bash
-node runner.ts --update-snapshots
-```
-
-A missing snapshot is a baseline, not a failure: the first run of a new target
-records one and passes. Mark a step `snapshot: false` to record it without
-asserting it. Firefox's address bar is always kept out: it reads the target's
-location aloud, the checkout path or the host's address, and that is a fact
-about the machine rather than the page. The rest of the toolbar stays in.
 
 ## When something steals the foreground
 
@@ -224,8 +114,8 @@ to restart" dialog.
 
 The sequence now re-checks focus every `FOCUS_CHECK_EVERY` steps (5), and on the
 last step regardless, so the tail of a transcript is known-good rather than
-assumed-good. The check is `reportTitle` — NVDA+T, which NVDA intercepts
-globally — so it reports whatever has the foreground without typing anything
+assumed-good. The check is `reportTitle` (NVDA+T, which NVDA intercepts
+globally), so it reports whatever has the foreground without typing anything
 into it, and the transcript names the culprit:
 
 ```
@@ -240,105 +130,36 @@ Three consequences worth knowing:
   the caret position the rest of the sequence depends on is gone. The next
   target gets a fresh launch and a fresh guard, which is the real recovery.
 - **Snapshot comparison is skipped**, and no baseline is written. A truncated run
-  would otherwise report every remaining step as removed — 49 diffs burying the
-  one line that explains them.
+  would otherwise report every remaining step as removed: 49 differences burying
+  the one line that explains them.
 - **The bound is `every`, not zero.** Detection happens after a step, so up to
   five keystrokes can still reach the wrong window. That is harmless for
-  navigation keys; a scenario that sends activating keys like `Enter` should pass
-  a smaller interval.
+  navigation keys; a scenario that sends activating keys like `Enter` sets
+  `focusCheckEvery` lower.
 
-If runs keep failing this way, check for a pending update reboot — it raises a
-dialog that will take the foreground again and again until you restart:
-
-```bash
-powershell -NoProfile -Command "Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'"
-```
-
-Exit codes: **0** all requests passed, **1** at least one failed, **2** the run
-itself broke. The distinction matters to CI — `1` is a finding, `2` is an
-unanswered question. Machine-readable results land in
-`runs/<runId>/results.json`.
-
-## Running
-
-```
-npm test                          # pure logic, runs anywhere, no NVDA needed
-Start-ScheduledTask nvda-smoke    # live check that the rig works at all
-Start-ScheduledTask nvda-probe    # iterate on a key sequence
-Start-ScheduledTask nvda-run      # the queue
-npm run daemon                    # the port, for the host to drive
-```
-
-For the approved Windows 11 ARM64 UTM guest, follow the manual bootstrap and
-idempotent Provisioner in [`provisioning/README.md`](provisioning/README.md).
-It is the supported path to prove real NVDA plus headed Firefox on the guest;
-the optional host-URL probe is diagnostic only.
-
-`npm run smoke` and friends exist too, but only work if the shell you are in is
-already on the interactive desktop. The scheduled task is the reliable path.
-
-On a machine that has never run the rig, register the tasks first — once, from
-the guest desktop:
-
-```
-powershell -ExecutionPolicy Bypass -File tasks\register.ps1
-```
-
-The daemon is deliberately **not** registered. Start it by hand from a terminal
-on the guest desktop when you want a session of host-driven work; it prints the
-URL and token to use and holds the port until you close the window. Nothing has
-to be installed, elevated or left running between sessions.
-
-Two switches for when that is not enough. `-Firewall` opens the port so a
-hand-started daemon is reachable from the host — without it, Windows raises its
-own "Allow access?" prompt the first time node binds, and this rig has strong
-opinions about windows that take the foreground. `-Daemon` additionally
-registers `nvda-daemon` at logon, so the port comes back after a reboot on its
-own. That is the CI shape; a person mostly wants the terminal.
-
-Copy `queue.example.txt` to `queue.txt` and `probe.example.json` to `probe.json`
-to get started; both are gitignored, being scratch.
+If runs keep failing this way, check for a pending update restart; see
+[`docs/operating-the-rig.md`](../../docs/operating-the-rig.md#before-a-run).
 
 ## Driving the rig from the host
 
-Only needed because the component library under test lives on the Mac. If you
-run its dev server *inside* the guest instead, none of this applies: point a
-queue line at `http://localhost:5173/...` and use `node runner.ts` from a
-terminal on the guest desktop. `resolveTarget` passes any `http(s)` target
-through unchanged, so the rig neither knows nor cares which side of the boundary
-the server is on.
+Only needed because the app under test lives on the Mac. If its dev server runs
+*inside* the guest instead, none of this applies: point a queue line at
+`http://localhost:5173/...` and use `node runner.ts` from a terminal on the
+guest desktop. `resolveTarget` passes any `http(s)` target through unchanged, so
+the rig neither knows nor cares which side of the boundary the server is on.
 
-What the daemon buys is not running the rig — it is asking the question from the
-machine where the library actually lives. Start it in the guest:
-
-```
-npm run daemon
-```
-
-It prints the URL and token, and holds the port until the window closes. Then,
-from the host:
-
-```js
-import { createClient } from "@sr-receipts/host";
-
-const rig = createClient({ url: process.env.RIG_URL, token: process.env.RIG_TOKEN });
-
-const report = await rig.run([{ target: "http://192.168.64.1:5173/docs/column-list",
-                                scenario: "./a11y/scenarios/data-table.mjs" }], {
-  onEvent: (event) => { if (event.type === "step") console.log(event.label, event.heard); },
-});
-
-if (!report.ok) process.exit(1);
-console.log(report.results[0].transcript.text);
-```
+What the daemon buys is not running the rig: it is asking the question from the
+machine where the app actually lives. How to start it and connect is in
+[`docs/operating-the-rig.md`](../../docs/operating-the-rig.md#driving-the-rig-from-the-mac);
+the client is in [`@sr-receipts/host`](../host/README.md).
 
 `POST /runs` streams: one NDJSON frame per event, ending with the report. That
 is not decoration. A run takes minutes, and a request that sends nothing for
 minutes is what sockets and proxies kill; a frame per step keeps the connection
 busy and hands the host live progress for free. It also covers the one stretch
-the rig was previously silent through — `openTarget` spends between 17 and 45
+the rig was previously silent through: `openTarget` spends between 17 and 45
 seconds launching Firefox and running the guards, and `request-started` and
-`opened` now bracket it, so a slow open is distinguishable from a hung one.
+`opened` bracket it, so a slow open is distinguishable from a hung one.
 
 Three behaviours worth knowing before you build on it:
 
@@ -356,7 +177,7 @@ Three behaviours worth knowing before you build on it:
 
 | | |
 |---|---|
-| `POST /runs` | `{ requests }` or `{ queue }` — the text of a queue file, parsed by the same parser — plus `scenario` and `snapshots` (`"compare"`, the default, `"update"` or `"off"`). Streams NDJSON. |
+| `POST /runs` | `{ requests }` or `{ queue }` (the text of a queue file, parsed by the same parser), plus `scenario` and `snapshots` (`"compare"`, the default, `"update"` or `"off"`). Streams NDJSON. |
 | `GET /health` | `{ ok, busy, runId, rig }`, where `rig` is the environment stamp. |
 | `GET /runs/:runId` | that run's `results.json`; `202` if it is still going |
 | `GET /runs/:runId/events` | the event stream, replayed |
@@ -368,55 +189,12 @@ to start without a token rather than falling back to open. This is not
 ceremony: a scenario reference is a path the rig `import`s, so anything that can
 reach the port can run code in the guest.
 
-## Reading a transcript
+## Tests
 
-Every transcript starts with the exact Windows, Firefox, NVDA, guidepup and Node
-builds that produced it, plus the git blob hash of the fixture's bytes. Without
-that block a diff between two runs cannot be attributed — NVDA's phrasing and
-Firefox's accessibility tree both change between releases. A real example: a
-toolbar announcement changed wording between Firefox 155.0.1 and 156.0, and the
-stamp is the only reason that was identifiable as environment drift rather than
-a regression in the page under test.
+```bash
+npm test
+```
 
-`(silence)` is written out explicitly, because a blank line in a transcript is
-indistinguishable from a formatting accident.
-
-## Where this is going
-
-- **Phase 5** — done: `provisioning/provision.ps1` takes a manually installed
-  Windows 11 ARM64 guest to a working rig in one command, installing the
-  reviewed [`runtime-manifest.json`](provisioning/runtime-manifest.json) and
-  proving it with a real NVDA and headed Firefox run. See
-  [`provisioning/README.md`](provisioning/README.md).
-- **Phase 6**: done. Split into the private workspace packages
-  `@sr-receipts/guest` (this one) and `@sr-receipts/host`, with the Execution
-  Target seam in `lib/execution-target.ts`.
-- **Phase 7**: done. VoiceOver with Safari runs transcript scenarios as a second
-  Execution Target, with one committed baseline.
-
-Next is letting a consuming repo ask both readers from its own Playwright
-tests. Playwright is the runner and never the browser driver, because it cannot
-drive Safari or release Firefox; the decisions, their costs and what was
-deferred are in
-[ADR 0001](../../docs/adr/0001-playwright-is-the-runner-not-the-browser-driver.md).
-In order:
-
-1. Two checks on real desktops: the Windows Guest Rig since `pathToFileURL`
-   replaced the hand-built `file:///` URL in `lib/target.ts`, and VoiceOver
-   against an `http(s)` target with more than one target in the queue.
-2. Scenarios accepted inline over the wire, then a first Playwright slice on
-   NVDA against `carbon-svelte`'s `/demo/va`: a `receipts` fixture, no
-   snapshots, measured timeouts.
-3. The VoiceOver project in the same fixture, in-process.
-4. Baselines for a consumer through Playwright's `toMatchSnapshot`.
-5. A VoiceOver twin of `detail-placement` on the same seven fixtures, which is
-   the first cross-reader comparison.
-6. A minimal reproduction of the `readTableColumnHeader` misfire, and a
-   measurement of where a VoiceOver step's 5 to 16 seconds go.
-7. A prototype of Guidepup's Virtual Screen Reader as a third Playwright
-   project, then a decision on whether it belongs. Its output is never a
-   Receipt.
-
-Alongside: the launch-race section of `voiceover/README.md` cites upstream issue
-#101, which has since been closed in favour of #113, and the VoiceOver Mac stays
-on macOS 26 until Guidepup ships a VoiceOver asset for macOS 27.
+Everything that needs no desktop: scenario compilation, the verdict, snapshots,
+the daemon and the host's client against a fake target, both Execution Targets
+against fake desktops, and the Provisioner's health report.

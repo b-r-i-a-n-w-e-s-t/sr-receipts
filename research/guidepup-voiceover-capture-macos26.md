@@ -95,7 +95,7 @@ Changing undocumented VoiceOver preference keys, opening Caption Panel, modifyin
 
 ### No known fix
 
-For the exact observed combination—macOS 26.6.2, bundled VoiceOver, Safari 26.6.2, Guidepup 0.34.0, successful start/control but `content of last phrase` repeatedly returning `-1728`—the primary-source record contains no released fix, documented alternate API, or confirmed preference workaround. The strongest upstream direction is open issue #129's proposed event-driven speech-capture integration ([#129](https://github.com/guidepup/guidepup/issues/129)); it is not available as a Guidepup release according to the 0.34.0 release notes ([release `0.34.0`](https://api.github.com/repos/guidepup/guidepup/releases/tags/0.34.0)).
+For the exact observed combination (macOS 26.6.2, bundled VoiceOver, Safari 26.6.2, Guidepup 0.34.0, successful start/control but `content of last phrase` repeatedly returning `-1728`), the primary-source record contains no released fix, documented alternate API, or confirmed preference workaround. The strongest upstream direction is open issue #129's proposed event-driven speech-capture integration ([#129](https://github.com/guidepup/guidepup/issues/129)); it is not available as a Guidepup release according to the 0.34.0 release notes ([release `0.34.0`](https://api.github.com/repos/guidepup/guidepup/releases/tags/0.34.0)).
 
 ## Recommendation
 

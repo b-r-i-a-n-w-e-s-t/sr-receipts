@@ -75,7 +75,7 @@ Continue shipping portable scenario files for the current deterministic NVDA tra
 
 ### D. Two-tier tests (recommended product boundary)
 
-Offer C for real-browser/reader E2E and retain the existing scenario runner for focused transcript investigations. Use Guidepup's Virtual Screen Reader package for fast DOM-level/unit feedback where appropriate, but label it as complementary—not evidence from real NVDA. Reserve the single interactive guest rig for serialized real-reader tests. This aligns the product boundaries with the upstream distinction between Virtual Screen Reader and real screen-reader testing.
+Offer C for real-browser/reader E2E and retain the existing scenario runner for focused transcript investigations. Use Guidepup's Virtual Screen Reader package for fast DOM-level/unit feedback where appropriate, but label it as complementary, not evidence from real NVDA. Reserve the single interactive guest rig for serialized real-reader tests. This aligns the product boundaries with the upstream distinction between Virtual Screen Reader and real screen-reader testing.
 
 ## Recommendation
 

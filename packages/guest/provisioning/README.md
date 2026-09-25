@@ -32,13 +32,13 @@ over SSH, as a service, or while the desktop is locked. Re-running is safe: the
 script verifies installed versions, uses `npm ci`, invokes Guidepup's `setup`
 then `install nvda` lifecycle, and re-registers the required limited,
 interactive entry points. The proof itself is always launched through the
-unelevated `nvda-smoke` scheduled task—not the possibly elevated provisioning
+unelevated `nvda-smoke` scheduled task, not the possibly elevated provisioning
 PowerShell process.
 
 ## Runtime stages
 
-Each manifest component is a named stage — `architecture`, `node`, `firefox`,
-`packages`, `guidepup-nvda`, `tasks` — and every outcome is recorded in the
+Each manifest component is a named stage (`architecture`, `node`, `firefox`,
+`packages`, `guidepup-nvda`, `tasks`), and every outcome is recorded in the
 report's `runtime` list. A stage's detail is read back off the machine, not
 claimed: the installed Node and Firefox versions, the `@guidepup/guidepup`
 version `npm ci` actually left in `node_modules`, the NVDA asset Guidepup
@@ -104,5 +104,5 @@ The report's `hostUrlProbe` records that result independently. Its failure does
 not change the Provisioner's exit status or `ok` verdict, and
 `test/provisioning.test.ts` holds that separation. The probe is the reporter's,
 so the PowerShell fallback report records `attempted: false` while still naming
-the `url` you asked about and why it went unprobed — a rig with no Node cannot
+the `url` you asked about and why it went unprobed. A rig with no Node cannot
 run the probe, which is not the same as nobody having asked for one.

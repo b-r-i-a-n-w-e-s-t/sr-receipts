@@ -89,7 +89,7 @@ This is issue #3's second acceptance criterion: rerunning confirms or repairs a
 guest instead of requiring manual cleanup.
 
 `npm ci` does reinstall `node_modules` from the committed lockfile on every
-run. That is deliberate — it is what makes the installed tree match the
+run. That is deliberate: it is what makes the installed tree match the
 reviewed manifest rather than whatever a previous run left behind.
 
 ## Third run: the host URL probe does not gate
@@ -113,9 +113,9 @@ guest-to-Mac reachability but never gates provisioning". The Provisioner exits
 That run also showed the probe's diagnosis was too thin. Node's `fetch` reports
 every network failure as `fetch failed` and hides the reason in `cause`, so the
 report could not distinguish "no dev server is running" from "the guest cannot
-route to the Mac at all". The probe now appends the cause — a refused
+route to the Mac at all". The probe now appends the cause (a refused
 connection reads `fetch failed: connect ECONNREFUSED 192.168.64.1:5173`, an
-unroutable host reads `The operation was aborted due to timeout` — and
+unroutable host reads `The operation was aborted due to timeout`), and
 `test/provisioning.test.ts` covers reachable, served-error, and refused URLs
 against a local server.
 

@@ -1,118 +1,88 @@
 # sr-receipts
 
-The product that runs real screen readers against web pages, on the desktops
-those readers live on, and keeps what each one said as evidence. Formerly named
-Dogwalk.
+The product that lets a developer drive real screen readers from the
+Playwright tests of the app they are working on, on the desktops those readers
+live on, and keeps what each one said as evidence. Formerly named Dogwalk.
 
 ## Language
 
 ### Where things run
 
 **Host**:
-The machine a developer works on, and the `@sr-receipts/host` package that
-connects from it to a Guest's daemon. It owns the wire protocol and knows
-nothing about any screen reader.
+The machine a developer works on, where their Playwright tests run, and the
+`@sr-receipts/host` package that reaches a Guest's daemon from it. It owns the
+wire protocol and the Reader Session interface, and knows no reader's commands.
 
 **Guest**:
 The side that runs a screen reader on its own interactive desktop, and the
-`@sr-receipts/guest` package. It holds every Execution Target, including the
-local VoiceOver one, so "guest" means the reader's side of the wire rather than
-a virtual machine.
+`@sr-receipts/guest` package. It holds the daemon, the guards, and the
+VoiceOver session, so "guest" means the reader's side rather than a virtual
+machine.
 _Avoid_: VM (for the Guest as a whole)
 
 **Windows Guest Rig**:
-The supported Windows 11 ARM64 virtual machine operated with UTM on a Mac, which
-runs NVDA with headed Firefox.
-_Avoid_: the VM, the Windows box
+A Windows 11 ARM64 virtual machine operated with UTM on a developer's Mac,
+which runs NVDA with headed Edge. Each developer has their own.
+_Avoid_: the VM, the Windows box, shared rig
 
 **Provisioner**:
 The idempotent setup process that turns an approved Windows Guest Rig into a
-provisioned rig after Windows' unavoidable first-run and activation steps.
+provisioned rig after Windows' unavoidable first-run and activation steps, and
+registers the daemon to start at logon.
 
 **Runtime Manifest**:
-The reviewed compatibility record of the exact runtime components installed by
-the Provisioner.
-
-**Execution Target**:
-One screen reader with its browser on its own desktop, which executes a
-Scenario and produces its observed speech: NVDA with Firefox on the Windows
-Guest Rig, or VoiceOver with Safari on a Mac.
-_Avoid_: target (on its own), reader (when the browser and desktop are meant too)
+The reviewed compatibility record of the exact runtime components installed
+by the Provisioner, including the Playwright version a consumer must match.
 
 ### Asking a question
 
-**Target**:
-The page a Run Request asks about: a Fixture, or any `http(s)` URL.
-_Avoid_: using "target" for an Execution Target
+**Reader Session**:
+One screen reader, started for one test, behind the one interface a test
+uses: Guidepup's method names, plus entering a page and capturing a page
+action. VoiceOver in process on a Mac and NVDA through the Guest's daemon are
+the two implementations.
+_Avoid_: Execution Target (retired), driver, target
+
+**Browser Server**:
+The Playwright browser server the Guest's daemon launches beside NVDA, which a
+test's `page` drives through Playwright's own `connectOptions`.
+
+**Entry**:
+Putting a Reader Session on a page's content and proving it, before a test
+asks anything. On NVDA it is the Focus Guard; on VoiceOver it is the Item
+Chooser sequence returning and the first item having text.
+
+**Focus Guard**:
+The proof, at Entry on NVDA, that keystrokes will reach the page's content:
+the browser is in front, focus is in the document, and browse mode is on,
+each shown by behaviour rather than assumed.
+
+**Capture Window**:
+The span during which a page action's speech is recorded, opened before the
+action and closed after it. On the wire it is a pair of routes.
 
 **Fixture**:
-A committed HTML page in the Guest, built to isolate one question, whose bytes
-are hashed into every Transcript that uses it.
+A committed HTML page in the Guest, used by the smoke to prove the rig without
+any app.
 
-**Scenario**:
-What to ask a Target: a sequence of Steps written in one reader's commands, with
-the Expectations and Checks that judge the answers.
-_Avoid_: test, script
-
-**Step**:
-One reader command or key press in a Scenario, and the announcement it draws.
-
-**Run Request**:
-One Target paired with one Scenario.
-_Avoid_: job
-
-**Run**:
-One or more Run Requests executed in turn on one Execution Target, identified by
-the time it started.
-
-**Queue**:
-A list of Run Requests written as text, one `target :: scenario` per line.
-
-### Evidence and judgement
+### Evidence
 
 **Transcript**:
-The human-readable record of one Run Request: the Environment Stamp, the guards'
-findings, and what the reader said at each Step.
+Every call to a Reader Session and its answer, one line each, from start to
+stop, with silence named. Attached to the test.
 
 **Environment Stamp**:
 The exact operating system, browser, reader and tool builds (and reader
 settings) that produced a Transcript, which is what explains a difference
-between two runs.
+between two runs. Attached to the test.
 _Avoid_: environment block, rig info
 
 **Receipt**:
-What one Run Request to a real screen reader produced: the Verdict, the
-Transcript, the Environment Stamp, and what was heard at each Step. A simulated
-reader never produces one.
+What one test to a real screen reader leaves behind: its Transcript, its
+Environment Stamp, and Playwright's own report and trace. A simulated reader
+never produces one.
 _Avoid_: result (for a simulated reader's output)
 
-**Expectation**:
-What must be true of one Step's announcement on any Target.
-
-**Check**:
-What must be true across a whole Transcript, such as how many announcements
-match a pattern.
-
-**Baseline**:
-What a Run is compared with: the words one Execution Target said for one Target
-and Scenario, accepted as right.
-_Avoid_: golden, expected output
-
-**Snapshot**:
-The Guest's committed file form of a Baseline.
-
-**Verdict**:
-The outcome of a Run Request or a Run: PASS, FAIL (a finding about the page), or
-broke (the question went unanswered).
-
-**Focus Guard**:
-The proof, before any Step runs, that keystrokes will reach the Target's page
-and not some other window.
-
-**Focus Watch**:
-The repeated check during a Run that nothing has taken the foreground since the
-Focus Guard passed.
-
-**Baseline Identity**:
-The compatibility identity that determines whether an observed accessibility
-transcript may be compared with a committed baseline.
+**Smoke**:
+The Guest's own proof that the rig works right now: NVDA, Edge, the Focus
+Guard and quick navigation on a Fixture, run by the Provisioner.

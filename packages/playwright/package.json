@@ -1,8 +1,8 @@
 {
   "name": "@sr-receipts/playwright",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A receipts fixture for Playwright Test: ask a real screen reader from a consuming repo's own tests.",
+  "description": "A reader fixture for Playwright Test: drive a real screen reader beside page from a consuming repo's own tests.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -11,9 +11,15 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "@sr-receipts/host": "0.1.0"
+    "@sr-receipts/host": "0.2.0"
   },
   "peerDependencies": {
-    "@playwright/test": "^1.50.0"
+    "@playwright/test": "^1.63.0",
+    "@sr-receipts/guest": "0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@sr-receipts/guest": {
+      "optional": true
+    }
   }
 }

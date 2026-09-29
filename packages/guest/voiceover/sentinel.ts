@@ -18,16 +18,20 @@
  * sentinel is stripped; a repeated announcement differs from the sentinel and
  * is recorded whole.
  *
- * The sentinel also has to reach Guidepup's own log, or Guidepup keeps
- * comparing against the previous announcement. A captured press of Control on
- * its own does that: Control is what VoiceOver uses to stop speaking, so it
- * also cuts the sentinel short, and with `capture: "initial"` Guidepup reads
- * `last phrase` once rather than waiting for it to settle. Whether it reads the
- * sentinel or an empty string, neither equals a real announcement.
+ * Guidepup notices the sentinel on its own: it is a new phrase to the next
+ * command's polling, so a silent command records only the sentinel, and a
+ * spoken one records the sentinel joined to the announcement with ". ".
+ *
+ * The sentinel used to be followed by a captured press of Control, to cut it
+ * short and put it in Guidepup's log. On 2026-09-26, under Playwright's
+ * WebKit, that press made VoiceOver drop the next announcement: a live region
+ * announced by a page action and every typed character were recorded as the
+ * sentinel alone. With the `output` command alone, or with no sentinel, the
+ * page action's announcement was heard; with the press alone it was not.
+ * Why the press has that effect was not established.
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { MacOSKeyCodes, voiceOver } from "@guidepup/guidepup";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,10 +40,9 @@ export const SENTINEL = "receipts mark";
 
 const LEADING_SENTINEL = new RegExp(`^${SENTINEL}(?:\\. |$)`);
 
-/** Have VoiceOver speak the sentinel, and have Guidepup take note of it. */
+/** Have VoiceOver speak the sentinel. */
 export async function speakSentinel(): Promise<void> {
   await execFileAsync("osascript", ["-e", `tell application "VoiceOver" to output ${JSON.stringify(SENTINEL)}`]);
-  await voiceOver.perform({ keyCode: MacOSKeyCodes.Control }, { capture: "initial" });
 }
 
 /** The sentinel, and the ". " Guidepup joins it on with, taken off the front. */

@@ -1,10 +1,10 @@
 # sr-receipts
 
-Receipts for what a screen reader actually said. sr-receipts runs a real screen
-reader against a real web page, in the browser that reader's users actually
-use, and records every word as evidence. Scenarios decide whether what it said
-is right, committed baselines catch it when that changes, and each result says
-exactly which reader, browser and operating system produced it.
+Receipts for what a screen reader actually said. sr-receipts lets the
+Playwright tests of the app you are working on drive a real screen reader,
+NVDA or VoiceOver, beside Playwright's own `page`, and keeps every word the
+reader said as evidence, stamped with the exact reader, browser and operating
+system that produced it.
 
 ## Why
 
@@ -16,122 +16,104 @@ browser gives them, and they do it differently, and differently again from one
 release to the next.
 
 A **Receipt** is the answer to "what did the screen reader say?" from the
-screen reader itself: the verdict, the full transcript, what was heard at each
-step, and the environment that explains it. A simulated reader never produces
-one.
+screen reader itself: the transcript of every call and its answer, the
+environment that explains it, and Playwright's own report and trace of what
+the page was doing. A simulated reader never produces one. It is what a ticket
+cites instead of a screen recording of someone driving a screen reader.
 
 That matters most for questions a DOM check cannot answer, such as:
 
 - Does an expandable table row's detail announce as belonging to its row, or as
   a stranger in the table? Is it read once, or twice?
-- When a row expands, does the table still announce the right number of rows?
-  (The investigation this project began with found variants that said 21 rows
-  for a table of 16.)
+- When a row is selected through the page, does the status region's "1 row
+  selected" reach the reader?
 - Did a component library upgrade, or a browser upgrade, change how a widget is
   announced? And if it did, which of the two changed?
 
 The first consumer is `@txstate-mws/carbon-svelte`, but nothing here knows about
-it. Any web app that can be served over `http(s)` can be pointed at, and the
-questions are scenarios a consuming repo can keep in its own tree.
+it. Any web app Playwright can open can be pointed at, and the tests live in
+the consuming repo.
 
 ## How it works
 
 ```
- The Mac you develop on                      Where a screen reader runs
- ─────────────────────                      ──────────────────────────
+ The Mac you develop on                        Windows Guest Rig (UTM VM, yours)
+ ─────────────────────                        ──────────────────────────────────
 
- your code / CI                              Windows Guest Rig (UTM VM)
-   @sr-receipts/host  ── HTTP + token ──▶    guest daemon
-   createClient()      ◀── NDJSON events ──    └─ NVDA + headed Firefox
+ npx playwright test --project nvda            guest daemon (at logon)
+   page  ── connectOptions (ws) ─────────▶       Playwright browser server: Edge
+   reader ── HTTP + token ───────────────▶       NVDA, the guards, capture
 
- node runner.ts (on the Mac)  ──────────▶    VoiceOver + Safari, in-process
+ npx playwright test --project voiceover
+   page  ── Playwright's WebKit or Chrome, on this Mac
+   reader ── VoiceOver, in process, on this Mac
 ```
 
-Three packages: two split by which side of the wire they live on, and a
-Playwright fixture on the host's side:
+One spec serves both projects. A test gets `page` from Playwright and `reader`
+from the fixture, and never says which reader it has:
+
+```ts
+test('selecting a row is announced', async ({ page, reader }) => {
+  await page.goto('/demo/columnlist')
+  await reader.enter(page)
+  const { spoken } = await reader.capture(() => page.getByLabel('select row').first().click())
+  expect(spoken).toMatch(/1 row selected/)
+  expect(await reader.next()).toMatch(/column 2/)
+})
+```
+
+Three packages:
 
 | Package | Owns | Runs on |
 |---|---|---|
-| [`@sr-receipts/host`](packages/host/README.md) | Connecting to a guest daemon with a URL and bearer token, starting runs, reading back Receipts. Owns the wire protocol and knows nothing about any screen reader. | The Mac you develop on |
-| [`@sr-receipts/guest`](packages/guest/README.md) | The daemon, scenarios, verdicts, snapshots, transcripts, every Execution Target, and the Provisioner for the Windows Guest Rig | The machine the screen reader runs on |
-| [`@sr-receipts/playwright`](packages/playwright/README.md) | The `receipts` fixture, so a consuming repo asks a real reader from its own `playwright test`. Depends on the host. | The Mac you develop on |
+| [`@sr-receipts/host`](packages/host/README.md) | The `ReaderSession` interface a test uses, the wire to a guest daemon, and NVDA as a session over it. Knows no reader's commands. | The Mac you develop on |
+| [`@sr-receipts/guest`](packages/guest/README.md) | The daemon that serves NVDA and launches the browser server, the guards, the VoiceOver session, the smoke, and the Provisioner for the Windows Guest Rig | The guest, and the Mac for VoiceOver |
+| [`@sr-receipts/playwright`](packages/playwright/README.md) | The `reader` fixture, so a consuming repo drives a real reader from its own `playwright test`. Depends on the host. | The Mac you develop on |
 
-The guest depends on the host for the protocol, never the other way round, so
-nothing Mac-facing carries a screen reader's vocabulary. All three are private
-workspace packages, versioned and changelogged separately, and not published.
+The guest depends on the host for the protocol, never the other way round. All
+three are private workspace packages, versioned and changelogged separately,
+and not published. Why it is shaped this way, what it cost, and what was
+retired to get here are in
+[ADR 0002](docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
-An **Execution Target** is one screen reader with its browser on its own
-desktop: NVDA with headed Firefox on a Windows 11 ARM64 virtual machine, or the
-Mac's bundled VoiceOver with Safari. Each one sits behind the same seam
-(`packages/guest/lib/execution-target.ts`), and one function, `executeRun` in
-`packages/guest/lib/run.ts`, is the only run implementation. The command line
-and the daemon are two thin callers of it, so a run started over HTTP and a run
-started at the guest's keyboard write the same files and reach the same
-verdict.
+### The life of a test
 
-### The life of a request
-
-A request is a **target** (a fixture file in the guest, or any `http(s)` URL)
-and a **scenario** (what to ask it). One run carries one or more requests, one
-at a time, because a screen reader owns the whole desktop.
-
-1. **The scenario compiles** before the reader starts. A scenario is a name, a
-   path, or the scenario object itself, sent inline from the host. Its steps
-   are the reader's own commands (`perform: "moveToNextTable"` for NVDA,
-   `perform: "findNextTable"` for VoiceOver) or key presses, so a typo fails in
-   a second rather than after a three-minute run.
-2. **The reader starts and the page opens** in a window of the run's own. Guards
-   prove the keystrokes will reach the page: that the right window is in front,
-   that the reader's cursor is in the web content, and on NVDA that browse mode
-   is on. A guard that fails stops the request and says why, rather than
-   recording silence that reads like a real answer.
-3. **The steps run.** After each one the target records what the reader said,
-   and re-checks every few steps that nothing has stolen the foreground.
-4. **The run is judged** three ways: step expectations (what must be true of one
-   announcement on any page), scenario checks (what must be true across the
-   whole transcript, such as "announced once, not twice"), and the snapshot (the
-   exact wording this target produced last time, committed).
-5. **A Receipt comes back** for each request, and the run ends in one of three
-   verdicts: **PASS** (exit 0), **FAIL** (exit 1: a finding about the page), or
-   **broke** (exit 2: the question went unanswered). CI treats the last two
-   differently on purpose.
-
-Every transcript opens with an environment stamp: the exact operating system,
-browser, reader, Guidepup and Node builds, plus a hash of the fixture's bytes.
-When a snapshot differs, the stamp is how you tell a regression in the page from
-a browser update that changed the wording.
+1. **The reader starts.** VoiceOver in process, with its launch retried on the
+   known race; NVDA through the daemon, fresh for each test.
+2. **`reader.enter(page)` proves the reader is on the page.** On NVDA: the
+   browser is in front, focus is in the document, and browse mode is on, each
+   shown by behaviour rather than assumed, because every expensive mistake on
+   the rig was a guard that certified a run it should have failed. On
+   VoiceOver: the Item Chooser sequence returns and the first item has text.
+   An entry that fails throws with every attempt in the message.
+3. **The test asks.** Reader commands by Guidepup's names, key presses, and
+   `reader.capture(action)` for what a `page` action makes the reader say.
+   Playwright's `expect` judges the answers.
+4. **The Receipt is attached.** The transcript and the environment stamp go on
+   the test, beside Playwright's report and trace.
 
 ## Using it
 
-Four ways in today, all described in more detail elsewhere:
-
-- **From the Mac, against NVDA.** Start the guest daemon, then call
-  `createClient({ url, token }).run(requests)` from a script or a test. This is
-  how a web app served from the Mac gets tested on NVDA: the guest reaches the
-  Mac's dev server at its UTM network address.
-- **On the Mac, against VoiceOver.** `node runner.ts "<target> :: <scenario>"`
-  in `packages/guest` drives VoiceOver and Safari on the Mac itself. It needs
-  a one-time set of macOS permissions, and it takes over the screen while it
-  runs.
-- **On the guest, against NVDA.** A queue file and the `nvda-run` scheduled
-  task, for working inside the virtual machine.
-- **From a consuming repo's Playwright tests, against NVDA.** The `receipts`
-  fixture in `@sr-receipts/playwright`. Playwright is the runner and reporter
-  only, never the browser driver, because it cannot drive Safari or release
-  Firefox. See
-  [ADR 0001](docs/adr/0001-playwright-is-the-runner-not-the-browser-driver.md).
-  VoiceOver in the same fixture is next on the [roadmap](docs/roadmap.md).
+- **From a consuming repo's Playwright tests.** The `reader` fixture in
+  `@sr-receipts/playwright`, with a `voiceover` project and an `nvda`
+  project. See [`packages/playwright/README.md`](packages/playwright/README.md).
+- **Against NVDA**, the guest daemon has to be up. It starts at logon once
+  the rig is provisioned; see
+  [`docs/operating-the-rig.md`](docs/operating-the-rig.md).
+- **Against VoiceOver**, `playwright test` has to be launched from the
+  application holding the macOS grants in
+  [`packages/guest/voiceover/README.md`](packages/guest/voiceover/README.md),
+  and it takes over the Mac while it runs.
 
 ## Where to read next
 
 | To | Read |
 |---|---|
-| Write a scenario and decide what fails it | [`docs/scenarios.md`](docs/scenarios.md) |
-| Set up and run the Windows Guest Rig, and drive it from the Mac | [`docs/operating-the-rig.md`](docs/operating-the-rig.md) |
+| Drive a reader from a consuming repo's Playwright tests | [`packages/playwright/README.md`](packages/playwright/README.md) |
+| Set up and run the Windows Guest Rig | [`docs/operating-the-rig.md`](docs/operating-the-rig.md) |
 | Run VoiceOver on a Mac, and what is known about capturing it | [`packages/guest/voiceover/README.md`](packages/guest/voiceover/README.md) |
-| Understand the NVDA rig's internals and the daemon's routes | [`packages/guest/README.md`](packages/guest/README.md) |
+| Understand the guards and the daemon's routes | [`packages/guest/README.md`](packages/guest/README.md) |
 | Call the daemon from code | [`packages/host/README.md`](packages/host/README.md) |
-| Ask a reader from a consuming repo's Playwright tests | [`packages/playwright/README.md`](packages/playwright/README.md) |
 | Provision a new Windows Guest Rig | [`packages/guest/provisioning/README.md`](packages/guest/provisioning/README.md) |
 | See what is planned and why | [`docs/roadmap.md`](docs/roadmap.md), [`docs/adr/`](docs/adr/) |
 | Look up a term | [`CONTEXT.md`](CONTEXT.md) |
@@ -143,5 +125,5 @@ npm ci      # at the repository root: installs every package from one lockfile
 npm test    # every package's tests, then a typecheck of the whole repository
 ```
 
-`npm test` needs no screen reader. Real-reader runs happen from
-`packages/guest`.
+`npm test` needs no screen reader. Real-reader runs happen from a consuming
+repo's Playwright tests, and the guest's smoke from the guest.

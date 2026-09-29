@@ -1,85 +1,125 @@
 /**
- * The `receipts` fixture: Playwright Test as runner, reporter and
- * configuration, with no `page`. The reader, its real browser, the guards and
- * the verdict stay behind the Execution Target seam on the guest; see ADR 0001.
+ * The `reader` fixture: a real screen reader beside Playwright's own `page`.
  *
- * Exported as fixtures for the consumer's own `test.extend`, and importing only
- * types from `@playwright/test`. Playwright refuses to load a second copy of
- * itself, and a linked package resolves its imports from where it really
+ * Playwright drives the browser. For a VoiceOver project that is the browser
+ * Playwright launched on this Mac; for an NVDA project it is the guest's Edge,
+ * reached through Playwright's own `connectOptions`. The reader comes from
+ * here: VoiceOver in process through `@sr-receipts/guest`, NVDA through the
+ * guest daemon's routes in `@sr-receipts/host`. Both are the same
+ * `ReaderSession`, so a spec never says which one it has. See ADR 0002.
+ *
+ * Exported as fixtures for the consumer's own `test.extend`, and importing
+ * only types from `@playwright/test`. Playwright refuses to load a second copy
+ * of itself, and a linked package resolves its imports from where it really
  * lives, which is not the consumer's `node_modules`.
  */
-import type { Fixtures } from "@playwright/test";
-import { createClient, RigError, type Reader, type Receipt, type Scenario } from "@sr-receipts/host";
+import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from "@playwright/test";
+import { createNvdaSession, type Reader, type ReaderSession } from "@sr-receipts/host";
 
-import { assertReader, defaultBudgets, findings, resolveTarget, timeoutFor, type Budgets } from "./receipts.ts";
-
-/** A project's `use: { receiptsOptions }`. */
-export interface ReceiptsOptions {
-  reader: Reader;
-  /** The guest daemon's base URL. */
-  url: string;
-  token: string;
-  /** What a path target is joined to: the address the guest reaches the host by. */
-  baseURL?: string;
-  /** Overrides this reader's default budgets. */
-  budgets?: Partial<Budgets>;
-}
-
-export interface ReceiptsRunOptions {
-  /**
-   * `false` returns the Receipt whatever its verdict, for an investigation that
-   * wants the transcript. A run that broke still throws.
-   */
-  assert?: boolean;
-}
-
-export interface Receipts {
-  /**
-   * Run one scenario against one target on this project's reader, and return
-   * the Receipt. Fails the test on findings unless `assert` is false.
-   */
-  run(target: string, scenario: Scenario, options?: ReceiptsRunOptions): Promise<Receipt>;
-}
-
-/** `test.extend(receiptsFixtures)` gives a test the `receipts` fixture. */
-export const receiptsFixtures: Fixtures<{ receipts: Receipts }, { receiptsOptions: ReceiptsOptions | undefined }> = {
-  receiptsOptions: [undefined, { option: true, scope: "worker" }],
-
-  receipts: async ({ receiptsOptions }, use, testInfo) => {
-    if (!receiptsOptions) {
-      throw new Error("this project has no receiptsOptions: set use.receiptsOptions in its Playwright config");
+/**
+ * A project's `use: { readerOptions }`. NVDA is reached through the guest
+ * daemon, so only an NVDA project has its `url` and `token`; VoiceOver runs
+ * in-process on this Mac.
+ */
+export type ReaderOptions =
+  | {
+      reader: "nvda";
+      /** The guest daemon's base URL, e.g. `http://192.168.64.3:8765`. */
+      url: string;
+      token: string;
     }
-    const { reader, url, token, baseURL, budgets } = receiptsOptions;
-    if (reader !== "nvda") throw new Error(`reader ${reader} is not supported by @sr-receipts/playwright yet`);
-    const rig = createClient({ url, token });
+  | {
+      reader: "voiceover";
+      /**
+       * The browser's application name as macOS knows it, for VoiceOver's
+       * activation. Defaults from the project's `browserName` and `channel`:
+       * Playwright's WebKit is "Playwright", its Chromium "Google Chrome for
+       * Testing", its Firefox "Nightly", and a branded channel its own name.
+       */
+      applicationName?: string;
+    };
 
-    await use({
-      async run(target, scenario, { assert = true } = {}) {
-        assertReader(scenario, reader);
-        testInfo.setTimeout(timeoutFor(scenario, { ...defaultBudgets[reader], ...budgets }));
+/** What Guidepup's Playwright package maps each browser to. */
+const APPLICATION_NAMES: Record<string, string> = {
+  chromium: "Google Chrome for Testing",
+  chrome: "Google Chrome",
+  "chrome-beta": "Google Chrome Beta",
+  msedge: "Microsoft Edge",
+  "msedge-beta": "Microsoft Edge Beta",
+  "msedge-dev": "Microsoft Edge Dev",
+  firefox: "Nightly",
+  webkit: "Playwright",
+};
 
-        let report;
-        try {
-          report = await rig.run([{ target: resolveTarget(target, baseURL), scenario }], { snapshots: "off" });
-        } catch (error) {
-          // A busy rig is not worth waiting for: the run in flight can take an
-          // hour, and a test that waits looks exactly like a hung one.
-          if (error instanceof RigError && error.status === 409) {
-            const { runId } = (error.body ?? {}) as { runId?: string };
-            throw new Error(`the rig is busy with run ${runId ?? "(unknown)"}; one run at a time`, { cause: error });
-          }
-          throw error;
-        }
+export function applicationNameFor(browserName: string, channel: string | undefined): string {
+  return APPLICATION_NAMES[channel ?? browserName] ?? APPLICATION_NAMES[browserName] ?? browserName;
+}
 
-        const receipt = report.results[0];
-        if (!receipt) throw new Error(`run ${report.runId} returned no Receipt`);
-        await testInfo.attach("transcript", { body: receipt.transcript.text, contentType: "text/plain" });
-        await testInfo.attach("environment", { body: receipt.environment.join("\n"), contentType: "text/plain" });
-        await testInfo.attach("receipt", { body: JSON.stringify(receipt, null, 2), contentType: "application/json" });
+/** What the VoiceOver half needs from `@sr-receipts/guest`, an optional peer. */
+export type Guest = Pick<typeof import("@sr-receipts/guest"), "createVoiceOverSession">;
 
-        if (assert && !receipt.ok) throw new Error(findings(receipt));
-        return receipt;
-      },
-    });
+export async function loadGuest(load: () => Promise<Guest> = () => import("@sr-receipts/guest")): Promise<Guest> {
+  try {
+    return await load();
+  } catch (error) {
+    // Only the guest itself missing: a missing module inside it is a broken
+    // install, and its own message says which.
+    const { code, message } = error as { code?: string; message?: string };
+    if (code === "ERR_MODULE_NOT_FOUND" && message?.includes("'@sr-receipts/guest'")) {
+      throw new Error("a VoiceOver project needs @sr-receipts/guest installed beside @sr-receipts/playwright", { cause: error });
+    }
+    throw error;
+  }
+}
+
+/** Build the project's session, started by the fixture. */
+export async function createSession(
+  options: ReaderOptions,
+  browser: { browserName: string; channel: string | undefined },
+  load?: () => Promise<Guest>,
+): Promise<ReaderSession> {
+  if (options.reader === "nvda") return createNvdaSession({ url: options.url, token: options.token });
+  const { createVoiceOverSession } = await loadGuest(load);
+  return createVoiceOverSession({ applicationName: options.applicationName ?? applicationNameFor(browser.browserName, browser.channel) });
+}
+
+/**
+ * What produced the speech. NVDA's browser is the guest's Edge, which the
+ * guest's own stamp names with its version; the project's `browserName` there
+ * is only the protocol Playwright connected with. VoiceOver's browser is the
+ * one Playwright launched on this Mac, which the Mac's stamp cannot name.
+ */
+export function environmentStamp(reader: Reader, readerStamp: string[], browser: { name: string; version: string }): string[] {
+  return reader === "nvda" ? readerStamp : [...readerStamp, `browser: ${browser.name} ${browser.version}`];
+}
+
+type ReaderFixtures = Fixtures<
+  { reader: ReaderSession },
+  { readerOptions: ReaderOptions | undefined },
+  PlaywrightTestArgs & PlaywrightTestOptions,
+  PlaywrightWorkerArgs & PlaywrightWorkerOptions
+>;
+
+/** `test.extend(readerFixtures)` gives a test the `reader` fixture beside `page`. */
+export const readerFixtures: ReaderFixtures = {
+  readerOptions: [undefined, { option: true, scope: "worker" }],
+
+  reader: async ({ readerOptions, browser, browserName, channel }, use, testInfo) => {
+    if (!readerOptions) {
+      throw new Error("this project has no readerOptions: set use.readerOptions in its Playwright config");
+    }
+    const session = await createSession(readerOptions, { browserName, channel });
+    await session.start();
+    try {
+      await use(session);
+    } finally {
+      await session.stop();
+      // The durable record: what was asked, what was said, and what produced
+      // it. Attached whatever the outcome, and kept by Playwright on failure.
+      await testInfo.attach("reader-transcript", { body: session.transcript.join("\n"), contentType: "text/markdown" });
+      const environment = await session.environment().catch((error: Error) => [`environment unavailable: ${error.message}`]);
+      const stamp = environmentStamp(readerOptions.reader, environment, { name: channel ?? browserName, version: browser.version() });
+      await testInfo.attach("environment", { body: stamp.join("\n"), contentType: "text/plain" });
+    }
   },
 };

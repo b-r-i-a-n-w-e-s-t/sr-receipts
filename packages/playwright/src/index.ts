@@ -1,8 +1,9 @@
 /**
- * `@sr-receipts/playwright`: a `receipts` fixture for Playwright Test, which
- * asks a real screen reader on its own desktop and returns the Receipt.
- * Re-exported explicitly, so the package's contract is a list someone can read.
+ * `@sr-receipts/playwright`: a `reader` fixture for Playwright Test, so a
+ * consuming repo drives a real screen reader beside `page` from its own
+ * tests. Re-exported explicitly, so the package's contract is a list someone
+ * can read.
  */
-export { receiptsFixtures, type Receipts, type ReceiptsOptions, type ReceiptsRunOptions } from "./fixture.ts";
-export { defaultBudgets, type Budgets } from "./receipts.ts";
-export type { Receipt, Scenario } from "@sr-receipts/host";
+export { readerFixtures, applicationNameFor, type ReaderOptions } from "./fixture.ts";
+export type { Captured, EntryOptions, EntryPage, Reader, ReaderSession } from "@sr-receipts/host";
+export { SILENCE } from "@sr-receipts/host";

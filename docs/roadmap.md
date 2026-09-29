@@ -6,91 +6,94 @@ file is the working list and changes as items land.
 
 ## Done so far
 
-- **The NVDA rig.** Scenarios as data the rig knows nothing about, a verdict
-  that can fail a build, committed snapshots, a focus watch that stops a run
-  when something steals the foreground, and per-scenario window sizes.
-- **The rig behind a port.** An authenticated daemon on the guest that streams
-  each run's progress, and a client on the Mac.
-- **Provisioning.** `provision.ps1` takes a manually installed Windows 11 ARM64
-  guest to a working rig in one command, and proves it with a real NVDA run.
-- **Two packages and an Execution Target seam.** `@sr-receipts/host` and
-  `@sr-receipts/guest`, with one run implementation behind
-  `lib/execution-target.ts`.
-- **VoiceOver as a second Execution Target**, with Safari on the Mac, and a
-  committed baseline for a fixture and for a live page served over `http`.
-- **The first investigation.** Where an expandable row's detail belongs in a
-  table, measured on NVDA across seven fixtures.
-- **Ready for a consumer.** Scenarios can be sent inline from the host, each
-  request returns a Receipt, a run chooses whether to use the guest's
-  snapshots at all, and the NVDA target's desktop is behind a seam that tests
-  can fake.
-- **A first Playwright slice on NVDA.** `@sr-receipts/playwright` and its
-  `receipts` fixture, linked into `carbon-svelte` by `file:`, asking NVDA about
-  `/demo/96` and reproducing carbon-svelte#382 in 75 to 88 seconds a test.
-  What it changed in ADR 0001, and the timings it measured, are in the ADR.
-- **Faster VoiceOver runs.** Where a VoiceOver step's time goes was measured,
-  and turning VoiceOver's hints off cut a 20-step run by about 30%.
+- **The NVDA rig.** A focus guard that proves the browser is in front, focus
+  is in the document and browse mode is on, each by behaviour; the interactive
+  scheduled-task mechanism; the Provisioner, which takes a manually installed
+  Windows 11 ARM64 guest to a working rig in one command.
+- **The rig behind a port.** An authenticated daemon on the guest.
+- **VoiceOver on the Mac**, in process: the launch retry, hints off and
+  stripped, the sentinel that tells silence from repetition, the doctor.
+- **The investigations** that shaped all of it: where an expandable row's
+  detail belongs, the docs page's iframe stealing focus, and
+  carbon-svelte#382's typed-character echo.
+- **The pivot to `page`** (2026-09-25, [ADR 0002](adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md)).
+  A consuming repo writes ordinary Playwright specs against `page` and one
+  `reader` fixture, with a `voiceover` and an `nvda` project, and runs both
+  with one command. The guest daemon serves NVDA as routes and launches an
+  Edge browser server; VoiceOver runs in process. The scenario language, the
+  step runner, the verdict, the runner's snapshots and the Execution Target
+  seam retired in favour of Playwright's own `expect`, attachments and
+  snapshots. Proved before the refactor: 10 of 10 on NVDA, 5 of 5 on
+  VoiceOver, 4 of 4 with both readers in one command. Proved after it, on
+  2026-09-26, with both readers in one command: carbon-svelte's four specs
+  (VoiceOver 4 of 4; NVDA passing the selection test and the
+  `autoHighlight=none` control, and reproducing carbon-svelte#382 as two
+  failures), and a scratch consumer outside both repositories, linked as the
+  Playwright package's README says, whose passing and failing tests each
+  carried a transcript and an environment stamp on both readers. The first
+  VoiceOver run under the refactored session heard nothing after entry; the
+  cause was the Control press after the sentinel, now removed (see
+  `packages/guest/voiceover/sentinel.ts`).
 
 ## Next, in order
 
-The rig is built, and nothing outside this repository uses it yet. What comes
-next is proving that other apps can: first by letting a consuming repo ask both
-readers from its own Playwright tests, then by a second consumer. The
-Playwright decisions, their costs, and what was deferred are in
-[ADR 0001](adr/0001-playwright-is-the-runner-not-the-browser-driver.md).
-
-Further work on the rig itself, including the items under "Known, not yet
-decided", waits until a consumer shows which of them matter.
-
-1. **The VoiceOver project in the same fixture**, running in-process on the Mac.
-2. **Baselines for a consumer** through Playwright's `toMatchSnapshot`, so they
-   live in the consuming repo.
-3. **A second consuming app**: a TXST app other than carbon-svelte, with a
-   handful of scenarios in its own repository. This is what shows sr-receipts
-   is useful beyond the library it grew up with, and what its setup costs
-   someone who did not build it.
+1. **carbon-svelte's `npm run sr-testing`** on a real issue: reproduce it on
+   both readers, try a fix, and cite the transcript in the ticket. The first
+   consumer's config and specs are linked, uncommitted, in that repository,
+   and run on both readers. Its lockfile still pins `@playwright/test`
+   1.62.1, with 1.63.0 installed over it without saving; the client must
+   share the guest's major.minor, so that is settled before it is committed.
+2. **Re-provision the rig** with the Provisioner as it now is, on a fresh
+   guest, and time it. Every developer will do this once; it is the product.
+3. **A committed markdown receipt per failing test**, written by the fixture
+   into the consuming repo, when a ticket needs a file rather than a report
+   attachment. Deferred in ADR 0002 until a ticket asks.
+4. **A second consuming app**: a TXST app other than carbon-svelte. This is
+   what shows the setup cost to someone who did not build it.
 
 ## Research, after that
 
-Questions worth answering, which a consumer does not need first.
-
-- **A VoiceOver twin of `detail-placement`** on the same fixtures: the first
-  comparison of the two readers on one question.
+- **A VoiceOver twin of the detail-placement question** on the fixtures,
+  now as specs: the first comparison of the two readers on one question.
 - **A minimal reproduction of the `readTableColumnHeader` misfire** on
   VoiceOver, which sometimes answers with VoiceOver's startup greeting.
-- **A prototype of Guidepup's Virtual Screen Reader** as a third Playwright
-  project, then a decision on whether it belongs. Whatever is decided, its
-  output is never a Receipt and never compared with a real reader's baseline.
-
-## Still to confirm on a real desktop
-
-- VoiceOver with more than one target in a queue.
+- **Guidepup's Virtual Screen Reader as a third project.** Its output is
+  never a Receipt.
 
 ## Known, not yet decided
 
-- **A failed window activation is not diagnosed.** When Guidepup's
-  `windowsActivate` throws on the guest ("Unable to activate application"),
-  the run breaks without the guard's `FOCUS FAILED` explanation.
-- **Throughput.** Each reader runs one request at a time, and a VoiceOver step
-  takes 5 to 7.5 seconds, so a broad suite takes an hour or more per reader. Two
-  candidates, once a consumer's suite shows where the time goes: a reader
-  session API (deferred in ADR 0001), and the VoiceOver target reading speech
-  itself instead of through Guidepup's capture loop, whose fixed polling puts a
-  floor of about 4.4 seconds under every step.
-- **The VoiceOver baseline's recorded environment** predates hints being turned
-  off, so comparisons against it report a changed environment until it is
-  re-recorded.
-- **Three smaller design improvements**: the VoiceOver smoke running through its
-  Execution Target as the NVDA smoke now does, one entry point for reports, and
-  cancelling an in-process run.
+- **No mid-test focus watch.** The rig used to check `reportTitle` every few
+  steps and stop when something stole the foreground. A test's `expect` now
+  catches wrong speech, but a long reader-driven sequence can still type into
+  a Windows Update dialog for a while first. Revive if a suite shows it.
+- **Throughput.** One reader start per test (3.5 s on NVDA), an NVDA entry
+  of about 28 s (12 s of it the focus-mode repair), a VoiceOver entry of 15 to
+  25 s, a VoiceOver command of about 5 s with the sentinel. A session per
+  worker and a faster VoiceOver capture are the candidates, once a suite
+  shows where the time goes.
+- **Edge only on the guest.** Playwright ships no Windows ARM64 browsers.
+  NVDA plus Firefox evidence would need Playwright to change, or the guest to
+  be x64.
+- **Baselines.** Playwright's `toMatchSnapshot` on a transcript line is the
+  intended mechanism; nothing uses it yet, and the environment stamp is an
+  attachment rather than part of the snapshot.
+- **The fixtures are static pages now.** The guest's `fixtures/` served the
+  runner by `file:` URL; a spec has to serve them over `http` for the guest's
+  browser to reach them. The smoke still opens `control.html` by file URL on
+  the guest.
 - **Upstream Guidepup issues** (the unbounded Item Chooser loop, the
   `readTableColumnHeader` misfire, the unconfigurable polling constants), each
   filed only after a minimal reproduction and approval at the time.
+- **A possible upstream NVDA issue**: an ARIA combo box whose input carries
+  `aria-activedescendant` loses typed-character echo under "Only in edit
+  controls". Same rule as the Guidepup issues; the two
+  `combobox-*activedescendant.html` fixtures are the minimal reproduction.
+- **Reader settings per test.** Confirming carbon-svelte#382 needs NVDA's
+  typed-character echo set to "Always", and a test has no way to ask for
+  that. The daemon's `start` route could take settings.
 
 ## Alongside
 
-- The launch-race section of
-  [`packages/guest/voiceover/README.md`](../packages/guest/voiceover/README.md)
-  cites upstream issue #101, which has since been closed in favour of #113.
-- The VoiceOver Mac stays on macOS 26 until Guidepup ships a VoiceOver asset for
-  macOS 27.
+- The VoiceOver Mac stays on macOS 26 until Guidepup ships a VoiceOver asset
+  for macOS 27.
+- Guidepup's launch race is tracked upstream as #113 (formerly #101).

@@ -8,7 +8,7 @@ import {
 
 export const HEALTH_REPORT_SCHEMA_VERSION = 3;
 export const PROVISION_EXECUTION =
-  "unelevated interactive scheduled task: real NVDA with headed Firefox";
+  "unelevated interactive scheduled task: real NVDA with headed Edge";
 
 /**
  * One reviewed Runtime Manifest step. The PowerShell provisioner records each

@@ -1,8 +1,8 @@
 {
   "name": "@sr-receipts/host",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "The Mac-facing client for an sr-receipts guest: connect, run, and read back reports and artifacts.",
+  "description": "The Mac-facing half of sr-receipts: the reader interface a test uses, the wire to a guest daemon, and NVDA as a session over it.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

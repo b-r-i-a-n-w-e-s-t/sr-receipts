@@ -19,31 +19,30 @@ network, the Mac is currently reachable from the guest at `192.168.64.1`; this
 is an operational fact, not discovery or a supported UTM-control contract.
 
 Run the Provisioner from PowerShell in that signed-in, **unlocked** desktop.
-The script deliberately registers the smoke task as that user at limited
-privilege; it is safe to launch the provisioner elevated only when Firefox
-installation needs it, because the proof is still unelevated:
+The script registers the smoke task and the daemon's logon task as that user
+at limited privilege. Launch it unelevated; the one step that needs elevation,
+the firewall rule, is `tasks\register.ps1 -Firewall`, run once afterwards:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File provisioning\provision.ps1
 ```
 
-NVDA and headed Firefox must share the interactive desktop. Do not run this
-over SSH, as a service, or while the desktop is locked. Re-running is safe: the
+NVDA and headed Edge must share the interactive desktop. Do not run this over
+SSH, as a service, or while the desktop is locked. Re-running is safe: the
 script verifies installed versions, uses `npm ci`, invokes Guidepup's `setup`
-then `install nvda` lifecycle, and re-registers the required limited,
-interactive entry points. The proof itself is always launched through the
-unelevated `nvda-smoke` scheduled task, not the possibly elevated provisioning
-PowerShell process.
+then `install nvda` lifecycle, and re-registers the limited, interactive
+entry points. The proof itself is always launched through the unelevated
+`nvda-smoke` scheduled task, not the provisioning PowerShell process.
 
 ## Runtime stages
 
-Each manifest component is a named stage (`architecture`, `node`, `firefox`,
+Each manifest component is a named stage (`architecture`, `node`, `edge`,
 `packages`, `guidepup-nvda`, `tasks`), and every outcome is recorded in the
 report's `runtime` list. A stage's detail is read back off the machine, not
-claimed: the installed Node and Firefox versions, the `@guidepup/guidepup`
-version `npm ci` actually left in `node_modules`, the NVDA asset Guidepup
-unpacked into its cache, and the scheduled tasks Windows now holds with their
-run level. A failed stage records its error, skips the remaining stages, and
+claimed: the installed Node version, the Edge version Windows ships, the
+`@guidepup/guidepup` and `playwright-core` versions `npm ci` actually left in
+`node_modules`, the NVDA asset Guidepup unpacked into its cache, and the
+scheduled tasks Windows now holds with their run level. A failed stage records its error, skips the remaining stages, and
 skips the NVDA proof, because there is no runtime left to prove; the report
 still names the stage that failed, so a dependency failure is never confused
 with a desktop, network, or speech-capture failure.
@@ -66,18 +65,23 @@ for a report this run failed to write.
 runtime version and downloaded executable hash. Node 22.18.0 is the official
 ARM64 ZIP distribution; it is installed into the current user's local
 application data so direct TypeScript execution needs no machine-wide MSI or
-elevation. Firefox is pinned to 156.0, the version recorded by the committed
-Windows transcript baselines. Both downloads have SHA-256 values verified before
-installation. The exact locked `@guidepup/setup` 0.25.3 installs assets selected
-from `@guidepup/guidepup` 0.34.0's own manifest; the NVDA asset facts in this
+elevation, with its SHA-256 verified before installation. Edge is the browser
+Windows 11 ships and the one native browser Playwright can drive on ARM64; it
+is verified present, never downloaded, and its version is recorded in every
+Environment Stamp rather than pinned. `playwright-core` 1.63.0 is the browser
+server a Mac's Playwright connects to, which only works between the same
+major.minor, so its version here is what every consumer must match. The exact
+locked `@guidepup/setup` 0.25.3 installs assets selected from
+`@guidepup/guidepup` 0.34.0's own manifest; the NVDA asset facts in this
 manifest are a reviewed copy of that source, and the pure test asserts their
 conformance. Updating any runtime means reviewing this manifest and the npm
 lockfile together.
 
 ## Evidence and optional network diagnosis
 
-With the runtime installed, provisioning always runs `smoke.ts control.html`, a
-local fixture, through real NVDA and headed Firefox. The reporter derives both
+With the runtime installed, provisioning always runs `smoke.ts`, which opens
+`fixtures/control.html` in headed Edge through Playwright, runs the guards,
+and asks real NVDA four commands. The reporter derives both
 artifact paths from `lib/smoke-result.ts` and hands them to the scheduled task,
 which writes a run-specific JSON smoke result and speech log under
 `artifacts/`; the result is the completion signal, so clock skew and a prior

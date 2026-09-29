@@ -36,7 +36,7 @@ const observed = {
 const runtime: ProvisioningStage[] = [
   { name: "architecture", ok: true, detail: "ARM64" },
   { name: "node", ok: true, detail: "v22.18.0" },
-  { name: "firefox", ok: true, detail: "156.0" },
+  { name: "edge", ok: true, detail: "153.0.4234.48" },
   { name: "packages", ok: true, detail: "npm ci" },
   { name: "guidepup-nvda", ok: true, detail: "0.2.1-2026.2" },
   { name: "tasks", ok: true, detail: "nvda-smoke registered" },
@@ -80,16 +80,16 @@ test("a failed runtime stage is named in the report instead of vanishing", () =>
   const failed: ProvisioningStage[] = [
     { name: "architecture", ok: true, detail: "ARM64" },
     { name: "node", ok: true, detail: "v22.18.0" },
-    { name: "firefox", ok: false, detail: "expected 156.0, found 155.0.1" },
+    { name: "edge", ok: false, detail: "no msedge.exe under Program Files" },
   ];
   const report = assessProvisioning({
     ...healthy, runtime: failed, taskCompleted: false, smoke: undefined,
     freshArtifact: false, observed: { ...observed, speechArtifactBytes: 0 },
-    failure: 'runtime stage "firefox" failed',
+    failure: 'runtime stage "edge" failed',
   });
   assert.equal(report.ok, false);
   assert.equal(report.checks.runtimeInstalled, false);
-  assert.equal(report.failure, 'runtime stage "firefox" failed');
+  assert.equal(report.failure, 'runtime stage "edge" failed');
   assert.deepEqual(report.runtime, failed);
 });
 
@@ -156,7 +156,7 @@ test("only the scheduled-task CMD posture using per-user Node proves the entry p
 });
 
 test("CMD entry points explicitly use the provisioned per-user Node wrapper", () => {
-  for (const entry of ["run-control.cmd", "run-daemon.cmd", "run-probe.cmd", "run-queue.cmd"]) {
+  for (const entry of ["run-smoke.cmd", "run-daemon.cmd"]) {
     assert.match(readFileSync(entry, "utf8"), /call "%~dp0run-node\.cmd"/i, entry);
   }
   assert.match(
@@ -251,7 +251,7 @@ test("runtime stages are recorded rather than thrown away, and the probe never g
   const script = readFileSync("provisioning/provision.ps1", "utf8");
   // Every manifest component is a named stage, so a dependency failure is
   // distinguishable from a desktop or speech-capture failure in the report.
-  for (const stage of ["architecture", "node", "firefox", "packages", "guidepup-nvda", "tasks"]) {
+  for (const stage of ["architecture", "node", "edge", "packages", "guidepup-nvda", "tasks"]) {
     assert.match(script, new RegExp(`'${stage}'`), stage);
   }
   assert.match(script, /'--stages', \$StagePath/);
@@ -267,7 +267,8 @@ test("runtime stages are recorded rather than thrown away, and the probe never g
 test("runtime manifest agrees with the locked packages and Guidepup NVDA manifest", () => {
   const runtime = JSON.parse(readFileSync("provisioning/runtime-manifest.json", "utf8")) as {
     node: { version: string; architecture: string; kind: string; sha256: string };
-    firefox: { version: string; architecture: string; sha256: string };
+    edge: { source: string };
+    playwright: { version: string };
     guidepup: { version: string; setupVersion: string; nvdaAsset: { id: string; version: string; repository: string; asset: string; sha256: string } };
   };
   const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { dependencies: Record<string, string> };
@@ -281,9 +282,12 @@ test("runtime manifest agrees with the locked packages and Guidepup NVDA manifes
   assert.equal(runtime.node.architecture, "arm64");
   assert.equal(runtime.node.kind, "zip");
   assert.match(runtime.node.sha256, /^[a-f0-9]{64}$/);
-  assert.equal(runtime.firefox.version, "156.0");
-  assert.equal(runtime.firefox.architecture, "arm64");
-  assert.match(runtime.firefox.sha256, /^[a-f0-9]{64}$/);
+  // Edge is the one browser Windows on ARM64 ships and Playwright can drive
+  // natively; it is verified present, never downloaded.
+  assert.equal(runtime.edge.source, "preinstalled with Windows 11");
+  // A Playwright client can only connect to a browser server of the same
+  // major.minor, so the guest's version is what every consumer must match.
+  assert.equal(pkg.dependencies["playwright-core"], runtime.playwright.version);
   assert.equal(pkg.dependencies["@guidepup/guidepup"], runtime.guidepup.version);
   assert.equal(pkg.dependencies["@guidepup/setup"], runtime.guidepup.setupVersion);
   assert.deepEqual(nvda, {

@@ -1,6 +1,6 @@
 /**
- * Read-only prerequisite check for the narrow local VoiceOver smoke target.
- * It deliberately does not invoke Guidepup setup or alter macOS permissions.
+ * Read-only prerequisite check for VoiceOver on this Mac. It deliberately does
+ * not invoke Guidepup setup or alter macOS permissions.
  */
 import { accessSync, constants, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -70,10 +70,6 @@ export function preferenceAccessCheck(path: string): DoctorCheck {
 }
 
 export function inspect(): DoctorCheck[] {
-  const safari = "/Applications/Safari.app";
-  const safariVersion = existsSync(safari)
-    ? command("mdls", ["-name", "kMDItemVersion", "-raw", safari]).replaceAll('"', "")
-    : "not installed";
   const languages = command("defaults", ["read", "-g", "AppleLanguages"]);
   const groupPreferences = voiceOverPreferenceDirectory();
   const preferences = existsSync(groupPreferences)
@@ -83,7 +79,6 @@ export function inspect(): DoctorCheck[] {
     checkExact("platform", process.platform, "darwin"),
     checkVersion("macOS", command("sw_vers", ["-productVersion"]), SUPPORTED.macOS),
     checkExact("bundled VoiceOver", existsSync("/System/Library/CoreServices/VoiceOver.app") ? "present" : "missing", "present"),
-    checkVersion("Safari", safariVersion, SUPPORTED.safari),
     checkExact("Guidepup", packageVersion(), SUPPORTED.guidepup),
     checkExact("Guidepup VoiceOver asset", existsSync(expectedVoiceOverAsset()) ? "present" : "missing", "present"),
     preferenceAccessCheck(preferences),

@@ -1,48 +1,45 @@
 # @sr-receipts/host
 
-The host's side of sr-receipts: connect to a guest daemon, run scenarios on a
-real screen reader, and read back what it said.
+The Mac's side of sr-receipts: the reader interface a test uses, the wire to
+a guest daemon, and NVDA as a session over that wire.
 
 ## Ownership
 
 This package owns:
 
-- `createClient`, which talks to a guest daemon with its endpoint and bearer
-  token
-- the wire protocol in `src/protocol.ts`: requests, the NDJSON event stream,
-  reports, and health
+- `ReaderSession` in `src/protocol.ts`: the one interface a test sees for
+  either reader, with Guidepup's method names
+- the wire protocol, also in `src/protocol.ts`: the daemon's routes and their
+  bodies
+- `connectReader`, a client for those routes, and `createNvdaSession`, NVDA
+  as a `ReaderSession` built on it
 
-It does not know how any screen reader is driven, and it depends on nothing but
-Node's `fetch`. `@sr-receipts/guest` implements the protocol and depends on this
-package for it. A change to `src/protocol.ts` is a change to both packages and
-belongs in both changelogs.
+It does not know how any screen reader is driven, and it depends on nothing
+but Node's `fetch`. `@sr-receipts/guest` implements the protocol and depends
+on this package for it. A change to `src/protocol.ts` is a change to both
+packages and belongs in both changelogs.
 
 ## Use
 
+Most consumers reach this through the `reader` fixture in
+[`@sr-receipts/playwright`](../playwright/README.md). Directly:
+
 ```js
-import { createClient } from "@sr-receipts/host";
+import { createNvdaSession } from "@sr-receipts/host";
 
-const rig = createClient({ url: process.env.RIG_URL, token: process.env.RIG_TOKEN });
-
-const report = await rig.run([{ target: "control.html", scenario: "survey" }], {
-  onEvent: (event) => { if (event.type === "step") console.log(event.label, event.heard); },
-});
-
-if (!report.ok) process.exit(1);
-console.log(report.results[0].transcript.text);
+const nvda = createNvdaSession({ url: process.env.RIG_URL, token: process.env.RIG_TOKEN });
+await nvda.start();
+await nvda.enter(page);                        // a Playwright page, or anything with title(), bringToFront(), evaluate()
+const { spoken } = await nvda.capture(() => page.getByRole("checkbox").first().click());
+console.log(spoken, await nvda.next());
+await nvda.stop();
+console.log(nvda.transcript.join("\n"));
 ```
 
-A request's `scenario` is a name or path the guest resolves, or the scenario
-itself, typed by `Scenario` in `src/protocol.ts`, for a host that keeps its
-scenarios in code rather than in the guest's files.
-
-Each entry in `report.results` is a Receipt: the verdict, the transcript, the
-environment that explains it, and what was heard at each step. `rig.transcript`
-still reads a transcript back by name from a finished run.
-
-A wrong answer resolves with `ok: false`. A run that broke rejects with a
-`RigError`. The guest README documents the routes, the one-run-at-a-time rule,
-and what happens when a client hangs up.
+`enter` throws with the guest's whole diagnosis when the guards fail. Every
+other call returns what the reader said, `""` for silence, and the transcript
+names silence. A refused request is a `RigError` carrying the status; a reader
+failure on the guest arrives with its cause chain.
 
 ## Versioning
 
@@ -56,5 +53,5 @@ external consumer exists.
 npm test
 ```
 
-Framing is tested here. The client against a real daemon is tested in
-`@sr-receipts/guest`, which can depend on this package.
+The client and the NVDA session against a fake daemon. The daemon itself is
+tested in `@sr-receipts/guest`, which can depend on this package.

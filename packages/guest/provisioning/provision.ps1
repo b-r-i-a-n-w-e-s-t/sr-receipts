@@ -6,7 +6,7 @@
   Run this only in a signed-in, unlocked Windows desktop after the manual UTM
   and Windows first-run boundary described in provisioning/README.md. It
   installs the exact reviewed Runtime Manifest, configures Guidepup's portable
-  NVDA asset, then proves the real headed NVDA/Firefox fixture.
+  NVDA asset, then proves real NVDA reading a fixture in headed Edge.
 
   Every manifest step is a named stage whose outcome is recorded rather than
   thrown away, so the health report can tell a dependency failure apart from a
@@ -149,7 +149,7 @@ function Write-FallbackReport {
     schemaVersion = 3
     ok = $false
     fixture = 'control.html'
-    execution = 'unelevated interactive scheduled task: real NVDA with headed Firefox'
+    execution = 'unelevated interactive scheduled task: real NVDA with headed Edge'
     checks = [ordered]@{
       runtimeInstalled = $runtimeInstalled; taskCompleted = $false; smokePassed = $false
       speechCaptured = $false; speechArtifact = $false; focusRetained = $false
@@ -186,22 +186,16 @@ if (-not (Test-StagesHealthy)) {
 
 Push-Location $rig
 try {
-  $firefox = Join-Path $env:ProgramFiles 'Mozilla Firefox\firefox.exe'
-  Invoke-Stage 'firefox' {
-    $version = if (Test-Path $firefox) { (Get-Item $firefox).VersionInfo.ProductVersion } else { '' }
-    if ($version -notlike "$($manifest.firefox.version)*") {
-      $download = Get-ExactFile $manifest.firefox
-      Write-Host "  installing Firefox $($manifest.firefox.version)" -ForegroundColor Cyan
-      $process = Start-Process -Wait -PassThru -FilePath $download -ArgumentList @('-ms')
-      if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
-        throw "Firefox installer exited $($process.ExitCode)."
-      }
-      $version = if (Test-Path $firefox) { (Get-Item $firefox).VersionInfo.ProductVersion } else { '' }
-    }
-    if ($version -notlike "$($manifest.firefox.version)*") {
-      throw "Firefox installation verification failed; expected $($manifest.firefox.version), found '$version'."
-    }
-    Set-StageDetail $version
+  # Edge is the one browser Windows on ARM64 ships and Playwright can drive
+  # natively; it is verified present, never installed. Its version is recorded,
+  # not pinned: Windows updates it, and the Environment Stamp names it per run.
+  Invoke-Stage 'edge' {
+    $edge = @(
+      (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
+      (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $edge) { throw 'no msedge.exe under Program Files; Edge ships with Windows 11 and is required.' }
+    Set-StageDetail "$((Get-Item $edge).VersionInfo.ProductVersion) at $edge"
   }
 
   Invoke-Stage 'packages' {
@@ -214,13 +208,19 @@ try {
     } finally {
       Pop-Location
     }
-    # The installed Guidepup version, not the fact that a command ran: it is
-    # the reviewed component this stage exists to put on disk.
+    # The installed versions, not the fact that a command ran: they are the
+    # reviewed components this stage exists to put on disk. playwright-core is
+    # the browser server a Mac's Playwright connects to, which only works
+    # between the same major.minor, so its version is what consumers match.
     $installed = Get-Content (Join-Path $workspace 'node_modules\@guidepup\guidepup\package.json') -Raw | ConvertFrom-Json
     if ($installed.version -ne $manifest.guidepup.version) {
       throw "npm ci installed @guidepup/guidepup $($installed.version), not the reviewed $($manifest.guidepup.version)."
     }
-    Set-StageDetail "@guidepup/guidepup $($installed.version) from the committed lockfile"
+    $playwright = Get-Content (Join-Path $workspace 'node_modules\playwright-core\package.json') -Raw | ConvertFrom-Json
+    if ($playwright.version -ne $manifest.playwright.version) {
+      throw "npm ci installed playwright-core $($playwright.version), not the reviewed $($manifest.playwright.version)."
+    }
+    Set-StageDetail "@guidepup/guidepup $($installed.version), playwright-core $($playwright.version) from the committed lockfile"
   }
 
   Invoke-Stage 'guidepup-nvda' {
@@ -245,7 +245,7 @@ try {
     if ($LASTEXITCODE) { throw "Interactive task registration exited $LASTEXITCODE." }
     # Read the tasks back, so the detail is what Windows now holds rather than
     # a claim that a registration script ran.
-    $registered = Get-ScheduledTask -TaskName 'nvda-smoke', 'nvda-run', 'nvda-probe' -ErrorAction Stop
+    $registered = Get-ScheduledTask -TaskName 'nvda-smoke', 'nvda-daemon' -ErrorAction Stop
     Set-StageDetail (
       ($registered | ForEach-Object { "$($_.TaskName) ($($_.Principal.RunLevel), $($_.Principal.LogonType))" }) -join ', '
     )

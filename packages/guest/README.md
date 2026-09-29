@@ -2,192 +2,125 @@
 
 The guest half of sr-receipts: the side that runs a real screen reader on its
 own interactive desktop and records what it said. The host half,
-[`@sr-receipts/host`](../host/README.md), connects to this package's daemon
-from the Mac.
+[`@sr-receipts/host`](../host/README.md), reaches this package's daemon from
+the Mac.
 
-It holds two Execution Targets: NVDA with headed Firefox on the Windows Guest
-Rig, which is what most of this document is about, and the bundled
-[VoiceOver with Safari on a local Mac](voiceover/README.md).
+It holds NVDA with headed Edge on the Windows Guest Rig, which is what most of
+this document is about, and the bundled
+[VoiceOver on a local Mac](voiceover/README.md), which the Playwright fixture
+runs in process.
 
 This README is about how the rig works and why. For the rest:
 
-- what sr-receipts is for, and how a request flows through it:
+- what sr-receipts is for, and how a test flows through it:
   [the repository README](../../README.md)
-- writing scenarios, and what fails a run:
-  [`docs/scenarios.md`](../../docs/scenarios.md)
-- setting up, running and driving the Windows Guest Rig:
+- setting up, running and pointing tests at the Windows Guest Rig:
   [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md)
+- writing the tests: [`@sr-receipts/playwright`](../playwright/README.md)
 
 Commands below run from this directory, `packages/guest`, after `npm ci` at the
 repository root.
 
 ## Four things that are not obvious
 
-These cost real time to discover. They are why this repo exists.
+These cost real time to discover. They are why this package exists, and why
+Guidepup's own Playwright fixtures were not enough (ADR 0002).
 
-1. **A run must be started by a scheduled task, not over SSH.** An SSH session
-   has no interactive desktop, so NVDA has no foreground window to describe.
-   Tasks `nvda-smoke`, `nvda-probe` and `nvda-run` are registered with an
-   interactive logon type so they land in the logged-in console session (see
-   `tasks/register.ps1`). The same applies to the daemon, which is why it runs
-   from a terminal or a logon task on that desktop rather than as a service: it
-   is reachable over the network and still has to run on the console.
+1. **The daemon must run in the interactive session, not over SSH.** An SSH
+   session has no interactive desktop, so NVDA has no foreground window to
+   describe. `nvda-daemon` and `nvda-smoke` are scheduled tasks registered
+   with an interactive logon so they land in the logged-in console session
+   (see `tasks/register.ps1`). The same is why the browser's window can only
+   be activated, and the desktop's windows only listed, by the daemon: a
+   PowerShell over SSH sees no window titles at all.
 
-2. **Do not call `windowsActivate` unconditionally after launching Firefox.**
-   Its VBScript ends in `SetForegroundWindow`, which Windows refuses from a
-   non-elevated process while an elevated window holds the foreground, and the
-   guest desktop runs an elevated VS Code and PowerShell. About half the time it
-   leaves focus on Firefox's hidden menu bar: NVDA reports `menu, off screen`
-   while the page reports `document.activeElement === body`. The title still
-   names Firefox, so a title guard passes and the transcript fills with
-   plausible silences. A freshly launched `-new-window` Firefox is already
-   foreground with its content focused; activate only if the guard asks.
+2. **The browser has to be activated, and an elevated window blocks it.**
+   SetForegroundWindow is refused from a background process unless it has
+   just sent input, which is what the Alt press before it is for, and it
+   cannot take the foreground from an elevated window at all. Alt+Esc was
+   measured to cycle between other windows without ever reaching the
+   browser. Edge has no window until a test connects, because Playwright
+   starts Chromium-family browsers with no startup window.
 
-3. **`F6` is the only recovery key.** It cycles Firefox's focus back into the
-   content area. `Escape` and a second `windowsActivate` were both measured and
-   neither recovers. Every other key lands on the address bar, where a letter is
-   typed as text rather than navigating.
+3. **`F6` is the only recovery key.** Activation can leave focus on the
+   browser's hidden menu bar: NVDA reports `menu` while the page reports
+   `document.activeElement === body`, and the title still names the browser.
+   `F6` cycles the browser's focus back into the content. `Escape` and a
+   second activation were both measured and neither recovers. Every other
+   key lands on the address bar, where a letter is typed as text.
 
 4. **Browse-vs-focus mode cannot be queried, only asserted.** In focus mode
-   every quick-navigation command is passed through to the page and answers with
-   silence. `reportCurrentFocus` does not say which mode it is in (it appends an
-   object-replacement character in focus mode, but that was measured to be
-   unreliable). So the mode is proved behaviourally: quick-navigate, and toggle
-   if the attempt is silent.
+   every quick-navigation command is passed through to the page and answers
+   with silence. `reportCurrentFocus` does not say which mode it is in (it
+   appends an object-replacement character in focus mode, but that was
+   measured to be unreliable). So the mode is proved behaviourally:
+   quick-navigate, and toggle if the attempt is silent. Every NVDA run of
+   the pivot's proof of concept was in focus mode after activation, and only
+   this caught it.
 
 ## Layout
 
 ```
-lib/          the rig core: everything above, encoded once
-  session.ts    NVDA lifecycle, openTarget(): launch, focus guard, mode guard
-  guard.ts      ensureReadyToNavigate(): points 2, 3 and 4
-  firefox.ts    hermetic profile, launch
-  speech.ts     SpeechLog: reads NVDA's cumulative log without dropping phrases
-  target.ts     fixture-or-URL resolution, provenance, settle timings, queue parsing
-  scenario.ts   the scenario authoring format, its compiler and loader
-  steps.ts      step specs ("perform:x" / "press:y") and the step loop
-  expect.ts     step expectations and scenario checks
-  snapshot.ts   committed transcripts, and diffing a run against them
-  report.ts     the verdict, the transcript, and results.json
-  run.ts        a whole run as a function: executeRun(), and runs/<runId>/
-  execution-target.ts  the seam between that run and any one screen reader
-  nvda-target.ts       NVDA with headed Firefox, as an Execution Target, behind WindowsDesktop
-  voiceover-target.ts  the bundled VoiceOver with Safari, as an Execution Target, behind VoiceOverDesktop
-  daemon.ts     the run layer behind a port: routing, auth, one run at a time
-  stamp.ts      the environment block at the head of every transcript
-  system.ts     delay, taskkill, powershell, git blob hash, window list
-
-scenarios/    what to ask a target: no harness knowledge, and vice versa
-snapshots/    what each target said last time, committed
-runner.ts     the command line: parse a queue, run it, print it, exit
-daemon.ts     the daemon's entry point: wire the server to the rig and listen
-probe.ts      reads probe.json + probe-fixture.txt, writes probe-out.txt
-smoke.ts      one target, four steps: does the rig work on this machine right now?
-tasks/        register.ps1: the scheduled tasks, and the daemon's firewall rule
-fixtures/     generated by build-fixtures.mjs; committed so their hashes mean something
-provisioning/ the idempotent Provisioner for the Windows Guest Rig
-voiceover/    VoiceOver's mechanics: Safari control, launch retry, sentinel, hints, doctor, smoke, capture probe
-test/         the parts that need no desktop
+lib/
+  nvda.ts       NVDA behind NvdaDesktop: Guidepup's actions one answer each,
+                the capture window, window listing and browser activation
+  guard.ts      enterDocument(): points 2, 3 and 4, in order, proved
+  daemon.ts     the reader behind a port: routing, auth, calls serialized
+  voiceover.ts  VoiceOver as a ReaderSession, in process, behind VoiceOverDesktop
+  stamp.ts      the Environment Stamp
+  system.ts     delay, taskkill, powershell
+  smoke-result.ts  the contract between smoke.ts and the Provisioner
+daemon.ts       the daemon's entry point: NVDA behind a port, an Edge browser
+                server beside it
+smoke.ts        one fixture, the guards, four commands: does the rig work now?
+tasks/          register.ps1: the scheduled tasks, and the firewall rule
+fixtures/       committed pages: control.html for the smoke, and the pages
+                past investigations were measured on
+provisioning/   the idempotent Provisioner for the Windows Guest Rig
+voiceover/      VoiceOver's mechanics: launch retry, sentinel, hints,
+                permissions, doctor
+test/           the parts that need no desktop
 ```
 
-The host's client lives in `@sr-receipts/host`, which also owns the wire types
-this package re-exports from `lib/types.ts`.
+## The daemon's routes
 
-`runner.ts` and `daemon.ts` are two thin callers of `executeRun` in
-`lib/run.ts`, not two implementations. The daemon hands it `nvdaTarget`; the
-runner hands it `voiceOverTarget` on macOS and `nvdaTarget` everywhere else.
-Nothing in the run, the verdict, the snapshots or the artifacts knows which
-Execution Target it was given: a run started over HTTP writes the same
-`runs/<runId>/` (transcripts, `results.json`, `DONE`) as one started by the
-`nvda-run` task, so nothing that reads a run's output has to know which asked
-for it.
-
-## When something steals the foreground
-
-The focus guard runs once, before the sequence. It used to be the only check,
-which meant that if another window took the foreground mid-run, the rig sent the
-rest of the scenario into it. Quick-navigation commands are bare letters, so
-`T`, `H` and `D` were typed in as text: one run filled the Windows Search box
-with `ttttddddddddhhhhhhhhhhhh` and recorded 45 steps of the desktop as though
-they were the page under test. The culprit was a Windows Update "Select a time
-to restart" dialog.
-
-The sequence now re-checks focus every `FOCUS_CHECK_EVERY` steps (5), and on the
-last step regardless, so the tail of a transcript is known-good rather than
-assumed-good. The check is `reportTitle` (NVDA+T, which NVDA intercepts
-globally), so it reports whatever has the foreground without typing anything
-into it, and the transcript names the culprit:
-
-```
-### FOCUS LOST after step 10
-  Select a time to restart had the foreground.
-  The remaining 39 step(s) were not run.
-```
-
-Three consequences worth knowing:
-
-- **The sequence stops rather than recovering.** Even if focus were won back,
-  the caret position the rest of the sequence depends on is gone. The next
-  target gets a fresh launch and a fresh guard, which is the real recovery.
-- **Snapshot comparison is skipped**, and no baseline is written. A truncated run
-  would otherwise report every remaining step as removed: 49 differences burying
-  the one line that explains them.
-- **The bound is `every`, not zero.** Detection happens after a step, so up to
-  five keystrokes can still reach the wrong window. That is harmless for
-  navigation keys; a scenario that sends activating keys like `Enter` sets
-  `focusCheckEvery` lower.
-
-If runs keep failing this way, check for a pending update restart; see
-[`docs/operating-the-rig.md`](../../docs/operating-the-rig.md#before-a-run).
-
-## Driving the rig from the host
-
-Only needed because the app under test lives on the Mac. If its dev server runs
-*inside* the guest instead, none of this applies: point a queue line at
-`http://localhost:5173/...` and use `node runner.ts` from a terminal on the
-guest desktop. `resolveTarget` passes any `http(s)` target through unchanged, so
-the rig neither knows nor cares which side of the boundary the server is on.
-
-What the daemon buys is not running the rig: it is asking the question from the
-machine where the app actually lives. How to start it and connect is in
-[`docs/operating-the-rig.md`](../../docs/operating-the-rig.md#driving-the-rig-from-the-mac);
-the client is in [`@sr-receipts/host`](../host/README.md).
-
-`POST /runs` streams: one NDJSON frame per event, ending with the report. That
-is not decoration. A run takes minutes, and a request that sends nothing for
-minutes is what sockets and proxies kill; a frame per step keeps the connection
-busy and hands the host live progress for free. It also covers the one stretch
-the rig was previously silent through: `openTarget` spends between 17 and 45
-seconds launching Firefox and running the guards, and `request-started` and
-`opened` bracket it, so a slow open is distinguishable from a hung one.
-
-Three behaviours worth knowing before you build on it:
-
-- **One run at a time.** NVDA, Firefox and the foreground window are one shared
-  desktop. A second `POST /runs` gets `409` naming the run in flight rather than
-  being queued behind it, because a queue would hide a hardware constraint
-  behind a promise that looks like it is making progress.
-- **Hanging up does not cancel.** The run holds the desktop; abandoning it half
-  way leaves NVDA and Firefox up for the next one to trip over. It finishes.
-  `GET /runs/<id>/events` replays what a disconnected client missed, and the
-  `DONE` marker is still written last.
-- **A wrong answer resolves; an unanswered question rejects.** `rig.run()`
-  returns a report with `ok: false` when a target failed, and throws when the
-  run itself broke. Same distinction as exit codes `1` and `2`.
+Every request needs `Authorization: Bearer $RIG_TOKEN`, and the daemon refuses
+to start without a token rather than falling back to open: anything that can
+reach the port drives the guest's reader and browser. Calls on the reader
+run one after another, in the order they arrived, because one desktop cannot
+interleave two callers' keystrokes.
 
 | | |
 |---|---|
-| `POST /runs` | `{ requests }` or `{ queue }` (the text of a queue file, parsed by the same parser), plus `scenario` and `snapshots` (`"compare"`, the default, `"update"` or `"off"`). Streams NDJSON. |
-| `GET /health` | `{ ok, busy, runId, rig }`, where `rig` is the environment stamp. |
-| `GET /runs/:runId` | that run's `results.json`; `202` if it is still going |
-| `GET /runs/:runId/events` | the event stream, replayed |
-| `GET /runs/:runId/files` | what the run wrote |
-| `GET /runs/:runId/files/:name` | one transcript |
+| `GET /health` | `{ ok, started, browser: { port, path }, rig }`, where `rig` is the environment stamp. |
+| `POST /reader/start` | Start NVDA. A reader that is already up is restarted, so a test that never stopped its reader cannot hold it for the next. |
+| `POST /reader/stop` | |
+| `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok, arrivedOn, lines }`; when `ok` is false, `lines` is the entire diagnosis, ending with the windows on screen. |
+| `POST /reader/perform` | `{ command }`, one of NVDA's commands by Guidepup's name. `{ spoken }`, `""` for silence. |
+| `POST /reader/press` | `{ key }`, e.g. `"Control+Home"`. `{ spoken }` |
+| `POST /reader/next`, `/reader/previous` | `{ spoken }` |
+| `GET /reader/log`, `POST /reader/clear` | Guidepup's own log, which has one entry per action. |
+| `POST /reader/capture/begin` | Open the speech window. Answers once Guidepup's listener is attached, so a page action sent next is inside it. |
+| `POST /reader/capture/end` | Close it. `{ spoken }`: what was said inside it. |
+| `GET /desktop/windows` | `{ windows }`: every window title on the desktop. |
+| `POST /desktop/activate` | Bring the browser's window to the front. `{ foreground }`: what is in front afterwards. |
 
-Every request needs `Authorization: Bearer $RIG_TOKEN`, and the daemon refuses
-to start without a token rather than falling back to open. This is not
-ceremony: a scenario reference is a path the rig `import`s, so anything that can
-reach the port can run code in the guest.
+The browser is not on these routes. The daemon launches a Playwright browser
+server on the installed Edge at `ws://<guest>:8766/<token>`, and a test
+reaches it with Playwright's own `connectOptions`. The token is the path:
+Playwright's own protection for a browser server is a secret path, and this
+keeps one secret rather than two.
+
+## The smoke
+
+```powershell
+Start-ScheduledTask nvda-smoke
+```
+
+Opens `fixtures/control.html` in Edge on the guest, runs the guards, and
+asks four commands. It asserts only that the rig works: NVDA started, the
+page was reached in browse mode, and quick navigation answered. The
+Provisioner runs it as its proof.
 
 ## Tests
 
@@ -195,6 +128,6 @@ reach the port can run code in the guest.
 npm test
 ```
 
-Everything that needs no desktop: scenario compilation, the verdict, snapshots,
-the daemon and the host's client against a fake target, both Execution Targets
-against fake desktops, and the Provisioner's health report.
+Everything that needs no desktop: the NVDA desktop against a fake Guidepup,
+the guards against a fake desktop, the daemon against a fake desktop, the
+VoiceOver session against a fake desktop, and the Provisioner's health report.

@@ -1,28 +1,26 @@
 # @sr-receipts/playwright
 
-A `receipts` fixture for Playwright Test, so a consuming repo can ask a real
-screen reader from its own `playwright test` and get back a Receipt.
+A `reader` fixture for Playwright Test, so a consuming repo drives a real
+screen reader beside Playwright's own `page` from its own `playwright test`.
 
-Playwright is the runner, reporter and configuration here, never the browser
-driver: there is no `page`. The reader, its real browser, the guards and the
-verdict stay on the guest, behind the Execution Target seam. Why, and what was
+Playwright drives the browser. For a VoiceOver project that is the browser
+Playwright launched on this Mac; for an NVDA project it is the guest's Edge,
+reached through Playwright's own `connectOptions`. The reader comes from the
+fixture: VoiceOver in process, NVDA through the guest daemon. Both are the
+same `ReaderSession`, so a spec never says which one it has. Why, and what was
 given up for it, is in
-[ADR 0001](../../docs/adr/0001-playwright-is-the-runner-not-the-browser-driver.md).
-
-NVDA only, for now. The VoiceOver project is the next step on the
-[roadmap](../../docs/roadmap.md).
+[ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
 ## Ownership
 
-This package owns:
+This package owns `readerFixtures`, the `reader` fixture and its
+`readerOptions`, and what happens around a test: starting and stopping the
+session, and attaching the transcript and the environment stamp.
 
-- `receiptsFixtures`, the `receipts` fixture and its `receiptsOptions`
-- what happens around a run: the timeout derived from the scenario, joining a
-  path target to `baseURL`, refusing a scenario written for the other reader,
-  the attachments, and turning a FAIL verdict into a failed test
-
-It depends on `@sr-receipts/host` for the client and the protocol, and imports
-only types from `@playwright/test`, which is a peer dependency.
+It depends on `@sr-receipts/host` for the interface and the NVDA session, and
+imports only types from `@playwright/test`, which is a peer dependency.
+`@sr-receipts/guest` is an optional peer, loaded only when a VoiceOver project
+runs, so an NVDA-only consumer never installs Guidepup.
 
 ## Use
 
@@ -31,79 +29,91 @@ Extend the consumer's own `test`. The package exports fixtures rather than a
 Playwright, which Playwright refuses to run with.
 
 ```ts
-// receipts/combobox.nvda.spec.ts
-import { test as base } from '@playwright/test'
-import { receiptsFixtures } from '@sr-receipts/playwright'
+// receipts/columnlist-selection.spec.ts
+import { test as base, expect } from '@playwright/test'
+import { readerFixtures } from '@sr-receipts/playwright'
 
-const test = base.extend(receiptsFixtures)
+const test = base.extend(readerFixtures)
 
-test('the combo box echoes typed characters', async ({ receipts }) => {
-  await receipts.run('/demo/96', {
-    reader: 'nvda',
-    name: 'combobox-echo',
-    steps: [
-      { label: 'to the combo box', perform: 'moveToNextComboBox' },
-      { label: 'enter focus mode', press: 'Enter' },
-      { label: 'type a', press: 'a', expect: { matches: '(^|\\. )a(\\.|$)' } },
-    ],
-  })
+test('selecting a row through the page is announced', async ({ page, reader }) => {
+  await page.goto('/demo/columnlist')
+  await reader.enter(page)
+  const { spoken } = await reader.capture(() => page.getByLabel('select row').first().click())
+  expect(spoken).toMatch(/1 row selected/)
+  expect(await reader.next()).toMatch(/column 2/)
 })
 ```
 
 Give it a config of its own, so the repo's ordinary `playwright test` never
-asks for the rig, and a test directory the ordinary config does not match:
+asks for a reader, and a test directory the ordinary config does not match:
 
 ```ts
 // playwright.receipts.config.ts
 import { defineConfig } from '@playwright/test'
-import type { ReceiptsOptions } from '@sr-receipts/playwright'
+import type { ReaderOptions } from '@sr-receipts/playwright'
 
-export default defineConfig<{}, { receiptsOptions: ReceiptsOptions }>({
+export default defineConfig<{}, { readerOptions: ReaderOptions }>({
   testDir: 'receipts',
   workers: 1,
   retries: 0,
+  timeout: 240_000,
+  use: { headless: false },
   projects: [{
-    name: 'nvda',
-    testMatch: /\.nvda\.spec\.ts$/,
+    name: 'voiceover',
     use: {
-      receiptsOptions: {
-        reader: 'nvda',
-        url: process.env.RIG_URL ?? '',
-        token: process.env.RIG_TOKEN ?? '',
-        baseURL: 'http://192.168.64.1:5176',
-      },
+      browserName: 'webkit',
+      baseURL: 'http://localhost:5176',
+      readerOptions: { reader: 'voiceover' },
+    },
+  }, {
+    name: 'nvda',
+    use: {
+      connectOptions: { wsEndpoint: process.env.RIG_BROWSER ?? 'ws://unset' },
+      baseURL: 'http://192.168.64.1:5176',
+      readerOptions: { reader: 'nvda', url: process.env.RIG_URL ?? '', token: process.env.RIG_TOKEN ?? '' },
     },
   }],
 })
 ```
 
-- **`workers: 1` and `retries: 0` are required.** One reader holds one desktop,
-  so a second worker gets a busy rig. A retry that turns a finding green
-  destroys the evidence.
-- **`baseURL` is the Mac as the guest sees it**, and the dev server has to
-  listen on that interface (`vite dev --host 0.0.0.0`), not only on
-  `localhost`. A target that is already a URL is passed through unchanged.
-- **`RIG_URL` and `RIG_TOKEN`** are the guest daemon's; see
-  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md).
+- **`workers: 1` and `retries: 0` are required.** One reader holds one
+  desktop. A retry that turns a finding green destroys the evidence.
+- **`headless: false`.** A screen reader needs a window to read.
+- **`baseURL` is wherever the reader's browser reaches the app.** For NVDA
+  that is the Mac as the guest sees it, and the dev server has to listen on
+  that interface (`vite dev --host 0.0.0.0`), not only on `localhost`. For
+  VoiceOver the browser runs on the Mac, so it is `localhost`.
+- **`RIG_URL`, `RIG_BROWSER` and `RIG_TOKEN`** are the guest daemon's, for the
+  NVDA project only; see
+  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md). The
+  consumer's `@playwright/test` must share the guest's Playwright
+  major.minor, or `connect` refuses.
+- **A VoiceOver test takes over the Mac's desktop**, and `playwright test`
+  has to be launched from the app holding the grants in
+  [`packages/guest/voiceover/README.md`](../guest/voiceover/README.md). Run
+  `npm run voiceover:doctor` in `packages/guest` first. The VoiceOver project's
+  browser is whatever Playwright launched; `readerOptions.applicationName`
+  overrides the name VoiceOver activates, which defaults from the project's
+  `browserName` and `channel`.
 
-`receipts.run(target, scenario)` runs one scenario against one target, with
-the guest's own snapshots off, and returns the Receipt:
+The `reader` fixture starts a fresh reader for each test and stops it after.
+What it offers:
 
-- **FAIL** fails the test and lists every failed expectation and check. Pass
-  `{ assert: false }` to get the Receipt whatever its verdict, for an
-  investigation that wants the transcript.
-- **A broken run** throws, and so does a busy rig, naming the run in flight
-  rather than waiting for it.
-- **A scenario for the other reader** throws before anything opens.
+- **`enter(page, { modeProbes? })`** puts the reader on the page's content and
+  proves it. On NVDA it is the rig's guards, and a page with no table,
+  heading or landmark passes its own `modeProbes`. It throws with every
+  attempt in the message when the proof fails.
+- **`perform(command)`, `press(key)`, `next()`, `previous()`** return what the
+  reader said, `""` for silence. Commands are Guidepup's names.
+- **`capture(action)`** runs a `page` action inside the reader's speech window
+  and returns `{ result, spoken }`.
+- **`transcript`** is every call and its answer. The fixture attaches it to
+  the test as `reader-transcript`, with the environment stamp as
+  `environment`, whatever the outcome. Playwright keeps them on failure.
 
-The test's timeout is set from the scenario: an open budget, plus a step budget
-for each step, plus every `settle`. The defaults are in `defaultBudgets`, and
-`receiptsOptions.budgets` overrides them per project. Each test attaches the
-transcript, the environment stamp and the Receipt as JSON to the report.
-
-Scenarios are written exactly as in
-[`docs/scenarios.md`](../../docs/scenarios.md), as objects in the spec. Only
-the object form is accepted, because the timeout is derived from it.
+A test's timeout is the consumer's to set. An NVDA entry costs about 28
+seconds, a VoiceOver entry 15 to 25, a captured page action 1.5 seconds on
+NVDA and 5 on VoiceOver; 240 seconds covers a test of a dozen steps.
 
 ## Linking it into a consumer
 
@@ -115,7 +125,10 @@ npm install --no-save file:/path/to/sr-receipts/packages/playwright
 ```
 
 The link is a symlink, and Playwright compiles the linked TypeScript because
-its real path is outside `node_modules`.
+its real path is outside `node_modules`. Imports resolve from that real path
+too, so `@sr-receipts/host` and, for a VoiceOver project, `@sr-receipts/guest`
+come from this repository's workspace without being linked themselves. The
+consumer installs its own `@playwright/test`, at the guest's major.minor.
 
 ## Versioning
 
@@ -129,5 +142,6 @@ published.
 npm test
 ```
 
-What the fixture does around a run is tested here without Playwright or a rig.
-The fixture against a real reader is run from a consumer.
+What the fixture decides before a reader starts is tested here without
+Playwright or a reader. The fixture against a real reader is run from a
+consumer.

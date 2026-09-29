@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "node": {
     "version": "22.18.0",
     "architecture": "arm64",
@@ -7,11 +7,13 @@
     "url": "https://nodejs.org/dist/v22.18.0/node-v22.18.0-win-arm64.zip",
     "sha256": "023afb3d25c4c7d10cb6eb8a64865c347b56d4b07e6690606d021130a9192263"
   },
-  "firefox": {
-    "version": "156.0",
-    "architecture": "arm64",
-    "url": "https://archive.mozilla.org/pub/firefox/releases/156.0/win64-aarch64/en-US/Firefox%20Setup%20156.0.exe",
-    "sha256": "6a51462fa456728c90db840bae43f27b30f49f56e038006b5ac4c4eaecc57003"
+  "edge": {
+    "source": "preinstalled with Windows 11",
+    "note": "Verified present, never downloaded. Playwright ships no Windows ARM64 browsers; the installed Edge is driven through channel msedge."
+  },
+  "playwright": {
+    "version": "1.63.0",
+    "note": "playwright-core on the guest. A consumer's @playwright/test must share this major.minor to connect to the browser server."
   },
   "guidepup": {
     "version": "0.34.0",

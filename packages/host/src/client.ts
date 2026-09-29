@@ -1,36 +1,44 @@
 /**
- * The host's side of the daemon.
+ * The Mac's side of the daemon: a client for its routes, and NVDA as a
+ * `ReaderSession` built on it.
  *
- * From the Mac, `await rig.run([...])` opens a target in a real screen reader
- * inside the guest and resolves with the verdict.
- *
- * The wire format has exactly one implementation on each side: this client, and
- * the guest's daemon, which implements `./protocol.ts`. `fetch` and nothing
- * else, so it has no dependency and runs on whatever Node the host has.
+ * `fetch` and nothing else, so it has no dependency and runs on whatever Node
+ * the Mac has. The wire format has exactly one implementation on each side:
+ * this client, and the guest's daemon.
  */
-import type { DaemonHealth, RunEvent, RunReport, RunRequest, SnapshotMode } from "./protocol.ts";
+import type {
+  Activation,
+  Captured,
+  DaemonHealth,
+  EnterBody,
+  EntryOptions,
+  EntryPage,
+  EntryResult,
+  PhraseLog,
+  ReaderSession,
+  Spoken,
+  Windows,
+} from "./protocol.ts";
+
+/**
+ * What a transcript records for a call that made the reader say nothing.
+ * Named, because a blank line in a transcript is indistinguishable from a
+ * formatting accident, and because silence is a result: it is what a
+ * quick-navigation command answers in focus mode, and what a missing
+ * accessible name sounds like.
+ */
+export const SILENCE = "(silence)";
 
 export interface ClientOptions {
-  /** The daemon's base URL, e.g. `http://192.168.64.7:8765`. */
+  /** The daemon's base URL, e.g. `http://192.168.64.3:8765`. */
   url: string;
   token: string;
 }
 
-export interface RunOptions {
-  /** Defaults to `compare` on the guest. */
-  snapshots?: SnapshotMode | undefined;
-  /**
-   * Every event as it happens, which for a three-minute run is the difference
-   * between watching it and waiting for it.
-   */
-  onEvent?: ((event: RunEvent) => void) | undefined;
-  signal?: AbortSignal | undefined;
-}
-
 /**
  * Thrown for anything the daemon refused. `status` distinguishes the cases a
- * caller acts on differently: 409 means another run holds the desktop and this
- * one is worth retrying, 401/403 mean the token is wrong and it is not.
+ * caller acts on differently: 401 and 403 mean the token is wrong, 500 means
+ * the reader failed and `body.error` says how.
  */
 export class RigError extends Error {
   readonly status: number;
@@ -43,121 +51,140 @@ export class RigError extends Error {
   }
 }
 
-/**
- * Split a byte stream into NDJSON frames.
- *
- * A frame can arrive in pieces and several can arrive in one chunk, so the tail
- * after the last newline is held back rather than parsed — the bug this avoids
- * is a half-received event being reported as malformed near the end of a long
- * transcript line.
- */
-export async function* readFrames(
-  stream: ReadableStream<Uint8Array>,
-): AsyncGenerator<RunEvent> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for await (const chunk of stream as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let newline = buffer.indexOf("\n");
-    while (newline !== -1) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      if (line) yield JSON.parse(line) as RunEvent;
-      newline = buffer.indexOf("\n");
-    }
-  }
-  const last = buffer.trim();
-  if (last) yield JSON.parse(last) as RunEvent;
-}
-
-export interface RigClient {
+/** The daemon's routes, one method each. */
+export interface RemoteReader {
   health(): Promise<DaemonHealth>;
-  /** Resolves when the run finishes. Rejects if the run itself broke. */
-  run(requests: RunRequest[], options?: RunOptions): Promise<RunReport>;
-  report(runId: string): Promise<RunReport>;
-  files(runId: string): Promise<string[]>;
-  transcript(runId: string, file: string): Promise<string>;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  enter(body: EnterBody): Promise<EntryResult>;
+  perform(command: string): Promise<string>;
+  press(key: string): Promise<string>;
+  next(): Promise<string>;
+  previous(): Promise<string>;
+  log(): Promise<string[]>;
+  clear(): Promise<void>;
+  captureBegin(): Promise<void>;
+  captureEnd(): Promise<string>;
+  windows(): Promise<string[]>;
+  activateBrowser(): Promise<string>;
 }
 
-export function createClient({ url, token }: ClientOptions): RigClient {
+export function connectReader({ url, token }: ClientOptions): RemoteReader {
   const base = url.replace(/\/+$/, "");
-  const headers = { authorization: `Bearer ${token}` };
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 
-  async function get(path: string): Promise<Response> {
-    const response = await fetch(`${base}${path}`, { headers });
+  async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      headers,
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+    const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const body: unknown = await response.json().catch(() => null);
-      const message = (body as { error?: string } | null)?.error ?? response.statusText;
-      throw new RigError(response.status, message, body);
+      const error = (payload as { error?: string | string[] } | null)?.error;
+      const message = error === undefined ? response.statusText : [error].flat().join(" <- ");
+      throw new RigError(response.status, `${method} ${path}: ${message}`, payload);
     }
-    return response;
+    return payload as T;
   }
+  const spoken = async (path: string, body?: unknown): Promise<string> =>
+    (await call<Spoken>("POST", path, body)).spoken;
 
   return {
-    async health() {
-      return (await get("/health")).json() as Promise<DaemonHealth>;
-    },
+    health: () => call<DaemonHealth>("GET", "/health"),
+    start: () => call("POST", "/reader/start"),
+    stop: () => call("POST", "/reader/stop"),
+    enter: (body) => call<EntryResult>("POST", "/reader/enter", body),
+    perform: (command) => spoken("/reader/perform", { command }),
+    press: (key) => spoken("/reader/press", { key }),
+    next: () => spoken("/reader/next"),
+    previous: () => spoken("/reader/previous"),
+    log: async () => (await call<PhraseLog>("GET", "/reader/log")).phrases,
+    clear: () => call("POST", "/reader/clear"),
+    captureBegin: () => call("POST", "/reader/capture/begin"),
+    captureEnd: () => spoken("/reader/capture/end"),
+    windows: async () => (await call<Windows>("GET", "/desktop/windows")).windows,
+    activateBrowser: async () => (await call<Activation>("POST", "/desktop/activate")).foreground,
+  };
+}
 
-    async run(requests, { snapshots, onEvent, signal } = {}) {
-      const response = await fetch(`${base}/runs`, {
-        method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
-        body: JSON.stringify({
-          requests,
-          ...(snapshots !== undefined && { snapshots }),
-        }),
-        ...(signal && { signal }),
-      });
+/**
+ * NVDA as a `ReaderSession`: the daemon's routes behind the interface a test
+ * uses, with the transcript kept here on the Mac.
+ *
+ * The guards run on the guest (`POST /reader/enter`): they need the browser's
+ * window activated from inside the interactive session, which nothing on the
+ * Mac can do. What crosses the wire for them is the page's title.
+ */
+export function createNvdaSession(options: ClientOptions): ReaderSession {
+  const remote = connectReader(options);
+  const transcript: string[] = [];
+  const said = async (label: string, request: () => Promise<string>): Promise<string> => {
+    const spoken = await request();
+    transcript.push(`${label}: ${spoken || SILENCE}`);
+    return spoken;
+  };
 
-      if (!response.ok || !response.body) {
-        const body: unknown = await response.json().catch(() => null);
-        const message = (body as { error?: string } | null)?.error ?? response.statusText;
-        throw new RigError(response.status, message, body);
-      }
+  return {
+    reader: "nvda",
+    transcript,
 
-      const runId = response.headers.get("x-run-id");
-      let report: RunReport | undefined;
-      let broke: string | undefined;
-
-      for await (const event of readFrames(response.body)) {
-        onEvent?.(event);
-        if (event.type === "run-finished") report = event.report;
-        if (event.type === "broke") broke = event.message;
-      }
-
-      // A stream that stopped without a verdict is the interesting failure: the
-      // daemon died, or the guest did. Say which run it was, since its output
-      // directory is still on the guest and usually explains it.
-      if (!report) {
-        throw new RigError(
-          502,
-          broke
-            ? `run ${runId ?? "?"} broke: ${broke}`
-            : `run ${runId ?? "?"} ended without a verdict`,
-          { runId, broke },
+    async start() {
+      try {
+        await remote.health();
+      } catch (error) {
+        if (error instanceof RigError) throw error;
+        throw new Error(
+          `the guest daemon at ${options.url} is not reachable; is the VM booted, signed in, and nvda-daemon running?`,
+          { cause: error },
         );
       }
-      if (report.broke) {
-        throw new RigError(502, `run ${report.runId} broke: ${report.broke}`, report);
+      await remote.start();
+      transcript.push("start NVDA: ok");
+    },
+
+    async stop() {
+      try {
+        await remote.stop();
+      } catch (error) {
+        transcript.push(`stop NVDA: ${(error as Error).message}`);
       }
-      return report;
     },
 
-    async report(runId) {
-      return (await get(`/runs/${encodeURIComponent(runId)}`)).json() as Promise<RunReport>;
+    async enter(page: EntryPage, { modeProbes }: EntryOptions = {}) {
+      await page.bringToFront();
+      const pageTitle = await page.title();
+      const result = await remote.enter({ pageTitle, ...(modeProbes && { modeProbes }) });
+      transcript.push(...result.lines);
+      if (!result.ok) {
+        throw new Error(`NVDA did not reach the page in browse mode:\n${result.lines.join("\n")}`);
+      }
+      return result.arrivedOn;
     },
 
-    async files(runId) {
-      const body = (await get(`/runs/${encodeURIComponent(runId)}/files`).then((r) =>
-        r.json(),
-      )) as { files: string[] };
-      return body.files;
+    perform: (command) => said(command, () => remote.perform(command)),
+    press: (key) => said(`press ${key}`, () => remote.press(key)),
+    next: () => said("next", () => remote.next()),
+    previous: () => said("previous", () => remote.previous()),
+
+    async capture<T>(action: () => Promise<T>): Promise<Captured<T>> {
+      await remote.captureBegin();
+      let result: T;
+      try {
+        result = await action();
+      } catch (error) {
+        // The window has to close whatever the action did, or the next call
+        // finds a capture still open.
+        await remote.captureEnd().catch(() => undefined);
+        throw error;
+      }
+      const spoken = await remote.captureEnd();
+      transcript.push(`page action: ${spoken || SILENCE}`);
+      return { result, spoken };
     },
 
-    async transcript(runId, file) {
-      return (
-        await get(`/runs/${encodeURIComponent(runId)}/files/${encodeURIComponent(file)}`)
-      ).text();
-    },
+    spokenPhraseLog: () => remote.log(),
+    clearSpokenPhraseLog: () => remote.clear(),
+    environment: async () => (await remote.health()).rig,
   };
 }

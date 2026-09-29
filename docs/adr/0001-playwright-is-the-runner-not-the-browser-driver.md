@@ -1,10 +1,16 @@
 ---
-status: accepted
+status: superseded
 date: 2026-09-21
 amended: 2026-09-25
+superseded-by: 0002
 ---
 
 # Playwright is the runner, not the browser driver
+
+**Superseded by [ADR 0002](0002-playwright-drives-the-browser-and-a-reader-is-a-session.md)
+on 2026-09-25**, when the real-browser premise below was dropped. Kept as the
+record of why the scenario language, the run layer and the Execution Target
+seam existed, and of what the first Playwright slice measured.
 
 A consuming repo should be able to test NVDA and VoiceOver from its own
 Playwright tests. Playwright cannot drive Safari.app or release Firefox (it
@@ -70,11 +76,12 @@ and [`research/guidepup-playwright-dogwalk.md`](../../research/guidepup-playwrig
    `use: { receiptsOptions: { reader, url, token, baseURL } }`, because a
    Playwright option cannot share its name with the `receipts` fixture it
    configures, with a
-   `*.nvda.spec.ts` and `*.voiceover.spec.ts` convention. A scenario written for
-   the other reader is a broken run, never a skip. The shipped configuration
-   sets `workers: 1` and `retries: 0`, because a retry that turns a finding
-   green destroys the evidence. A busy daemon (`409`) fails fast and names the
-   run in flight.
+   `*.nvda.spec.ts` and `*.voiceover.spec.ts` convention. `url` and `token` are
+   the daemon's, so only an NVDA project has them. A scenario written for
+   the other reader is a broken run, never a skip. The consumer's configuration
+   must set `workers: 1` and `retries: 0`; the package ships none of its own. A
+   retry that turns a finding green destroys the evidence. A busy daemon
+   (`409`) fails fast and names the run in flight.
 9. **Timeouts are derived from the scenario**: an open budget plus a per-reader
    budget for each step, overridable. Starting guesses are 90 seconds to open,
    10 seconds a step on NVDA and 25 on VoiceOver. The first slice corrects them.

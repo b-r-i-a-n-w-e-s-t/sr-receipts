@@ -1,150 +1,152 @@
 /**
  * Getting NVDA into a state where a key sequence means anything.
  *
- * This is the hard-won part of the rig. It was duplicated verbatim in both the
- * probe and the runner; it lives here once now.
+ * This is the hard-won part of the rig, and it is what the stock Guidepup
+ * fixture lacks. Three guards, in order, each proved rather than assumed:
  *
- * The title guard is not enough on its own, in two separate ways.
+ * 1. **The browser is in front.** Activation runs in the interactive session,
+ *    and the title NVDA reports (NVDA+T, which NVDA intercepts globally, so it
+ *    types nothing) has to begin with the page's title. Alt+Esc was measured
+ *    to cycle between other windows without ever reaching the browser.
  *
- * First, activating the window sometimes leaves the focus on Firefox's own
- * hidden menu bar: NVDA reports `menu, off screen` while the page still reports
- * `document.activeElement === body`, so the focused object is browser chrome,
- * not content. The title names Firefox throughout, so the title guard passes and
- * the transcript fills with plausible silences. `Escape` and a second
- * `windowsActivate` were both measured and neither recovers. `F6` does, by
- * cycling Firefox's focus back into the content area, and it is the only key
- * this loop will send: every other press lands on the address bar, where a
- * letter key is typed in as text rather than navigating.
+ * 2. **Focus is in the document.** Activating a window can leave focus on the
+ *    browser's own hidden menu bar: NVDA reports `menu` while the page still
+ *    reports `document.activeElement === body`. The title names the browser
+ *    throughout, so a title guard passes and a transcript fills with plausible
+ *    silences. `Escape` and a second activation were both measured and
+ *    neither recovers. `F6` does, by cycling the browser's focus back into
+ *    the content, and it is the only key this loop sends: every other press
+ *    lands on the address bar, where a letter is typed as text.
  *
- * Second, being in the document is still not enough, because NVDA can be in
- * focus mode there, and in focus mode every quick-navigation command is passed
- * through to the page and answers with silence. `reportCurrentFocus` does not
- * say which mode it is in. It appends an object-replacement character in focus
- * mode, but that was measured to be unreliable, so the mode is asserted by
- * behaviour instead: try to quick-navigate, and toggle the mode if the attempt
- * is silent.
+ * 3. **Browse mode is on.** In focus mode every quick-navigation command is
+ *    passed through to the page and answers with silence, and
+ *    `reportCurrentFocus` does not say which mode it is in (it appends an
+ *    object-replacement character in focus mode, which was measured to be
+ *    unreliable). So the mode is asserted by behaviour: quick-navigate, and
+ *    toggle the mode if the attempt is silent. Every NVDA run of the pivot's
+ *    proof of concept found focus mode here, and only this caught it.
  *
- * The guard leaves the caret at the top of the document, so a sequence always
+ * The guard leaves the caret at the top of the document, so a test always
  * starts from a known position.
  */
-import { SILENCE, type SpeechLog } from "./speech.ts";
-import type { WindowsDesktop } from "./nvda-target.ts";
-import type { ReaderDriver } from "./steps.ts";
-import type { NvdaCommand } from "./types.ts";
+import type { EntryResult } from "@sr-receipts/host";
+import type { NvdaDesktop } from "./nvda.ts";
+import { delay as wait } from "./system.ts";
 
 /**
- * Which quick-navigation commands to use when asserting browse mode.
- *
- * The original guard probed with `moveToNextTable` alone, which was true of
- * every target the rig had at the time — the control fixture, both shape
- * fixtures, the docs page and the stresstest page all contain a table — and
- * would have reported a permanent focus-guard failure on any target that does
- * not. A component library will have plenty of those.
- *
- * The probes are tried in order and any one of them answering proves browse
- * mode, so the list runs from most to least specific. `moveToNextHeading` is the
- * effective fallback: essentially every real page has a heading. All three are
- * quick-navigation commands, which is the point — they exist only in browse
- * mode, so speech from one is positive proof of the mode rather than of the
- * page. A plain `ArrowDown` would be useless here, since it also does something
- * in focus mode.
- *
- * A target with no table, no heading and no landmark needs its own probe passed
- * in; there is no way to assert the mode without something to navigate to.
+ * Which quick-navigation commands to use when asserting browse mode, tried in
+ * order. Any one answering proves the mode, so the list runs from most to
+ * least specific, and `moveToNextHeading` is the effective fallback: nearly
+ * every real page has a heading. All three exist only in browse mode, which
+ * is the point; a plain `ArrowDown` would be useless, since it also does
+ * something in focus mode. A page with none of the three needs its own probe.
  */
-export const MODE_PROBES: NvdaCommand[] = [
-  "moveToNextTable",
-  "moveToNextHeading",
-  "moveToNextLandmark",
-];
+export const MODE_PROBES = ["moveToNextTable", "moveToNextHeading", "moveToNextLandmark"];
 
-/** The readiness guard's outcome. */
-export interface GuardResult {
-  ok: boolean;
-  /** One line per attempt, for the transcript. */
-  seen: string[];
-  /** Which mode probe answered, when one did. */
-  provedBy?: NvdaCommand;
-}
-
-export interface GuardOptions {
+export interface EnterDocumentOptions {
+  /** The page's title; the reported window title must begin with it. */
+  pageTitle: string;
+  modeProbes?: string[] | undefined;
+  activateAttempts?: number | undefined;
   focusAttempts?: number | undefined;
   modeAttempts?: number | undefined;
-  modeProbes?: NvdaCommand[] | undefined;
+  delay?: ((milliseconds: number) => Promise<void>) | undefined;
 }
 
 /**
- * Throw unless every mode probe is a command NVDA has.
- *
- * A misspelled probe would reach `nvda.perform(undefined)`, which is silent —
- * and the guard reads silence as "wrong mode". The result would be a
- * focus-guard failure that looks exactly like a real one. In TypeScript a
- * literal typo no longer compiles, but a scenario can still arrive as JSON
- * from a repo that never ran tsc, so the check stays. The NVDA target makes it
- * when it validates a scenario, before any target opens; the guard makes it
- * again for a caller that did not.
+ * Throw unless every mode probe is a command NVDA has. A misspelled probe
+ * would reach `nvda.perform(undefined)`, which is silent, and the guard reads
+ * silence as "wrong mode": a guard failure that looks exactly like a real
+ * one. The desktop's `perform` refuses an unknown name; this asks first.
  */
-export function validateModeProbes(nvda: ReaderDriver, modeProbes: readonly string[] = MODE_PROBES): void {
-  const unknown = modeProbes.filter((name) => !nvda.keyboardCommands[name]);
-  if (unknown.length) {
-    throw new Error(`unknown NVDA keyboard command(s) in modeProbes: ${unknown.join(", ")}`);
-  }
+export function validateModeProbes(commands: Readonly<Record<string, unknown>>, modeProbes: readonly string[] = MODE_PROBES): void {
+  const unknown = modeProbes.filter((name) => !commands[name]);
+  if (unknown.length) throw new Error(`unknown NVDA keyboard command(s) in modeProbes: ${unknown.join(", ")}`);
 }
 
-export async function ensureReadyToNavigate(
-  desktop: WindowsDesktop,
-  speech: SpeechLog,
-  { focusAttempts = 8, modeAttempts = 3, modeProbes = MODE_PROBES }: GuardOptions = {},
-): Promise<GuardResult> {
-  const { reader: nvda, delay } = desktop;
-  const k = nvda.keyboardCommands;
-  const seen: string[] = [];
+/**
+ * Punctuation to spaces and whitespace collapsed, the way Guidepup's own
+ * fixture compares titles: NVDA speaks symbols as words ("<" is "less"), so a
+ * title with any in it never matches character for character.
+ */
+const clean = (title: string): string =>
+  title
+    .toLowerCase()
+    .replace(/[|¦:;,.'"`\-‐–—·_()[\]{}\\^~<>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  validateModeProbes(nvda, modeProbes);
+/**
+ * Whether the browser showing the page is in front. The window title Windows
+ * reports after activation is the page's title verbatim, so it is checked
+ * first; NVDA's spoken title, with its symbols read out, is the fallback. A
+ * page with no title is matched on the browser's name instead.
+ */
+const titleMatches = (foreground: string, reported: string, pageTitle: string): boolean => {
+  if (!pageTitle) return /edge/i.test(foreground) || /edge/i.test(reported);
+  const page = clean(pageTitle).slice(0, 20);
+  return foreground.startsWith(pageTitle) || clean(foreground).startsWith(page) || clean(reported).startsWith(page);
+};
 
+export async function enterDocument(
+  desktop: NvdaDesktop,
+  {
+    pageTitle,
+    modeProbes = MODE_PROBES,
+    activateAttempts = 4,
+    focusAttempts = 6,
+    modeAttempts = 3,
+    delay = wait,
+  }: EnterDocumentOptions,
+): Promise<EntryResult> {
+  const lines: string[] = [];
+  const failed = async (heading: string): Promise<EntryResult> => {
+    lines.unshift(heading);
+    lines.push("### windows on screen", ...(await desktop.windows().catch((error: Error) => [`ERROR ${error.message}`])));
+    return { ok: false, arrivedOn: "", lines };
+  };
+
+  let title = "";
+  for (let attempt = 1; ; attempt++) {
+    const foreground = await desktop.activateBrowser();
+    lines.push(`activate browser (attempt ${attempt}): foreground is ${foreground || "(unknown)"}`);
+    await delay(500);
+    title = await desktop.perform("reportTitle");
+    lines.push(`title reported: ${title}`);
+    if (titleMatches(foreground, title, pageTitle)) break;
+    if (attempt >= activateAttempts) return failed(`### FOCUS GUARD FAILED: the browser is not in front (page title ${JSON.stringify(pageTitle)})`);
+  }
+
+  await desktop.perform("exitFocusMode");
+  await delay(100);
   let inDocument = false;
   for (let attempt = 1; attempt <= focusAttempts; attempt++) {
-    // Discard immediately before every measured command, so `heard` is that
-    // command's answer and not a backlog from launching the browser or from the
-    // previous attempt's recovery keystroke. Without this the `document` test
-    // below can match speech from several seconds ago.
-    await speech.discard();
-    await nvda.perform(k.reportCurrentFocus);
-    const heard = await speech.heard();
-    seen.push(`focus attempt ${attempt}: ${heard}`);
-    if (/\bdocument\b/i.test(heard)) {
+    const focus = await desktop.perform("reportCurrentFocus");
+    lines.push(`focus attempt ${attempt}: ${focus}`);
+    if (/\bdocument\b/i.test(focus)) {
       inDocument = true;
       break;
     }
-    // First recover by bringing the window forward, in case something else took
-    // the foreground; after that, cycle Firefox's own focus into the content.
-    if (attempt === 1) {
-      await desktop.activateBrowser();
-      await delay(2000);
-    } else {
-      await nvda.press("F6");
-      await delay(1000);
-    }
+    await desktop.press("F6");
+    await delay(1000);
   }
-  if (!inDocument) return { ok: false, seen };
+  if (!inDocument) return failed("### FOCUS GUARD FAILED: focus never reached the document");
 
   for (let attempt = 1; attempt <= modeAttempts; attempt++) {
     for (const probe of modeProbes) {
-      await nvda.press("Control+Home");
-      await delay(500);
-      await speech.discard();
-      await nvda.perform(k[probe]);
-      const heard = await speech.heard();
-      seen.push(`browse mode attempt ${attempt}, ${probe}: ${heard}`);
-      if (heard !== SILENCE) {
-        await nvda.press("Control+Home");
-        await delay(500);
-        await speech.discard();
-        return { ok: true, seen, provedBy: probe };
+      await desktop.press("Control+Home");
+      await delay(300);
+      const heard = await desktop.perform(probe);
+      lines.push(`browse mode attempt ${attempt}, ${probe}: ${heard || "(silence)"}`);
+      if (heard) {
+        const arrivedOn = await desktop.press("Control+Home");
+        await delay(300);
+        lines.push(`### focus guard: in the document, in browse mode (proved by ${probe})`, `top of the document: ${arrivedOn || "(silence)"}`);
+        return { ok: true, arrivedOn: arrivedOn || heard, lines };
       }
     }
-    await nvda.perform(k.toggleBetweenBrowseAndFocusMode);
+    await desktop.perform("toggleBetweenBrowseAndFocusMode");
     await delay(1000);
   }
-  return { ok: false, seen };
+  return failed("### FOCUS GUARD FAILED: browse mode could not be proved; quick navigation never answered");
 }

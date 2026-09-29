@@ -1,14 +1,14 @@
 /**
- * `@sr-receipts/host`: connect to a guest daemon, run, and read back what the
- * screen reader said. Re-exported explicitly, so the package's contract is a
- * list someone can read.
+ * `@sr-receipts/host`: the reader interface a test uses, the wire to a guest
+ * daemon, and NVDA as a session over that wire. Re-exported explicitly, so the
+ * package's contract is a list someone can read.
  */
 export type * from "./protocol.ts";
 export {
-  createClient,
-  readFrames,
+  SILENCE,
   RigError,
+  connectReader,
+  createNvdaSession,
   type ClientOptions,
-  type RigClient,
-  type RunOptions,
+  type RemoteReader,
 } from "./client.ts";

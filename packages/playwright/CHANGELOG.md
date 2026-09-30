@@ -21,6 +21,15 @@ The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browse
   Playwright launched, with its version.
 - `@playwright/test` `^1.63.0` is the peer range, since a consumer's version
   must match the guest's browser server.
+- `readerMatchers`, for the consumer's `expect.extend`: `toAnnounce(text)`
+  matches literal text case-insensitively, across any whitespace and never
+  inside a longer word, or takes a RegExp; `toAnnounceCleanly()` fails on a
+  symbol read as a word, an ellipsis, or a period standing alone. Both take a
+  spoken string or a `capture`'s `{ spoken }`.
+- `withReader(base)` returns the consumer's `test` with the `reader` fixture,
+  typed. Playwright's `extend` cannot infer fixture types, so
+  `base.extend(readerFixtures)` ran but left `reader` untyped in a consumer's
+  editor and `tsc`. `readerFixtures` is still exported.
 
 ## 0.1.0
 

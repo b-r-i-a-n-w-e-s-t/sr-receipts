@@ -37,12 +37,17 @@ file is the working list and changes as items land.
 
 ## Next, in order
 
-1. **carbon-svelte's `npm run sr-testing`** on a real issue: reproduce it on
-   both readers, try a fix, and cite the transcript in the ticket. The first
-   consumer's config and specs are linked, uncommitted, in that repository,
-   and run on both readers. Its lockfile still pins `@playwright/test`
-   1.62.1, with 1.63.0 installed over it without saving; the client must
-   share the guest's major.minor, so that is settled before it is committed.
+1. **carbon-svelte's receipts** on a real issue: reproduce it on both
+   readers, try a fix, and cite the transcript in the ticket. On 2026-09-29,
+   carbon-svelte#393 went through the first two: the specs found NVDA
+   speaking a stray "dot" and a stale status, and both readers passed after
+   the component changed. No transcript has been cited in a ticket yet. The
+   consumer's config and specs are untracked in that repository and hidden by
+   its `.git/info/exclude`; they run with `npx playwright test --config
+   playwright.receipts.config.ts`, as its `package.json` has no script for
+   them. Its lockfile still pins `@playwright/test` 1.62.1, with 1.63.0
+   installed over it without saving; the client must share the guest's
+   major.minor, so that is settled before any of it is committed.
 2. **Re-provision the rig** with the Provisioner as it now is, on a fresh
    guest, and time it. Every developer will do this once; it is the product.
 3. **A committed markdown receipt per failing test**, written by the fixture

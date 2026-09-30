@@ -13,8 +13,8 @@ given up for it, is in
 
 ## Ownership
 
-This package owns `readerFixtures`, the `reader` fixture and its
-`readerOptions`, and what happens around a test: starting and stopping the
+This package owns `withReader` and `readerFixtures`, the `reader` fixture and
+its `readerOptions`, the speech matchers, and what happens around a test: starting and stopping the
 session, and attaching the transcript and the environment stamp.
 
 It depends on `@sr-receipts/host` for the interface and the NVDA session, and
@@ -24,39 +24,91 @@ runs, so an NVDA-only consumer never installs Guidepup.
 
 ## Use
 
-Extend the consumer's own `test`. The package exports fixtures rather than a
-`test`, because a linked package would otherwise load a second copy of
-Playwright, which Playwright refuses to run with.
+Pass the consumer's own `test` to `withReader`. The package takes it as an
+argument rather than exporting a `test`, because a linked package would
+otherwise load a second copy of Playwright, which Playwright refuses to run
+with. `withReader` also names the fixture types for the type checker:
+Playwright's `extend` cannot infer them, so `base.extend(readerFixtures)`
+runs but leaves `reader` untyped. `readerFixtures` stays exported for a
+consumer composing its own fixtures, with the type arguments written out.
 
 ```ts
 // receipts/columnlist-selection.spec.ts
-import { test as base, expect } from '@playwright/test'
-import { readerFixtures } from '@sr-receipts/playwright'
+import { test as base, expect as baseExpect } from '@playwright/test'
+import { readerMatchers, withReader } from '@sr-receipts/playwright'
 
-const test = base.extend(readerFixtures)
+const test = withReader(base)
+const expect = baseExpect.extend(readerMatchers)
 
 test('selecting a row through the page is announced', async ({ page, reader }) => {
   await page.goto('/demo/columnlist')
+  const firstRow = page.locator('input[type="checkbox"][id*="-select-"]:not([id$="-select-all"])').first()
+  await firstRow.waitFor()
   await reader.enter(page)
-  const { spoken } = await reader.capture(() => page.getByLabel('select row').first().click())
-  expect(spoken).toMatch(/1 row selected/)
-  expect(await reader.next()).toMatch(/column 2/)
+
+  // Carbon's label covers the checkbox, so click the label, as a mouse user does.
+  const selected = await reader.capture(async () => {
+    await page.locator(`label[for="${await firstRow.getAttribute('id')}"]`).click()
+    await expect(firstRow).toBeChecked()
+  })
+  expect.soft(selected).toAnnounce('1 row selected.')
+  expect.soft(selected).toAnnounceCleanly()
+
+  // Neither reader follows a click, but both follow page focus.
+  await reader.capture(() => firstRow.focus())
+  expect.soft(await reader.next()).toAnnounce('column 2')
 })
 ```
+
+The matchers take a `capture`'s result or a spoken string:
+
+- **`toAnnounce(text)`** passes when the reader said the text. It matches
+  literally, so a period needs no escaping; case-insensitively; across
+  whatever whitespace the reader put between words; and never inside a longer
+  word or number, so `'1 row selected'` does not match `21 rows selected`.
+  A RegExp is used as it is, for what text cannot say.
+- **`toAnnounceCleanly()`** fails on punctuation a listener hears as noise: a
+  symbol read as a word ("dot", "period", "ellipsis"), an ellipsis, or a
+  period standing alone between words. NVDA's `. ` between utterances is not
+  noise.
+
+Extend `expect` in the consumer, as with `test`, so only one Playwright is
+loaded.
+
+Move the reader with `locator.focus()` inside a `capture`, not with a click.
+Use `expect.soft` for a test with several findings, so the first one does not
+hide the rest.
 
 Give it a config of its own, so the repo's ordinary `playwright test` never
 asks for a reader, and a test directory the ordinary config does not match:
 
 ```ts
 // playwright.receipts.config.ts
+import { existsSync, readFileSync } from 'node:fs'
 import { defineConfig } from '@playwright/test'
 import type { ReaderOptions } from '@sr-receipts/playwright'
+
+// RIG_URL, RIG_BROWSER and RIG_TOKEN from a gitignored .env.rig, unless the
+// shell already set them.
+const envFile = new URL('.env.rig', import.meta.url)
+if (existsSync(envFile)) {
+  for (const line of readFileSync(envFile, 'utf8').split('\n')) {
+    const match = line.match(/^([A-Z_]+)=(.*)$/)
+    if (match && !process.env[match[1]]) process.env[match[1]] = match[2]
+  }
+}
 
 export default defineConfig<{}, { readerOptions: ReaderOptions }>({
   testDir: 'receipts',
   workers: 1,
   retries: 0,
   timeout: 240_000,
+  reporter: [['list'], ['html', { open: 'never', outputFolder: 'receipts-report' }]],
+  webServer: {
+    command: 'npx vite dev --host 0.0.0.0 --port 5176 --strictPort',
+    url: 'http://localhost:5176',
+    reuseExistingServer: true,
+  },
   use: { headless: false },
   projects: [{
     name: 'voiceover',
@@ -85,9 +137,17 @@ export default defineConfig<{}, { readerOptions: ReaderOptions }>({
   VoiceOver the browser runs on the Mac, so it is `localhost`.
 - **`RIG_URL`, `RIG_BROWSER` and `RIG_TOKEN`** are the guest daemon's, for the
   NVDA project only; see
-  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md). The
-  consumer's `@playwright/test` must share the guest's Playwright
-  major.minor, or `connect` refuses.
+  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md). The config
+  above reads them from `.env.rig`; sourcing that file in the shell works too.
+  The consumer's `@playwright/test` must share the guest's Playwright
+  major.minor, or `connect` refuses. The guest's version is in `/health`'s
+  environment stamp.
+- **`webServer` listens on every interface** for the NVDA project's sake, and
+  `reuseExistingServer` lets a dev server you already started serve both
+  projects.
+- **`reporter` writes its own report folder**, apart from the ordinary
+  config's. Passing `--reporter` on the command line replaces both reporters,
+  so no HTML report is written and the folder keeps the previous run's.
 - **A VoiceOver test takes over the Mac's desktop**, and `playwright test`
   has to be launched from the app holding the grants in
   [`packages/guest/voiceover/README.md`](../guest/voiceover/README.md). Run
@@ -109,11 +169,32 @@ What it offers:
   and returns `{ result, spoken }`.
 - **`transcript`** is every call and its answer. The fixture attaches it to
   the test as `reader-transcript`, with the environment stamp as
-  `environment`, whatever the outcome. Playwright keeps them on failure.
+  `environment`, whatever the outcome, so a passing test in the HTML report
+  carries them too.
 
 A test's timeout is the consumer's to set. An NVDA entry costs about 28
 seconds, a VoiceOver entry 15 to 25, a captured page action 1.5 seconds on
 NVDA and 5 on VoiceOver; 240 seconds covers a test of a dozen steps.
+
+## Reading a receipt
+
+Open the report with `npx playwright show-report receipts-report`, and a
+test's `reader-transcript` from its attachments.
+
+- **An NVDA `spoken` string is several utterances joined.** Guidepup joins
+  the parts of one utterance with `, ` and separate utterances with `. `
+  (`NVDAClient.js` in `@guidepup/guidepup`). So `available.. main landmark` is
+  the page's own period, then the join: NVDA did not say it twice. The
+  utterances after an announcement are usually NVDA reading where it landed.
+- **A VoiceOver `spoken` string is one phrase**, VoiceOver's last, with the
+  sentinel and hints removed.
+- **Before calling a finding a component bug, check the DOM held what the
+  reader said.** A `MutationObserver` on the region, in an ordinary
+  Playwright script, shows every text the page actually went through. If the
+  reader spoke a text the DOM never held, the cause is how the reader read the
+  change, and the fix is shaped by that: for example, NVDA announces an
+  `aria-atomic` region once per changed text node, and can pair a new node
+  with a stale one.
 
 ## Linking it into a consumer
 
@@ -128,7 +209,20 @@ The link is a symlink, and Playwright compiles the linked TypeScript because
 its real path is outside `node_modules`. Imports resolve from that real path
 too, so `@sr-receipts/host` and, for a VoiceOver project, `@sr-receipts/guest`
 come from this repository's workspace without being linked themselves. The
-consumer installs its own `@playwright/test`, at the guest's major.minor.
+consumer installs its own `@playwright/test`, at the guest's major.minor. If
+its lockfile pins another version, install the guest's over it in the same
+command, also without saving:
+
+```bash
+npm install --no-save @playwright/test@1.63.0 file:/path/to/sr-receipts/packages/playwright
+```
+
+Any later `npm ci` or `npm install` in the consumer undoes both, so check
+`npx playwright --version` before a run.
+
+To keep the config, the specs and the report out of the consumer's git
+without touching its `.gitignore`, list them in its `.git/info/exclude`,
+which is local to the clone.
 
 ## Versioning
 

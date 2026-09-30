@@ -8,12 +8,12 @@
  * guest daemon's routes in `@sr-receipts/host`. Both are the same
  * `ReaderSession`, so a spec never says which one it has. See ADR 0002.
  *
- * Exported as fixtures for the consumer's own `test.extend`, and importing
+ * Applied to the consumer's own `test` by `withReader`, and importing
  * only types from `@playwright/test`. Playwright refuses to load a second copy
  * of itself, and a linked package resolves its imports from where it really
  * lives, which is not the consumer's `node_modules`.
  */
-import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from "@playwright/test";
+import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from "@playwright/test";
 import { createNvdaSession, type Reader, type ReaderSession } from "@sr-receipts/host";
 
 /**
@@ -93,14 +93,14 @@ export function environmentStamp(reader: Reader, readerStamp: string[], browser:
   return reader === "nvda" ? readerStamp : [...readerStamp, `browser: ${browser.name} ${browser.version}`];
 }
 
-type ReaderFixtures = Fixtures<
-  { reader: ReaderSession },
-  { readerOptions: ReaderOptions | undefined },
-  PlaywrightTestArgs & PlaywrightTestOptions,
-  PlaywrightWorkerArgs & PlaywrightWorkerOptions
->;
+type ReaderTestFixtures = { reader: ReaderSession };
+type ReaderWorkerFixtures = { readerOptions: ReaderOptions | undefined };
+type BaseTestArgs = PlaywrightTestArgs & PlaywrightTestOptions;
+type BaseWorkerArgs = PlaywrightWorkerArgs & PlaywrightWorkerOptions;
 
-/** `test.extend(readerFixtures)` gives a test the `reader` fixture beside `page`. */
+type ReaderFixtures = Fixtures<ReaderTestFixtures, ReaderWorkerFixtures, BaseTestArgs, BaseWorkerArgs>;
+
+/** The `reader` fixture and its option. `withReader` applies them with their types named. */
 export const readerFixtures: ReaderFixtures = {
   readerOptions: [undefined, { option: true, scope: "worker" }],
 
@@ -123,3 +123,15 @@ export const readerFixtures: ReaderFixtures = {
     }
   },
 };
+
+/**
+ * The consumer's `test` with the `reader` fixture: `withReader(base)`, where
+ * `base` is the consumer's own `test` from `@playwright/test`. Playwright's
+ * `extend` cannot infer fixture types from an object it is handed, so
+ * `base.extend(readerFixtures)` loses `reader` to the type checker; this names
+ * them. The consumer's `base` is taken as an argument, so no second Playwright
+ * is loaded.
+ */
+export function withReader(base: TestType<BaseTestArgs, BaseWorkerArgs>): TestType<BaseTestArgs & ReaderTestFixtures, BaseWorkerArgs & ReaderWorkerFixtures> {
+  return base.extend<ReaderTestFixtures, ReaderWorkerFixtures>(readerFixtures);
+}

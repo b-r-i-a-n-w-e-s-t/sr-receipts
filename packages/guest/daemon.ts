@@ -51,6 +51,10 @@ writeFileSync("artifacts/daemon.pid", `${process.pid}\n`, "utf8");
 // window, so nothing is on screen between tests.
 const browser = await chromium.launchServer({ channel: "msedge", headless: false, host, port: browserPort, wsPath: `/${token}` });
 
+// The stamp is taken once and kept, so this also takes the one every
+// transcript this daemon serves will carry.
+const environment = await desktop.environment();
+
 const server = createRigServer({ token, desktop, browser: { port: browserPort, path: `/${token}` } });
 
 /** Where the Mac should point, since nothing records how it addresses the guest. */
@@ -64,7 +68,7 @@ server.listen(port, host, () => {
   console.log(`nvda-rig daemon listening on ${host}:${port}, browser server on ${host}:${browserPort}`);
   // The stamp is what heads every transcript, so printing it at startup means
   // the daemon's log says which NVDA and Edge the tests it serves will use.
-  for (const line of desktop.environment()) console.log(`  ${line}`);
+  for (const line of environment) console.log(`  ${line}`);
 
   console.log("\nFrom the Mac:");
   for (const address of addresses()) {

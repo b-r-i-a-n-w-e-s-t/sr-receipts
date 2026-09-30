@@ -90,7 +90,9 @@ retired to get here are in
    `reader.capture(action)` for what a `page` action makes the reader say.
    Playwright's `expect` judges the answers.
 4. **The Receipt is attached.** The transcript and the environment stamp go on
-   the test, beside Playwright's report and trace.
+   the test, beside Playwright's report and trace. Open them with `npx
+   playwright show-report`; see
+   [Reading a receipt](packages/playwright/README.md#reading-a-receipt).
 
 ## Using it
 
@@ -110,6 +112,7 @@ retired to get here are in
 | To | Read |
 |---|---|
 | Drive a reader from a consuming repo's Playwright tests | [`packages/playwright/README.md`](packages/playwright/README.md) |
+| See and read a receipt | [`packages/playwright/README.md#reading-a-receipt`](packages/playwright/README.md#reading-a-receipt) |
 | Set up and run the Windows Guest Rig | [`docs/operating-the-rig.md`](docs/operating-the-rig.md) |
 | Run VoiceOver on a Mac, and what is known about capturing it | [`packages/guest/voiceover/README.md`](packages/guest/voiceover/README.md) |
 | Understand the guards and the daemon's routes | [`packages/guest/README.md`](packages/guest/README.md) |

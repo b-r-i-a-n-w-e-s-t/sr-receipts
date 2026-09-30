@@ -6,7 +6,7 @@ import {
   type SmokeResult,
 } from "../lib/smoke-result.ts";
 
-export const HEALTH_REPORT_SCHEMA_VERSION = 3;
+export const HEALTH_REPORT_SCHEMA_VERSION = 4;
 export const PROVISION_EXECUTION =
   "unelevated interactive scheduled task: real NVDA with headed Edge";
 
@@ -76,7 +76,6 @@ export interface HealthReport {
     smokePassed: boolean;
     speechCaptured: boolean;
     speechArtifact: boolean;
-    focusRetained: boolean;
     scheduledCmdNode: boolean;
     freshArtifact: boolean;
   };
@@ -124,7 +123,6 @@ export function assessProvisioning({
     // maintainer reads survived the run. The two fail for different reasons.
     speechCaptured: smoke?.speechCaptured === true,
     speechArtifact: observed.speechArtifactBytes > 0,
-    focusRetained: smoke?.focusLost === null,
     scheduledCmdNode:
       smoke?.schemaVersion === SMOKE_RESULT_SCHEMA_VERSION &&
       smoke.fixture === SMOKE_CONTROL_FIXTURE &&

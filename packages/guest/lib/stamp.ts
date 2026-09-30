@@ -8,32 +8,29 @@
  * runs cannot be attributed.
  */
 import { existsSync, readdirSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import { EDGE } from "./nvda.ts";
-import { powershell } from "./system.ts";
+import { packageVersion, powershell } from "./system.ts";
 
-// Package versions come from package.json files, which are not importable
-// modules under ESM without a JSON import attribute. `createRequire` reads
-// them with none of that ceremony and no build-time resolution.
-const require = createRequire(import.meta.url);
-
-const version = (name: string): string => {
-  try {
-    return (require(`${name}/package.json`) as { version: string }).version;
-  } catch {
-    return "not installed";
-  }
-};
-
-export function stamp(): string[] {
+/**
+ * Every line is collected even when a query fails, because the stamp is
+ * provenance: a line saying "unknown" is better than a lost run.
+ */
+export async function stamp(ask: (script: string) => Promise<string> = powershell): Promise<string[]> {
+  const query = (script: string): Promise<string> => ask(script).catch(() => "unknown");
   const reg = "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
   const cache = join(process.env.LOCALAPPDATA ?? "", "guidepup", "nvda", "all");
+  const [release, build, revision, edge] = await Promise.all([
+    query(`(Get-ItemProperty '${reg}').DisplayVersion`),
+    query(`(Get-ItemProperty '${reg}').CurrentBuild`),
+    query(`(Get-ItemProperty '${reg}').UBR`),
+    query(`(Get-Item '${EDGE}').VersionInfo.ProductVersion`),
+  ]);
   return [
-    `windows: ${powershell(`(Get-ItemProperty '${reg}').DisplayVersion`)} build ${powershell(`(Get-ItemProperty '${reg}').CurrentBuild`)}.${powershell(`(Get-ItemProperty '${reg}').UBR`)} ${process.env.PROCESSOR_ARCHITECTURE}`,
-    `edge: ${powershell(`(Get-Item '${EDGE}').VersionInfo.ProductVersion`)} at ${EDGE}, driven by playwright-core ${version("playwright-core")}`,
+    `windows: ${release} build ${build}.${revision} ${process.env.PROCESSOR_ARCHITECTURE}`,
+    `edge: ${edge} at ${EDGE}, driven by playwright-core ${packageVersion("playwright-core")}`,
     `nvda asset: ${existsSync(cache) ? readdirSync(cache).join(", ") : "unknown"}`,
-    `guidepup: ${version("@guidepup/guidepup")}`,
+    `guidepup: ${packageVersion("@guidepup/guidepup")}`,
     `node: ${process.version}`,
     "nvda settings: guidepup bundled config, speechViewer.showSpeechViewerAtStartup=false, capture=true",
   ];

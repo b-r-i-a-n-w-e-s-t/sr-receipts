@@ -11,8 +11,11 @@ This package owns:
   either reader, with Guidepup's method names
 - the wire protocol, also in `src/protocol.ts`: the daemon's routes and their
   bodies
-- `connectReader`, a client for those routes, and `createNvdaSession`, NVDA
-  as a `ReaderSession` built on it
+- `createReaderSession` in `src/session.ts`: the Reader Session every
+  reader is built with. It wraps a reader adapter and owns the transcript,
+  the serialization of calls, the rule that every call rejects rather than
+  throws, the restart on `start` and the `stop` that never throws
+- `createNvdaSession`, NVDA's adapter over the daemon's routes
 
 It does not know how any screen reader is driven, and it depends on nothing
 but Node's `fetch`. `@sr-receipts/guest` implements the protocol and depends
@@ -53,5 +56,6 @@ external consumer exists.
 npm test
 ```
 
-The client and the NVDA session against a fake daemon. The daemon itself is
-tested in `@sr-receipts/guest`, which can depend on this package.
+The Reader Session against a fake adapter. The NVDA session is tested against
+the real daemon in `@sr-receipts/guest`'s `test/wire.test.ts`, since the guest
+can depend on this package and not the other way round.

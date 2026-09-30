@@ -19,17 +19,16 @@
  *   `voiceover/hints.ts`.
  * - The start is retried on the launch race only. See `voiceover/orchestrator.ts`.
  */
-import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { MacOSKeyCodes, macOSActivate, voiceOver } from "@guidepup/guidepup";
-import { SILENCE, type Captured, type EntryPage, type ReaderSession } from "@sr-receipts/host";
+import { SILENCE, createReaderSession, type EntryPage, type Recorder, type ReaderSession } from "@sr-receipts/host";
 import { inspect } from "../voiceover/doctor.ts";
-import { errorChain, type DoctorCheck, type Outcome } from "../voiceover/evidence.ts";
+import type { DoctorCheck, Outcome } from "../voiceover/evidence.ts";
 import { stripHint } from "../voiceover/hints.ts";
 import { launchWithRetry } from "../voiceover/orchestrator.ts";
 import { automationProblems } from "../voiceover/permissions.ts";
 import { speakSentinel, stripSentinel } from "../voiceover/sentinel.ts";
-import { delay } from "./system.ts";
+import { delay, packageVersion } from "./system.ts";
 
 /**
  * Merged into Guidepup's portable preferences before VoiceOver starts. Hints
@@ -86,8 +85,6 @@ export interface VoiceOverSessionOptions {
   applicationName: string;
 }
 
-const require = createRequire(import.meta.url);
-
 /**
  * The marker functions below run in the browser, through `page.evaluate`,
  * where `document` exists. This package is typechecked against Node's
@@ -108,11 +105,10 @@ function command(file: string, args: string[]): string {
 }
 
 function environment(): string[] {
-  const guidepup = require("@guidepup/guidepup/package.json") as { version: string };
   return [
     `macos: ${command("sw_vers", ["-productVersion"])} build ${command("sw_vers", ["-buildVersion"])} ${process.arch}`,
     "voiceover: bundled with macOS",
-    `guidepup: ${guidepup.version}`,
+    `guidepup: ${packageVersion("@guidepup/guidepup")}`,
     `node: ${process.version}`,
     `voiceover settings: guidepup portable preferences with ${JSON.stringify(VOICEOVER_SETTINGS)}, capture=true, sentinel spoken before each command, hints stripped from recorded speech`,
   ];
@@ -164,17 +160,19 @@ const SEARCH_ATTEMPTS = 5;
 /** The sentinel and the hints come off where speech is read, so every caller sees the same words. */
 const clean = (phrase: string): string => stripHint(stripSentinel(phrase));
 
+/**
+ * VoiceOver as a `ReaderSession`: this file is its adapter, and
+ * `createReaderSession` gives it the Transcript, the serialization and the
+ * error contract every reader shares.
+ */
 export function createVoiceOverSession({ applicationName }: VoiceOverSessionOptions, desktop: VoiceOverDesktop = realDesktop): ReaderSession {
   const { reader } = desktop;
-  const transcript: string[] = [];
 
   /** A command's answer: the last phrase, cleaned; silence when the sentinel is all that is left. */
-  const said = async (label: string, action: () => Promise<void>): Promise<string> => {
+  const said = async (action: () => Promise<void>): Promise<string> => {
     await desktop.speakSentinel();
     await action();
-    const spoken = clean(await reader.lastSpokenPhrase());
-    transcript.push(`${label}: ${spoken || SILENCE}`);
-    return spoken;
+    return clean(await reader.lastSpokenPhrase());
   };
 
   /**
@@ -182,7 +180,7 @@ export function createVoiceOverSession({ applicationName }: VoiceOverSessionOpti
    * bounds on both loops, which the stock ones lack. The marker input is the
    * stock trick that makes VoiceOver notice later Playwright interactions.
    */
-  async function enter(page: EntryPage): Promise<string> {
+  async function enter(page: EntryPage, record: Recorder): Promise<string> {
     await desktop.activate(applicationName);
     await reader.key("Control");
     await desktop.delay(100);
@@ -208,7 +206,7 @@ export function createVoiceOverSession({ applicationName }: VoiceOverSessionOpti
         await desktop.delay(100);
         await reader.perform(reader.keyboardCommands.openItemChooser);
         spoken = await reader.lastSpokenPhrase();
-        transcript.push(`open item chooser (attempt ${attempt}): ${spoken || SILENCE}`);
+        record(`open item chooser (attempt ${attempt}): ${spoken || SILENCE}`);
         if (ITEM_CHOOSER_ANNOUNCEMENT.test(spoken)) break;
         if (attempt >= CHOOSER_ATTEMPTS) {
           throw new Error(`Item Chooser did not open in ${CHOOSER_ATTEMPTS} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
@@ -226,7 +224,7 @@ export function createVoiceOverSession({ applicationName }: VoiceOverSessionOpti
             break;
           }
         }
-        transcript.push(`item chooser search (round ${round}): ${spoken || SILENCE}`);
+        record(`item chooser search (round ${round}): ${spoken || SILENCE}`);
         if (!matched) {
           await reader.key("Backspace");
           await desktop.delay(100);
@@ -242,7 +240,7 @@ export function createVoiceOverSession({ applicationName }: VoiceOverSessionOpti
       await reader.clearItemTextLog();
       await reader.next();
       const arrivedOn = clean(await reader.itemText());
-      transcript.push(`### focus guard: VoiceOver cursor in the web content, on ${JSON.stringify(arrivedOn)}`);
+      record(`### focus guard: VoiceOver cursor in the web content, on ${JSON.stringify(arrivedOn)}`);
       if (!arrivedOn) throw new Error("entered web content, but the first item has no text");
       return arrivedOn;
     } finally {
@@ -250,11 +248,10 @@ export function createVoiceOverSession({ applicationName }: VoiceOverSessionOpti
     }
   }
 
-  return {
+  return createReaderSession({
     reader: "voiceover",
-    transcript,
 
-    async start() {
+    async start(record) {
       // Everything that can be known without the reader is asked before it
       // starts, because a reader that is already talking has the keyboard.
       const missing = desktop.checks().filter((check) => !check.ok);
@@ -282,47 +279,31 @@ export function createVoiceOverSession({ applicationName }: VoiceOverSessionOpti
         // One line per attempt: a start that needed a retry says so instead
         // of passing silently. An AppleScript error arrives with newlines.
         for (const attempt of attempts) {
-          transcript.push(`${attempt.action}: ${attempt.ok ? "ok" : (attempt.error ?? "failed").replace(/\s*\n\s*/g, " ").trim()}`);
+          record(`${attempt.action}: ${attempt.ok ? "ok" : (attempt.error ?? "failed").replace(/\s*\n\s*/g, " ").trim()}`);
         }
       }
     },
 
-    async stop() {
-      try {
-        await desktop.stop();
-      } catch (error) {
-        transcript.push(`stop VoiceOver: ${errorChain(error).join(" <- ")}`);
-      }
-    },
-
-    async enter(page) {
-      try {
-        return await enter(page);
-      } catch (error) {
-        transcript.push("### WEB CONTENT NOT REACHED", errorChain(error).join(" <- "));
-        throw new Error(`VoiceOver did not reach the web content:\n${transcript.join("\n")}`, { cause: error });
-      }
-    },
+    stop: () => desktop.stop(),
+    enter: (page, _options, record) => enter(page, record),
 
     perform: (name) => {
       const keyCommand = reader.keyboardCommands[name];
       if (!keyCommand) throw new Error(`unknown VoiceOver keyboard command: ${name}`);
-      return said(name, () => reader.perform(keyCommand));
+      return said(() => reader.perform(keyCommand));
     },
-    press: (key) => said(`press ${key}`, () => reader.press(key)),
-    next: () => said("next", () => reader.next()),
-    previous: () => said("previous", () => reader.previous()),
+    press: (key) => said(() => reader.press(key)),
+    next: () => said(() => reader.next()),
+    previous: () => said(() => reader.previous()),
 
-    async capture<T>(action: () => Promise<T>): Promise<Captured<T>> {
+    async capture(action) {
       await desktop.speakSentinel();
       const captured = await reader.capture(action);
-      const spoken = clean(captured.spokenPhrase);
-      transcript.push(`page action: ${spoken || SILENCE}`);
-      return { result: captured.result, spoken };
+      return { result: captured.result, spoken: clean(captured.spokenPhrase) };
     },
 
     spokenPhraseLog: async () => (await reader.spokenPhraseLog()).map(clean),
     clearSpokenPhraseLog: () => reader.clearSpokenPhraseLog(),
     environment: async () => desktop.environment(),
-  };
+  });
 }

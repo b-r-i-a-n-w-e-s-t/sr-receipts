@@ -68,7 +68,7 @@ lib/
   daemon.ts     the reader behind a port: routing, auth, calls serialized
   voiceover.ts  VoiceOver as a ReaderSession, in process, behind VoiceOverDesktop
   stamp.ts      the Environment Stamp
-  system.ts     delay, taskkill, powershell
+  system.ts     delay, powershell, packageVersion
   smoke-result.ts  the contract between smoke.ts and the Provisioner
 daemon.ts       the daemon's entry point: NVDA behind a port, an Edge browser
                 server beside it
@@ -92,7 +92,7 @@ interleave two callers' keystrokes.
 
 | | |
 |---|---|
-| `GET /health` | `{ ok, started, browser: { port, path }, rig }`, where `rig` is the environment stamp. |
+| `GET /health` | `{ ok, started, browser: { port, path }, rig }`, where `rig` is the environment stamp, taken once when the daemon starts. Not serialized, so it answers while a reader call is running. |
 | `POST /reader/start` | Start NVDA. A reader that is already up is restarted, so a test that never stopped its reader cannot hold it for the next. |
 | `POST /reader/stop` | |
 | `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok, arrivedOn, lines }`; when `ok` is false, `lines` is the entire diagnosis, ending with the windows on screen. |

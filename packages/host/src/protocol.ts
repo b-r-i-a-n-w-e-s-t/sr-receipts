@@ -63,6 +63,10 @@ export interface Captured<T> {
  * One reader, started for one test. The same interface for VoiceOver in
  * process on the Mac and for NVDA through the guest daemon, with Guidepup's
  * method names, so a test never says which reader it is asking.
+ *
+ * Both are built by `createReaderSession`, so on either reader: calls run one
+ * at a time in the order they were made, every call rejects rather than
+ * throws, and a failed call leaves a line in the transcript.
  */
 export interface ReaderSession {
   readonly reader: Reader;
@@ -71,6 +75,7 @@ export interface ReaderSession {
    * named. The fixture attaches it to the test: this is the durable record.
    */
   readonly transcript: string[];
+  /** A started reader is restarted. */
   start(): Promise<void>;
   /** Never throws: a failed teardown must not mask the error that caused it. */
   stop(): Promise<void>;
@@ -87,7 +92,11 @@ export interface ReaderSession {
   press(key: string): Promise<string>;
   next(): Promise<string>;
   previous(): Promise<string>;
-  /** Run a page action inside the reader's speech window, and return what it made the reader say. */
+  /**
+   * Run a page action inside the reader's speech window, and return what it
+   * made the reader say. The action must not call the reader: that call would
+   * wait for the capture it is inside, so it is refused.
+   */
   capture<T>(action: () => Promise<T>): Promise<Captured<T>>;
   spokenPhraseLog(): Promise<string[]>;
   clearSpokenPhraseLog(): Promise<void>;

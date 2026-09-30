@@ -1,33 +1,13 @@
 /**
- * The Mac's side of the daemon: a client for its routes, and NVDA as a
- * `ReaderSession` built on it.
+ * NVDA as a `ReaderSession`, over the guest daemon's routes.
  *
  * `fetch` and nothing else, so it has no dependency and runs on whatever Node
  * the Mac has. The wire format has exactly one implementation on each side:
- * this client, and the guest's daemon.
+ * this adapter, and the guest's daemon. The contract test that runs the two
+ * together is in `@sr-receipts/guest`, which can depend on this package.
  */
-import type {
-  Activation,
-  Captured,
-  DaemonHealth,
-  EnterBody,
-  EntryOptions,
-  EntryPage,
-  EntryResult,
-  PhraseLog,
-  ReaderSession,
-  Spoken,
-  Windows,
-} from "./protocol.ts";
-
-/**
- * What a transcript records for a call that made the reader say nothing.
- * Named, because a blank line in a transcript is indistinguishable from a
- * formatting accident, and because silence is a result: it is what a
- * quick-navigation command answers in focus mode, and what a missing
- * accessible name sounds like.
- */
-export const SILENCE = "(silence)";
+import type { DaemonHealth, EnterBody, EntryResult, PhraseLog, ReaderSession, Spoken } from "./protocol.ts";
+import { createReaderSession } from "./session.ts";
 
 export interface ClientOptions {
   /** The daemon's base URL, e.g. `http://192.168.64.3:8765`. */
@@ -51,25 +31,12 @@ export class RigError extends Error {
   }
 }
 
-/** The daemon's routes, one method each. */
-export interface RemoteReader {
-  health(): Promise<DaemonHealth>;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  enter(body: EnterBody): Promise<EntryResult>;
-  perform(command: string): Promise<string>;
-  press(key: string): Promise<string>;
-  next(): Promise<string>;
-  previous(): Promise<string>;
-  log(): Promise<string[]>;
-  clear(): Promise<void>;
-  captureBegin(): Promise<void>;
-  captureEnd(): Promise<string>;
-  windows(): Promise<string[]>;
-  activateBrowser(): Promise<string>;
-}
-
-export function connectReader({ url, token }: ClientOptions): RemoteReader {
+/**
+ * The guards run on the guest (`POST /reader/enter`): they need the browser's
+ * window activated from inside the interactive session, which nothing on the
+ * Mac can do. What crosses the wire for them is the page's title.
+ */
+export function createNvdaSession({ url, token }: ClientOptions): ReaderSession {
   const base = url.replace(/\/+$/, "");
   const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 
@@ -87,104 +54,61 @@ export function connectReader({ url, token }: ClientOptions): RemoteReader {
     }
     return payload as T;
   }
-  const spoken = async (path: string, body?: unknown): Promise<string> =>
-    (await call<Spoken>("POST", path, body)).spoken;
+  const spoken = async (path: string, body?: unknown): Promise<string> => (await call<Spoken>("POST", path, body)).spoken;
+  const health = () => call<DaemonHealth>("GET", "/health");
 
-  return {
-    health: () => call<DaemonHealth>("GET", "/health"),
-    start: () => call("POST", "/reader/start"),
+  return createReaderSession({
+    reader: "nvda",
+
+    async start() {
+      try {
+        await health();
+      } catch (error) {
+        if (error instanceof RigError) throw error;
+        throw new Error(`the guest daemon at ${url} is not reachable; is the VM booted, signed in, and nvda-daemon running?`, {
+          cause: error,
+        });
+      }
+      await call("POST", "/reader/start");
+    },
+
     stop: () => call("POST", "/reader/stop"),
-    enter: (body) => call<EntryResult>("POST", "/reader/enter", body),
+
+    async enter(page, { modeProbes }, record) {
+      await page.bringToFront();
+      const body: EnterBody = { pageTitle: await page.title(), ...(modeProbes && { modeProbes }) };
+      const result = await call<EntryResult>("POST", "/reader/enter", body);
+      if (result.ok) {
+        record(...result.lines);
+        return result.arrivedOn;
+      }
+      // The guard's first line is its verdict; the rest is how it got there.
+      const [verdict = "the guards failed", ...lines] = result.lines;
+      record(...lines);
+      throw new Error(verdict.replace(/^#+\s*/, ""));
+    },
+
     perform: (command) => spoken("/reader/perform", { command }),
     press: (key) => spoken("/reader/press", { key }),
     next: () => spoken("/reader/next"),
     previous: () => spoken("/reader/previous"),
-    log: async () => (await call<PhraseLog>("GET", "/reader/log")).phrases,
-    clear: () => call("POST", "/reader/clear"),
-    captureBegin: () => call("POST", "/reader/capture/begin"),
-    captureEnd: () => spoken("/reader/capture/end"),
-    windows: async () => (await call<Windows>("GET", "/desktop/windows")).windows,
-    activateBrowser: async () => (await call<Activation>("POST", "/desktop/activate")).foreground,
-  };
-}
 
-/**
- * NVDA as a `ReaderSession`: the daemon's routes behind the interface a test
- * uses, with the transcript kept here on the Mac.
- *
- * The guards run on the guest (`POST /reader/enter`): they need the browser's
- * window activated from inside the interactive session, which nothing on the
- * Mac can do. What crosses the wire for them is the page's title.
- */
-export function createNvdaSession(options: ClientOptions): ReaderSession {
-  const remote = connectReader(options);
-  const transcript: string[] = [];
-  const said = async (label: string, request: () => Promise<string>): Promise<string> => {
-    const spoken = await request();
-    transcript.push(`${label}: ${spoken || SILENCE}`);
-    return spoken;
-  };
-
-  return {
-    reader: "nvda",
-    transcript,
-
-    async start() {
-      try {
-        await remote.health();
-      } catch (error) {
-        if (error instanceof RigError) throw error;
-        throw new Error(
-          `the guest daemon at ${options.url} is not reachable; is the VM booted, signed in, and nvda-daemon running?`,
-          { cause: error },
-        );
-      }
-      await remote.start();
-      transcript.push("start NVDA: ok");
-    },
-
-    async stop() {
-      try {
-        await remote.stop();
-      } catch (error) {
-        transcript.push(`stop NVDA: ${(error as Error).message}`);
-      }
-    },
-
-    async enter(page: EntryPage, { modeProbes }: EntryOptions = {}) {
-      await page.bringToFront();
-      const pageTitle = await page.title();
-      const result = await remote.enter({ pageTitle, ...(modeProbes && { modeProbes }) });
-      transcript.push(...result.lines);
-      if (!result.ok) {
-        throw new Error(`NVDA did not reach the page in browse mode:\n${result.lines.join("\n")}`);
-      }
-      return result.arrivedOn;
-    },
-
-    perform: (command) => said(command, () => remote.perform(command)),
-    press: (key) => said(`press ${key}`, () => remote.press(key)),
-    next: () => said("next", () => remote.next()),
-    previous: () => said("previous", () => remote.previous()),
-
-    async capture<T>(action: () => Promise<T>): Promise<Captured<T>> {
-      await remote.captureBegin();
-      let result: T;
+    async capture(action) {
+      await call("POST", "/reader/capture/begin");
+      let result;
       try {
         result = await action();
       } catch (error) {
         // The window has to close whatever the action did, or the next call
         // finds a capture still open.
-        await remote.captureEnd().catch(() => undefined);
+        await spoken("/reader/capture/end").catch(() => undefined);
         throw error;
       }
-      const spoken = await remote.captureEnd();
-      transcript.push(`page action: ${spoken || SILENCE}`);
-      return { result, spoken };
+      return { result, spoken: await spoken("/reader/capture/end") };
     },
 
-    spokenPhraseLog: () => remote.log(),
-    clearSpokenPhraseLog: () => remote.clear(),
-    environment: async () => (await remote.health()).rig,
-  };
+    spokenPhraseLog: async () => (await call<PhraseLog>("GET", "/reader/log")).phrases,
+    clearSpokenPhraseLog: async () => void (await call("POST", "/reader/clear")),
+    environment: async () => (await health()).rig,
+  });
 }

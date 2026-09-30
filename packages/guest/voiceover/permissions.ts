@@ -16,7 +16,7 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { errorChain } from "./evidence.ts";
+import { errorChain } from "@sr-receipts/host";
 
 const execFileAsync = promisify(execFile);
 

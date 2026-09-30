@@ -25,7 +25,7 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { DaemonHealth, EnterBody } from "@sr-receipts/host";
+import { errorChain, type DaemonHealth, type EnterBody } from "@sr-receipts/host";
 import { enterDocument } from "./guard.ts";
 import type { NvdaDesktop } from "./nvda.ts";
 
@@ -104,21 +104,6 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
-}
-
-function errorChain(error: unknown): string[] {
-  const messages: string[] = [];
-  let current = error;
-  while (current) {
-    if (current instanceof Error) {
-      messages.push(current.message);
-      current = current.cause;
-    } else {
-      messages.push(String(current));
-      break;
-    }
-  }
-  return messages;
 }
 
 /** Thrown by a route for a body it cannot use; the message is the entire 400. */
@@ -200,12 +185,16 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
     if (!presented) return json(res, 401, { error: "Authorization: Bearer <token> required" });
     if (!tokenMatches(presented, token)) return json(res, 403, { error: "token not accepted" });
 
-    if (method === "GET" && path === "/health") {
-      const health: DaemonHealth = { ok: true, started, browser, rig: desktop.environment() };
-      return json(res, 200, health);
-    }
-
     void (async () => {
+      // Not serialized: health must answer while a reader call is running.
+      if (method === "GET" && path === "/health") {
+        try {
+          const health: DaemonHealth = { ok: true, started, browser, rig: await desktop.environment() };
+          return json(res, 200, health);
+        } catch (error) {
+          return json(res, 500, { error: errorChain(error) });
+        }
+      }
       let body: Record<string, unknown> = {};
       try {
         const text = await readBody(req);

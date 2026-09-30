@@ -64,7 +64,7 @@ function fakeGuidepup(): Fake {
 
 test("a command answers with its own speech, and silence is an empty string", async () => {
   const guidepup = fakeGuidepup();
-  const desktop = createNvdaDesktop({ reader: guidepup, environment: () => [] });
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [] });
   assert.equal(await desktop.perform("reportTitle"), "Control, Mozilla");
   assert.equal(await desktop.perform("moveToNextTable"), "");
   assert.equal(await desktop.press("Control+Home"), "");
@@ -74,21 +74,21 @@ test("a command answers with its own speech, and silence is an empty string", as
 
 test("an unknown command is refused before any keystroke is sent", async () => {
   const guidepup = fakeGuidepup();
-  const desktop = createNvdaDesktop({ reader: guidepup, environment: () => [] });
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [] });
   await assert.rejects(async () => desktop.perform("moveToNextTabel"), /unknown NVDA keyboard command: moveToNextTabel/);
   assert.deepEqual(guidepup.calls, []);
 });
 
 test("start passes the rig's options: whole announcements, no speech viewer", async () => {
   const guidepup = fakeGuidepup();
-  await createNvdaDesktop({ reader: guidepup, environment: () => [] }).start();
+  await createNvdaDesktop({ reader: guidepup, environment: async () => [] }).start();
   assert.match(guidepup.calls[0] ?? "", /"capture":true/);
   assert.match(guidepup.calls[0] ?? "", /"showSpeechViewerAtStartup":false/);
 });
 
 test("captureBegin returns only once Guidepup's listener is attached, and captureEnd returns what was said", async () => {
   const guidepup = fakeGuidepup();
-  const desktop = createNvdaDesktop({ reader: guidepup, environment: () => [] });
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [] });
   await desktop.captureBegin();
   // The window is open: the listener was attached before begin returned, and
   // the action inside is still waiting for end.
@@ -98,7 +98,7 @@ test("captureBegin returns only once Guidepup's listener is attached, and captur
 });
 
 test("a second begin while one is open, or an end with none open, is refused", async () => {
-  const desktop = createNvdaDesktop({ reader: fakeGuidepup(), environment: () => [] });
+  const desktop = createNvdaDesktop({ reader: fakeGuidepup(), environment: async () => [] });
   await assert.rejects(desktop.captureEnd(), /no capture is open/);
   await desktop.captureBegin();
   await assert.rejects(desktop.captureBegin(), /already open/);
@@ -109,7 +109,7 @@ test("the desktop's window list and activation run the PowerShell it is given", 
   const scripts: string[] = [];
   const desktop = createNvdaDesktop({
     reader: fakeGuidepup(),
-    environment: () => [],
+    environment: async () => [],
     browserProcess: "msedge",
     powershell: async (script) => {
       scripts.push(script);
@@ -119,4 +119,11 @@ test("the desktop's window list and activation run the PowerShell it is given", 
   assert.deepEqual(await desktop.windows(), ["msedge: Component Library", "Code: repo [Administrator]"]);
   assert.equal(await desktop.activateBrowser(), "Component Library - Microsoft Edge");
   assert.match(scripts[1] ?? "", /Get-Process msedge/);
+});
+
+test("the environment stamp is taken once and kept", async () => {
+  let taken = 0;
+  const desktop = createNvdaDesktop({ reader: fakeGuidepup(), environment: async () => [`stamp ${++taken}`] });
+  assert.deepEqual(await desktop.environment(), ["stamp 1"]);
+  assert.deepEqual(await desktop.environment(), ["stamp 1"]);
 });

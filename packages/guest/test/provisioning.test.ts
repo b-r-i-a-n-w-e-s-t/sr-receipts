@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
+  HEALTH_REPORT_SCHEMA_VERSION,
   NO_HOST_URL_PROBE,
   assessProvisioning,
   probeHostUrl,
@@ -18,9 +22,12 @@ import {
   type SmokeResult,
 } from "../lib/smoke-result.ts";
 
+/** A file of this package, read from wherever the tests were started. */
+const source = (path: string): string => readFileSync(join(import.meta.dirname, "..", path), "utf8");
+
 const smoke: SmokeResult = {
   schemaVersion: SMOKE_RESULT_SCHEMA_VERSION, runId: "1", fixture: SMOKE_CONTROL_FIXTURE, ok: true,
-  expectedSteps: 4, completedSteps: 4, speechCaptured: true, focusLost: null, error: null,
+  expectedSteps: 4, completedSteps: 4, speechCaptured: true, error: null,
   observed: {
     node: "v22.18.0",
     executable: String.raw`C:\Users\Rig\AppData\Local\nvda-rig\node-v22.18.0-win-arm64\node.exe`,
@@ -51,21 +58,17 @@ test("health proof uses the smoke JSON contract, not transcript text", () => {
   assert.equal(report.ok, true);
   assert.deepEqual(report.checks, {
     runtimeInstalled: true, taskCompleted: true, smokePassed: true, speechCaptured: true,
-    speechArtifact: true, focusRetained: true, scheduledCmdNode: true, freshArtifact: true,
+    speechArtifact: true, scheduledCmdNode: true, freshArtifact: true,
   });
   assert.deepEqual(report.artifacts, {
     result: "artifacts/smoke-result-1.json", speech: "artifacts/smoke-log-1.txt",
   });
 });
 
-test("focus loss and silent speech cannot become a healthy report", () => {
-  const report = assessProvisioning({
-    ...healthy,
-    smoke: { ...smoke, speechCaptured: false, focusLost: "Windows Security" },
-  });
+test("silent speech cannot become a healthy report", () => {
+  const report = assessProvisioning({ ...healthy, smoke: { ...smoke, speechCaptured: false } });
   assert.equal(report.ok, false);
   assert.equal(report.checks.speechCaptured, false);
-  assert.equal(report.checks.focusRetained, false);
 });
 
 test("an empty or missing speech artifact cannot become a healthy report", () => {
@@ -157,10 +160,10 @@ test("only the scheduled-task CMD posture using per-user Node proves the entry p
 
 test("CMD entry points explicitly use the provisioned per-user Node wrapper", () => {
   for (const entry of ["run-smoke.cmd", "run-daemon.cmd"]) {
-    assert.match(readFileSync(entry, "utf8"), /call "%~dp0run-node\.cmd"/i, entry);
+    assert.match(source(entry), /call "%~dp0run-node\.cmd"/i, entry);
   }
   assert.match(
-    readFileSync("run-node.cmd", "utf8"),
+    source("run-node.cmd"),
     /%LOCALAPPDATA%\\nvda-rig\\node-v22\.18\.0-win-arm64\\node\.exe/i,
   );
 });
@@ -174,14 +177,14 @@ test("no script parameter default depends on $PSScriptRoot", () => {
     "provisioning/run-smoke-task.ps1",
     "tasks/register.ps1",
   ]) {
-    const block = /^param\(([\s\S]*?)^\)/m.exec(readFileSync(script, "utf8"));
+    const block = /^param\(([\s\S]*?)^\)/m.exec(source(script));
     assert.ok(block?.[1], `${script} has no script parameter block`);
     assert.doesNotMatch(block[1], /\$PSScriptRoot/, script);
   }
 });
 
 test("the task protocol is result-controlled and cleans up on timeout", () => {
-  const task = readFileSync("provisioning/run-smoke-task.ps1", "utf8");
+  const task = source("provisioning/run-smoke-task.ps1");
   assert.doesNotMatch(task, /LastRunTime/);
   // The reporter owns both artifact paths, so the two scripts cannot disagree
   // about which files this run's proof lives in.
@@ -197,7 +200,7 @@ test("the task protocol is result-controlled and cleans up on timeout", () => {
 });
 
 test("the provisioner's no-Node fallback report cannot drift from the report type", () => {
-  const script = readFileSync("provisioning/provision.ps1", "utf8");
+  const script = source("provisioning/provision.ps1");
   // Shaped like the report PowerShell writes: no smoke ran, and a failure.
   const report = assessProvisioning({
     ...healthy, smoke: undefined, taskCompleted: false, freshArtifact: false,
@@ -239,7 +242,7 @@ test("the provisioner's no-Node fallback report cannot drift from the report typ
  * there. Getting this wrong fails on the guest, where nothing here runs.
  */
 test("the provisioner installs and reads packages at the workspace root", () => {
-  const script = readFileSync("provisioning/provision.ps1", "utf8");
+  const script = source("provisioning/provision.ps1");
   assert.match(script, /\$workspace = Split-Path -Parent \(Split-Path -Parent \$rig\)/);
   const packages = script.slice(script.indexOf("Invoke-Stage 'packages'"), script.indexOf("Invoke-Stage 'tasks'"));
   assert.match(packages, /Push-Location \$workspace/);
@@ -248,7 +251,7 @@ test("the provisioner installs and reads packages at the workspace root", () => 
 });
 
 test("runtime stages are recorded rather than thrown away, and the probe never gates", () => {
-  const script = readFileSync("provisioning/provision.ps1", "utf8");
+  const script = source("provisioning/provision.ps1");
   // Every manifest component is a named stage, so a dependency failure is
   // distinguishable from a desktop or speech-capture failure in the report.
   for (const stage of ["architecture", "node", "edge", "packages", "guidepup-nvda", "tasks"]) {
@@ -265,13 +268,13 @@ test("runtime stages are recorded rather than thrown away, and the probe never g
 });
 
 test("runtime manifest agrees with the locked packages and Guidepup NVDA manifest", () => {
-  const runtime = JSON.parse(readFileSync("provisioning/runtime-manifest.json", "utf8")) as {
+  const runtime = JSON.parse(source("provisioning/runtime-manifest.json")) as {
     node: { version: string; architecture: string; kind: string; sha256: string };
     edge: { source: string };
     playwright: { version: string };
     guidepup: { version: string; setupVersion: string; nvdaAsset: { id: string; version: string; repository: string; asset: string; sha256: string } };
   };
-  const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { dependencies: Record<string, string> };
+  const pkg = JSON.parse(source("package.json")) as { dependencies: Record<string, string> };
   // Resolved, not joined: npm workspaces install it at the workspace root.
   const guidepupManifestPath = createRequire(import.meta.url).resolve("@guidepup/guidepup/manifest.json");
   const guidepupManifest = JSON.parse(readFileSync(guidepupManifestPath, "utf8")) as {
@@ -294,4 +297,27 @@ test("runtime manifest agrees with the locked packages and Guidepup NVDA manifes
     version: runtime.guidepup.nvdaAsset.version, repository: runtime.guidepup.nvdaAsset.repository,
     asset: runtime.guidepup.nvdaAsset.asset, sha256: runtime.guidepup.nvdaAsset.sha256,
   });
+});
+
+test("the reporter, run as the Provisioner runs it, names a failed stage and never starts the smoke", () => {
+  // Only the failed-stage path: any other would start the real smoke task on
+  // a Windows guest.
+  const dir = mkdtempSync(join(tmpdir(), "health-report-"));
+  const stages = join(dir, "stages.json");
+  const output = join(dir, "report.json");
+  writeFileSync(stages, JSON.stringify([
+    { name: "node", ok: true, detail: "v22.18.0" },
+    { name: "edge", ok: false, detail: "no msedge.exe under Program Files" },
+  ]));
+  const run = spawnSync(process.execPath, [join(import.meta.dirname, "..", "provisioning", "health-report.ts"), output, "--stages", stages], {
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 1, run.stderr);
+  const report = JSON.parse(readFileSync(output, "utf8")) as ReturnType<typeof assessProvisioning>;
+  assert.equal(report.schemaVersion, HEALTH_REPORT_SCHEMA_VERSION);
+  assert.equal(report.ok, false);
+  assert.equal(report.failure, 'runtime stage "edge" failed: no msedge.exe under Program Files');
+  assert.equal(report.checks.runtimeInstalled, false);
+  assert.equal(report.checks.taskCompleted, false);
+  assert.deepEqual(report.hostUrlProbe, NO_HOST_URL_PROBE);
 });

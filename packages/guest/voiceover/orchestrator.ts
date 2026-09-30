@@ -1,4 +1,5 @@
-import { errorChain, type Outcome } from "./evidence.ts";
+import { errorChain } from "@sr-receipts/host";
+import type { Outcome } from "./evidence.ts";
 
 /**
  * Guidepup terminates and restarts VoiceOver inside `start()`, and can activate

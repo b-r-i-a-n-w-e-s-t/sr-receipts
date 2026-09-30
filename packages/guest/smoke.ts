@@ -36,7 +36,7 @@ function smokeRequest(): SmokeRequest | undefined {
 const request = smokeRequest();
 const fixture = pathToFileURL(join(import.meta.dirname, "fixtures", SMOKE_CONTROL_FIXTURE)).href;
 const desktop = createNvdaDesktop();
-const out = [`# smoke on ${SMOKE_CONTROL_FIXTURE}`, "", ...desktop.environment(), ""];
+const out = [`# smoke on ${SMOKE_CONTROL_FIXTURE}`, "", ...(await desktop.environment()), ""];
 let ok = false;
 let completedSteps = 0;
 let speechCaptured = false;
@@ -93,7 +93,6 @@ try {
     expectedSteps: COMMANDS.length,
     completedSteps,
     speechCaptured,
-    focusLost: null,
     error: failure,
     observed: {
       node: process.version,

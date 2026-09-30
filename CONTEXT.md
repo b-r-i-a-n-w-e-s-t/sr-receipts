@@ -11,7 +11,10 @@ live on, and keeps what each one said as evidence. Formerly named Dogwalk.
 **Host**:
 The machine a developer works on, where their Playwright tests run, and the
 `@sr-receipts/host` package that reaches a Guest's daemon from it. It owns the
-wire protocol and the Reader Session interface, and knows no reader's commands.
+Reader Session and the wire. The wire is an NVDA wire: NVDA is the only
+reader that crosses it, and its routes, health and entry options (the mode
+probes) are NVDA's. The host still knows no reader's commands; a command
+crosses as Guidepup's name for it, and the Guest checks it.
 
 **Guest**:
 The side that runs a screen reader on its own interactive desktop, and the
@@ -39,8 +42,10 @@ by the Provisioner, including the Playwright version a consumer must match.
 **Reader Session**:
 One screen reader, started for one test, behind the one interface a test
 uses: Guidepup's method names, plus entering a page and capturing a page
-action. VoiceOver in process on a Mac and NVDA through the Guest's daemon are
-the two implementations.
+action. Built once, in the host, around a reader adapter, so the Transcript,
+serialized calls, and rejecting rather than throwing hold on every reader.
+VoiceOver in process on a Mac and NVDA through the Guest's daemon are the two
+adapters.
 _Avoid_: Execution Target (retired), driver, target
 
 **Browser Server**:
@@ -69,7 +74,8 @@ any app.
 
 **Transcript**:
 Every call to a Reader Session and its answer, one line each, from start to
-stop, with silence named. Attached to the test.
+stop, with silence named and a failed call recorded as failed. Attached to
+the test.
 
 **Environment Stamp**:
 The exact operating system, browser, reader and tool builds (and reader

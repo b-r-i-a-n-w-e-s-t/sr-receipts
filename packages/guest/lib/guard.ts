@@ -54,17 +54,6 @@ export interface EnterDocumentOptions {
 }
 
 /**
- * Throw unless every mode probe is a command NVDA has. A misspelled probe
- * would reach `nvda.perform(undefined)`, which is silent, and the guard reads
- * silence as "wrong mode": a guard failure that looks exactly like a real
- * one. The desktop's `perform` refuses an unknown name; this asks first.
- */
-export function validateModeProbes(commands: Readonly<Record<string, unknown>>, modeProbes: readonly string[] = MODE_PROBES): void {
-  const unknown = modeProbes.filter((name) => !commands[name]);
-  if (unknown.length) throw new Error(`unknown NVDA keyboard command(s) in modeProbes: ${unknown.join(", ")}`);
-}
-
-/**
  * Punctuation to spaces and whitespace collapsed, the way Guidepup's own
  * fixture compares titles: NVDA speaks symbols as words ("<" is "less"), so a
  * title with any in it never matches character for character.

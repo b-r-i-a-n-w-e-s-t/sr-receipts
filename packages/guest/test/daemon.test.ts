@@ -73,7 +73,7 @@ async function harness(t: test.TestContext): Promise<Harness> {
       calls.push("activate");
       return "Component Library - Microsoft Edge";
     },
-    environment: () => ["windows: test", "nvda: test"],
+    environment: async () => ["windows: test", "nvda: test"],
   };
   state.server = createRigServer({ token: TOKEN, desktop, browser: { port: 8766, path: "/tok" } });
   await new Promise<void>((resolve) => state.server.listen(0, "127.0.0.1", resolve));

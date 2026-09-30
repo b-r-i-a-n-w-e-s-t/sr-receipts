@@ -1,7 +1,7 @@
 /** The machine-readable contract between the smoke entry point and provisioner. */
 import { join } from "node:path";
 
-export const SMOKE_RESULT_SCHEMA_VERSION = 1;
+export const SMOKE_RESULT_SCHEMA_VERSION = 2;
 export const SMOKE_CONTROL_FIXTURE = "control.html";
 export const SCHEDULED_TASK_POSTURE = "scheduled-task-cmd";
 
@@ -37,7 +37,6 @@ export interface SmokeResult {
   expectedSteps: number;
   completedSteps: number;
   speechCaptured: boolean;
-  focusLost: string | null;
   error: string | null;
   observed: {
     node: string;

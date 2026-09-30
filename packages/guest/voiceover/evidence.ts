@@ -31,18 +31,3 @@ export function checkExact(name: string, actual: string, expected: string): Doct
 export function checkVersion(name: string, actual: string, expected: RegExp): DoctorCheck {
   return { name, actual, expected: expected.source, ok: expected.test(actual) };
 }
-
-export function errorChain(error: unknown): string[] {
-  const causes: string[] = [];
-  let current = error;
-  while (current) {
-    if (current instanceof Error) {
-      causes.push(current.message);
-      current = current.cause;
-    } else {
-      causes.push(String(current));
-      break;
-    }
-  }
-  return causes;
-}

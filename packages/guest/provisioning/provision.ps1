@@ -146,13 +146,13 @@ function Write-FallbackReport {
   $reporterNode = ''
   if (Test-Path $node) { $reporterNode = (& $node --version) }
   $fallback = [ordered]@{
-    schemaVersion = 3
+    schemaVersion = 4
     ok = $false
     fixture = 'control.html'
     execution = 'unelevated interactive scheduled task: real NVDA with headed Edge'
     checks = [ordered]@{
       runtimeInstalled = $runtimeInstalled; taskCompleted = $false; smokePassed = $false
-      speechCaptured = $false; speechArtifact = $false; focusRetained = $false
+      speechCaptured = $false; speechArtifact = $false
       scheduledCmdNode = $false; freshArtifact = $false
     }
     runtime = @($stages)

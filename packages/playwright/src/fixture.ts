@@ -100,15 +100,28 @@ type BaseWorkerArgs = PlaywrightWorkerArgs & PlaywrightWorkerOptions;
 
 type ReaderFixtures = Fixtures<ReaderTestFixtures, ReaderWorkerFixtures, BaseTestArgs, BaseWorkerArgs>;
 
-/** The `reader` fixture and its option. `withReader` applies them with their types named. */
-export const readerFixtures: ReaderFixtures = {
-  readerOptions: [undefined, { option: true, scope: "worker" }],
+/** What the fixture's body needs from Playwright's own fixtures and `testInfo`. */
+interface ReaderFixtureArgs {
+  readerOptions: ReaderOptions | undefined;
+  browser: { version(): string };
+  browserName: string;
+  channel: string | undefined;
+}
+interface Attachments {
+  attach(name: string, options: { body: string; contentType: string }): Promise<void>;
+}
 
-  reader: async ({ readerOptions, browser, browserName, channel }, use, testInfo) => {
+/** The `reader` fixture's body, given how to build a session. Taken as an argument so its tests need no reader. */
+export function readerFixture(create: typeof createSession = createSession) {
+  return async (
+    { readerOptions, browser, browserName, channel }: ReaderFixtureArgs,
+    use: (session: ReaderSession) => Promise<void>,
+    testInfo: Attachments,
+  ): Promise<void> => {
     if (!readerOptions) {
       throw new Error("this project has no readerOptions: set use.readerOptions in its Playwright config");
     }
-    const session = await createSession(readerOptions, { browserName, channel });
+    const session = await create(readerOptions, { browserName, channel });
     await session.start();
     try {
       await use(session);
@@ -121,7 +134,13 @@ export const readerFixtures: ReaderFixtures = {
       const stamp = environmentStamp(readerOptions.reader, environment, { name: channel ?? browserName, version: browser.version() });
       await testInfo.attach("environment", { body: stamp.join("\n"), contentType: "text/plain" });
     }
-  },
+  };
+}
+
+/** The `reader` fixture and its option. `withReader` applies them with their types named. */
+export const readerFixtures: ReaderFixtures = {
+  readerOptions: [undefined, { option: true, scope: "worker" }],
+  reader: readerFixture(),
 };
 
 /**

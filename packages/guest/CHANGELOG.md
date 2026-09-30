@@ -47,6 +47,21 @@ Nearly everything here is breaking.
   `snapshots/`, and VoiceOver's Safari driver, smoke and capture probe.
   `SILENCE` moved to `@sr-receipts/host`.
 - `playwright-core` 1.63.0 is a dependency.
+- **The VoiceOver session is an adapter** built with the host's
+  `createReaderSession`, so its calls are now serialized, an unknown command
+  rejects rather than throws, and a failed call or page action leaves a
+  transcript line. A failed entry says "VoiceOver did not reach the page"
+  and ends the transcript with the reason.
+- **The Environment Stamp is taken once and kept**, asked of PowerShell in
+  parallel. `NvdaDesktop.environment()` and `stamp()` return a promise, and
+  `/health` no longer blocks the daemon with a synchronous PowerShell start
+  per request.
+- **Dead code removed:** `taskkill`, `validateModeProbes` (NVDA's `perform`
+  already refuses an unknown command), and the smoke's `focusLost`, which was
+  always null once the mid-test focus watch retired. `SmokeResult` is schema
+  2, and the health report is schema 4 without its `focusRetained` check.
+- One `powershell`, one `packageVersion`, and `errorChain` from the host,
+  where the guest had two, three and two.
 
 ## 0.1.0
 

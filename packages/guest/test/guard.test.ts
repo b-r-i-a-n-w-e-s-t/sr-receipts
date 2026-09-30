@@ -14,7 +14,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { MODE_PROBES, enterDocument, validateModeProbes } from "../lib/guard.ts";
+import { MODE_PROBES, enterDocument } from "../lib/guard.ts";
 import type { NvdaDesktop } from "../lib/nvda.ts";
 
 interface Script {
@@ -71,7 +71,7 @@ function fakeDesktop({ titles = ["Component Library : Component Library - Micros
       calls.push("activate");
       return answer(foreground, Math.max(0, titleAsked));
     },
-    environment: () => [],
+    environment: async () => [],
   };
 }
 
@@ -168,10 +168,4 @@ test("a page with no title is matched on the browser's name instead", async () =
   const desktop = fakeDesktop({ titles: ["Untitled - Microsoft Edge"] });
   const entry = await enterDocument(desktop, { pageTitle: "", delay: noDelay });
   assert.equal(entry.ok, true);
-});
-
-test("validateModeProbes refuses a misspelled probe, which would otherwise read as focus mode", () => {
-  const commands = { moveToNextTable: {}, moveToNextHeading: {} };
-  validateModeProbes(commands, ["moveToNextHeading"]);
-  assert.throws(() => validateModeProbes(commands, ["moveToNextTabel"]), /unknown NVDA keyboard command\(s\) in modeProbes: moveToNextTabel/);
 });

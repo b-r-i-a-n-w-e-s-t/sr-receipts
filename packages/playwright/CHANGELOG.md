@@ -30,6 +30,9 @@ The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browse
   typed. Playwright's `extend` cannot infer fixture types, so
   `base.extend(readerFixtures)` ran but left `reader` untyped in a consumer's
   editor and `tsc`. `readerFixtures` is still exported.
+- Either reader's session now serializes calls, so a spec's `Promise.all`
+  over two reader calls runs them in order, and a reader call from inside a
+  `capture`'s action is refused rather than hanging the test.
 
 ## 0.1.0
 

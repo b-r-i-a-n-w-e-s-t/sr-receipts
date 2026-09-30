@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkExact, checkVersion, errorChain, SUPPORTED } from "../voiceover/evidence.ts";
+import { checkExact, checkVersion, SUPPORTED } from "../voiceover/evidence.ts";
 import { appleScriptControlCheck, expectedVoiceOverAsset, preferenceAccessCheck, voiceOverPreferenceDirectory } from "../voiceover/doctor.ts";
 import { isLaunchRace, launchWithRetry, START_ATTEMPTS, START_SETTLE_MS } from "../voiceover/orchestrator.ts";
 import type { Outcome } from "../voiceover/evidence.ts";
@@ -25,12 +25,6 @@ test("doctor reports AppleScript control, the prerequisite VoiceOver capture dep
   assert.equal(check.name, "VoiceOver AppleScript control");
   assert.equal(check.ok, false);
   assert.match(check.actual, /no VoiceOver preferences at/);
-});
-
-test("errorChain walks the causes and stops at a non-error", () => {
-  const error = new Error("outer", { cause: new Error("middle", { cause: "inner" }) });
-  assert.deepEqual(errorChain(error), ["outer", "middle", "inner"]);
-  assert.deepEqual(errorChain(undefined), []);
 });
 
 test("only the VoiceOver launch race counts as retryable", () => {

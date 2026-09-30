@@ -11,14 +11,11 @@
  * can take the foreground from an elevated window; the rule in
  * `docs/operating-the-rig.md` about minimizing elevated windows stands.
  */
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { nvda } from "@guidepup/guidepup";
 import { stamp } from "./stamp.ts";
-
-const execFileAsync = promisify(execFile);
+import { powershell as runPowerShell } from "./system.ts";
 
 /**
  * `capture: true` keeps whole announcements; Guidepup's default `"initial"`
@@ -72,7 +69,12 @@ export interface NvdaDesktop {
   windows(): Promise<string[]>;
   /** Bring the browser's window to the front; returns what is in front afterwards. */
   activateBrowser(): Promise<string>;
-  environment(): string[];
+  /**
+   * The Environment Stamp, taken once and kept. It costs several PowerShell
+   * starts, and what it names is fixed for the daemon's life: the browser
+   * server's Edge is the one launched at startup even if Edge updates on disk.
+   */
+  environment(): Promise<string[]>;
 }
 
 const PS_WINDOWS = `Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { "$($_.ProcessName): $($_.MainWindowTitle)" }`;
@@ -91,19 +93,12 @@ $sb = New-Object System.Text.StringBuilder 512
 Write-Output $sb.ToString()
 `;
 
-async function runPowerShell(script: string): Promise<string> {
-  const { stdout } = await execFileAsync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
-    windowsHide: true,
-  });
-  return stdout.trim();
-}
-
 export interface NvdaDesktopOptions {
   reader?: GuidepupNvda;
   powershell?: (script: string) => Promise<string>;
   /** The browser's process name, for activation. */
   browserProcess?: string;
-  environment?: () => string[];
+  environment?: () => Promise<string[]>;
 }
 
 export function createNvdaDesktop({
@@ -119,6 +114,7 @@ export function createNvdaDesktop({
     return await reader.lastSpokenPhrase();
   };
 
+  let stamped: Promise<string[]> | undefined;
   let pending: { finish: () => void; result: Promise<{ spokenPhrase: string }> } | null = null;
 
   return {
@@ -165,6 +161,6 @@ export function createNvdaDesktop({
 
     windows: async () => (await powershell(PS_WINDOWS)).split(/\r?\n/).filter(Boolean),
     activateBrowser: () => powershell(activationScript(browserProcess)),
-    environment,
+    environment: () => (stamped ??= environment()),
   };
 }

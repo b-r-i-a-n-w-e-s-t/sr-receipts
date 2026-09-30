@@ -152,7 +152,10 @@ test("a reader that fails to start is stopped, and the attempts are in the trans
   const vo = session(desktop);
   await assert.rejects(vo.start(), /cannot be started/);
   assert.deepEqual(desktop.calls, ["start reader", "stop reader"]);
-  assert.deepEqual(vo.transcript, ["start VoiceOver (attempt 1): VoiceOver cannot be started Application isn’t running. (-600)"]);
+  assert.deepEqual(vo.transcript, [
+    "start VoiceOver (attempt 1): VoiceOver cannot be started Application isn’t running. (-600)",
+    "start VoiceOver: failed: VoiceOver cannot be started",
+  ]);
 });
 
 test("entering web content activates the browser, walks the Item Chooser, and proves arrival by the first item", async () => {
@@ -180,7 +183,7 @@ test("an Item Chooser that never opens fails after a bounded number of attempts,
   };
   const vo = session(desktop);
   await vo.start();
-  await assert.rejects(vo.enter(page()), /did not reach the web content[\s\S]*Item Chooser did not open in 10 attempts; VoiceOver last said/);
+  await assert.rejects(vo.enter(page()), /VoiceOver did not reach the page:[\s\S]*Item Chooser did not open in 10 attempts; VoiceOver last said/);
   assert.equal(desktop.calls.filter((call) => call === "perform").length, 10);
 });
 
@@ -194,14 +197,23 @@ test("every command is preceded by the sentinel, and a command that leaves it in
   desktop.reader.press = async () => undefined;
   assert.equal(await vo.press("F13"), "");
   assert.deepEqual(desktop.calls.filter((call) => call === "sentinel").length, 3);
-  assert.deepEqual(vo.transcript.slice(1), ['findNextTable: said {"key":"t"}', "press Tab: pressed Tab", "press F13: (silence)"]);
+  assert.deepEqual(vo.transcript.slice(2), ['findNextTable: said {"key":"t"}', "press Tab: pressed Tab", "press F13: (silence)"]);
+});
+
+test("calls made together run one at a time, so their keystrokes never interleave", async () => {
+  const desktop = fakeDesktop();
+  const vo = session(desktop);
+  await vo.start();
+  desktop.calls.length = 0;
+  await Promise.all([vo.next(), vo.press("Tab")]);
+  assert.deepEqual(desktop.calls, ["sentinel", "next", "sentinel", "press Tab"]);
 });
 
 test("a command VoiceOver lacks is refused before a keystroke", async () => {
   const desktop = fakeDesktop();
   const vo = session(desktop);
   await vo.start();
-  await assert.rejects(async () => vo.perform("findNextTabel"), /unknown VoiceOver keyboard command: findNextTabel/);
+  await assert.rejects(vo.perform("findNextTabel"), /unknown VoiceOver keyboard command: findNextTabel/);
   assert.ok(!desktop.calls.includes("sentinel"));
 });
 

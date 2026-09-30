@@ -10,11 +10,11 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
-    // The rig runs .ts directly: Node 24 strips types with no build step, so
-    // `node runner.ts` works from the scheduled task exactly as `node
-    // runner.cjs` did. Nothing is emitted here — tsc only checks. That split is
-    // the point: the guest needs no toolchain, and the types still mean
-    // something because `npm test` runs `tsc --noEmit`.
+    // Every package runs its .ts directly: Node strips types with no build
+    // step (the guest's pinned Node is 22.18), so `node daemon.ts` runs from
+    // the scheduled task as it is. Nothing is emitted here; tsc only checks.
+    // That split is the point: the guest needs no toolchain, and the types
+    // still mean something because `npm test` runs `tsc --noEmit`.
     "noEmit": true,
 
     // Type stripping erases annotations rather than compiling them, so the
@@ -28,5 +28,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["packages/*/lib/**/*.ts", "packages/*/src/**/*.ts", "packages/*/provisioning/**/*.ts", "packages/*/scenarios/**/*.ts", "packages/*/test/**/*.ts", "packages/*/voiceover/**/*.ts", "packages/*/*.ts"]
+  "include": ["packages/*/lib/**/*.ts", "packages/*/src/**/*.ts", "packages/*/provisioning/**/*.ts", "packages/*/test/**/*.ts", "packages/*/voiceover/**/*.ts", "packages/*/*.ts"]
 }

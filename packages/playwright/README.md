@@ -178,8 +178,31 @@ NVDA and 5 on VoiceOver; 240 seconds covers a test of a dozen steps.
 
 ## Reading a receipt
 
-Open the report with `npx playwright show-report receipts-report`, and a
-test's `reader-transcript` from its attachments.
+A receipt is two attachments on each test, passed or failed:
+`reader-transcript`, every call to the reader and its answer, with the entry's
+proof at the top; and `environment`, what produced the speech.
+
+Open the report from the consumer repo:
+
+```bash
+npx playwright show-report receipts-report
+```
+
+Click a test, then scroll to its **Attachments**, where both are expandable
+text.
+
+- **The report is the only copy.** The fixture attaches the text to the
+  report rather than writing files, so `test-results/` holds traces and error
+  context but no transcripts.
+- **Each run replaces the report.** It holds the latest run only, and a
+  `--project nvda` run leaves only NVDA's tests in it. Copy a transcript out
+  before the next run if a ticket will cite it.
+- **The report server keeps running** until it is stopped. A second
+  `show-report` then fails with `EADDRINUSE` on port 9323. The running server
+  reads the folder on each request, so reloading its page shows the latest
+  run; otherwise stop it, or pass `--port 9324`.
+
+Reading what was said:
 
 - **An NVDA `spoken` string is several utterances joined.** Guidepup joins
   the parts of one utterance with `, ` and separate utterances with `. `

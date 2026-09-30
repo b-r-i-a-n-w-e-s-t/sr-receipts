@@ -6,9 +6,9 @@ Safari. Deliberately narrow: **macOS 26.6.x**, the **bundled VoiceOver**,
 English, and **`@guidepup/guidepup` 0.34.0**.
 
 Two things live here: the doctor, a read-only check of the prerequisites, and
-the mechanics the session in [`lib/voiceover.ts`](../lib/voiceover.ts) is
-built from: the launch retry, the sentinel, the hints, and the permission
-probe. A VoiceOver test needs the authorization below, and takes over the
+the session itself, [`session.ts`](session.ts), with the launch retry, the
+sentinel and the hints settled inside it, the Item Chooser walk in
+[`entry.ts`](entry.ts), and the permission probe. A VoiceOver test needs the authorization below, and takes over the
 Mac while it runs.
 
 ## One-time human authorization
@@ -75,7 +75,7 @@ before starting the reader.
   finished launching it: AppleScript `-600`, "application isn't running".
   Roughly one start in seven failed this way in the pivot's proof of concept.
   Five attempts with a ten second settle, every attempt in the transcript;
-  anything else fails on the first attempt. See `start` in `desktop.ts`.
+  anything else fails on the first attempt. See `start` in `session.ts`.
 - **Web content is entered through the Item Chooser**, the sequence
   Guidepup's own fixture uses, with both loops bounded: ten attempts to open
   the chooser, five rounds of typing "web content". On macOS 26 the chooser
@@ -87,13 +87,15 @@ before starting the reader.
   the phrase it recorded last, which cannot tell silence from a repeat.
   Speaking "receipts mark" first makes `last phrase` something no page says:
   a silent command leaves it in place and is recorded as silence; a repeated
-  announcement differs from it and is recorded whole. See `sentinel.ts`.
+  announcement differs from it and is recorded whole. See "Speech" in
+  `session.ts`.
 - **Hints are off and stripped.** `SCRShouldOutputVOInstructions: false`,
   found in VoiceOver's framework strings, not documentation. A hint arrives
   about a second after the announcement and restarts Guidepup's wait for
   speech to settle; with hints on, most steps took 8.5 to 15 seconds
   instead of 5 to 7.5. Any hint that gets through is cut from what is
-  recorded, and a capture that was only a hint is silence. See `hints.ts`.
+  recorded, and a capture that was only a hint is silence. See "Speech" in
+  `session.ts`.
 - **`capture(action)` is Guidepup's own**, with the sentinel spoken first.
   It caught a focus move that a 100 ms poll of `last phrase` had missed.
 
@@ -107,7 +109,7 @@ before starting the reader.
 - A Control press after the sentinel made VoiceOver drop the next
   announcement (2026-09-26, Playwright's WebKit): the first run of the
   refactored session recorded every page action and typed character as
-  silence. The sentinel is now `output` alone. See `sentinel.ts`.
+  silence. The sentinel is now `output` alone. See "Speech" in `session.ts`.
 - `readTableColumnHeader` (VO-C) has answered with VoiceOver's own startup
   greeting in 3 of 11 uses, and once moved the cursor out of the table. The
   cause is unknown. Keep it out of anything whose later steps depend on

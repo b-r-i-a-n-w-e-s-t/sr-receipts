@@ -28,8 +28,13 @@
  *
  * The guard leaves the caret at the top of the document, so a test always
  * starts from a known position.
+ *
+ * Its shape is the Entry's on every reader: each step is recorded as it
+ * happens, arrival returns what the reader landed on, and a proof that fails
+ * throws with the reason, after recording the windows that were on screen.
+ * The daemon puts that on the wire; nothing here knows the wire.
  */
-import type { EntryResult } from "@sr-receipts/host";
+import { SILENCE, type Recorder } from "@sr-receipts/host";
 import type { NvdaDesktop } from "./nvda.ts";
 import { delay as wait } from "./system.ts";
 
@@ -77,6 +82,10 @@ const titleMatches = (foreground: string, reported: string, pageTitle: string): 
   return foreground.startsWith(pageTitle) || clean(foreground).startsWith(page) || clean(reported).startsWith(page);
 };
 
+/**
+ * Returns what the reader landed on; throws, after recording each step and the
+ * windows on screen, when the proof fails.
+ */
 export async function enterDocument(
   desktop: NvdaDesktop,
   {
@@ -87,23 +96,22 @@ export async function enterDocument(
     modeAttempts = 3,
     delay = wait,
   }: EnterDocumentOptions,
-): Promise<EntryResult> {
-  const lines: string[] = [];
-  const failed = async (heading: string): Promise<EntryResult> => {
-    lines.unshift(heading);
-    lines.push("### windows on screen", ...(await desktop.windows().catch((error: Error) => [`ERROR ${error.message}`])));
-    return { ok: false, arrivedOn: "", lines };
+  record: Recorder,
+): Promise<string> {
+  const failed = async (reason: string): Promise<never> => {
+    record("### windows on screen", ...(await desktop.windows().catch((error: Error) => [`ERROR ${error.message}`])));
+    throw new Error(`FOCUS GUARD FAILED: ${reason}`);
   };
 
   let title = "";
   for (let attempt = 1; ; attempt++) {
     const foreground = await desktop.activateBrowser();
-    lines.push(`activate browser (attempt ${attempt}): foreground is ${foreground || "(unknown)"}`);
+    record(`activate browser (attempt ${attempt}): foreground is ${foreground || "(unknown)"}`);
     await delay(500);
     title = await desktop.perform("reportTitle");
-    lines.push(`title reported: ${title}`);
+    record(`title reported: ${title}`);
     if (titleMatches(foreground, title, pageTitle)) break;
-    if (attempt >= activateAttempts) return failed(`### FOCUS GUARD FAILED: the browser is not in front (page title ${JSON.stringify(pageTitle)})`);
+    if (attempt >= activateAttempts) return failed(`the browser is not in front (page title ${JSON.stringify(pageTitle)})`);
   }
 
   await desktop.perform("exitFocusMode");
@@ -111,7 +119,7 @@ export async function enterDocument(
   let inDocument = false;
   for (let attempt = 1; attempt <= focusAttempts; attempt++) {
     const focus = await desktop.perform("reportCurrentFocus");
-    lines.push(`focus attempt ${attempt}: ${focus}`);
+    record(`focus attempt ${attempt}: ${focus}`);
     if (/\bdocument\b/i.test(focus)) {
       inDocument = true;
       break;
@@ -119,23 +127,23 @@ export async function enterDocument(
     await desktop.press("F6");
     await delay(1000);
   }
-  if (!inDocument) return failed("### FOCUS GUARD FAILED: focus never reached the document");
+  if (!inDocument) return failed("focus never reached the document");
 
   for (let attempt = 1; attempt <= modeAttempts; attempt++) {
     for (const probe of modeProbes) {
       await desktop.press("Control+Home");
       await delay(300);
       const heard = await desktop.perform(probe);
-      lines.push(`browse mode attempt ${attempt}, ${probe}: ${heard || "(silence)"}`);
+      record(`browse mode attempt ${attempt}, ${probe}: ${heard || SILENCE}`);
       if (heard) {
         const arrivedOn = await desktop.press("Control+Home");
         await delay(300);
-        lines.push(`### focus guard: in the document, in browse mode (proved by ${probe})`, `top of the document: ${arrivedOn || "(silence)"}`);
-        return { ok: true, arrivedOn: arrivedOn || heard, lines };
+        record(`### focus guard: in the document, in browse mode (proved by ${probe})`, `top of the document: ${arrivedOn || SILENCE}`);
+        return arrivedOn || heard;
       }
     }
     await desktop.perform("toggleBetweenBrowseAndFocusMode");
     await delay(1000);
   }
-  return failed("### FOCUS GUARD FAILED: browse mode could not be proved; quick navigation never answered");
+  return failed("browse mode could not be proved; quick navigation never answered");
 }

@@ -33,7 +33,7 @@ file is the working list and changes as items land.
   carried a transcript and an environment stamp on both readers. The first
   VoiceOver run under the refactored session heard nothing after entry; the
   cause was the Control press after the sentinel, now removed (see
-  `packages/guest/voiceover/sentinel.ts`).
+  `packages/guest/voiceover/session.ts`).
 
 ## Next, in order
 
@@ -98,8 +98,8 @@ file is the working list and changes as items land.
   attachment rather than part of the snapshot.
 - **The fixtures are static pages now.** The guest's `fixtures/` served the
   runner by `file:` URL; a spec has to serve them over `http` for the guest's
-  browser to reach them. The smoke still opens `control.html` by file URL on
-  the guest.
+  browser to reach them. The Smoke still opens `control.html` by file URL on
+  the guest, in the daemon's browser.
 - **Upstream Guidepup issues** (the unbounded Item Chooser loop, the
   `readTableColumnHeader` misfire, the unconfigurable polling constants), each
   filed only after a minimal reproduction and approval at the time.

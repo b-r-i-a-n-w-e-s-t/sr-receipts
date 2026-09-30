@@ -13,7 +13,8 @@
  *   GET  /health                 DaemonHealth
  *   POST /reader/start           start NVDA; a started reader is restarted
  *   POST /reader/stop
- *   POST /reader/enter           EnterBody -> EntryResult: the guards
+ *   POST /reader/enter           EnterBody -> EntryResult: the guards, with
+ *                                what they recorded either way
  *   POST /reader/perform         { command } -> Spoken
  *   POST /reader/press           { key } -> Spoken
  *   POST /reader/next            Spoken
@@ -120,13 +121,19 @@ export interface EnterBody {
   modeProbes?: string[] | undefined;
 }
 
-/** How the guards went. `lines` is transcript prose; when `ok` is false it is the entire diagnosis. */
-export interface EntryResult {
-  ok: boolean;
-  /** What the reader is on once the guards passed. */
-  arrivedOn: string;
-  lines: string[];
-}
+/**
+ * How the guards went. `lines` is what the guards recorded, step by step, and
+ * goes into the Transcript either way. A failure crosses as the guard's cause
+ * chain, outermost first, the same shape a 500 carries.
+ */
+export type EntryResult =
+  | {
+      ok: true;
+      /** What the reader is on once the guards passed. */
+      arrivedOn: string;
+      lines: string[];
+    }
+  | { ok: false; lines: string[]; error: string[] };
 
 export interface Spoken {
   spoken: string;

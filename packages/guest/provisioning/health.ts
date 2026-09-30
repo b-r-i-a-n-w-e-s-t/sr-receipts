@@ -1,14 +1,8 @@
-import {
-  SMOKE_CONTROL_FIXTURE,
-  SMOKE_RESULT_SCHEMA_VERSION,
-  SCHEDULED_TASK_POSTURE,
-  type SmokeArtifacts,
-  type SmokeResult,
-} from "../lib/smoke-result.ts";
+import { SMOKE_CONTROL_FIXTURE, type SmokeResult } from "../lib/smoke-result.ts";
 
-export const HEALTH_REPORT_SCHEMA_VERSION = 4;
+export const HEALTH_REPORT_SCHEMA_VERSION = 5;
 export const PROVISION_EXECUTION =
-  "unelevated interactive scheduled task: real NVDA with headed Edge";
+  "the logon daemon, as a test uses it: real NVDA and headed Edge through the daemon's routes and browser server";
 
 /**
  * One reviewed Runtime Manifest step. The PowerShell provisioner records each
@@ -65,6 +59,11 @@ export async function probeHostUrl(url: string | undefined): Promise<HostUrlProb
   }
 }
 
+/** Where the Smoke's transcript, the log a maintainer reads, was written. */
+export interface SmokeArtifacts {
+  transcript: string;
+}
+
 export interface HealthReport {
   schemaVersion: typeof HEALTH_REPORT_SCHEMA_VERSION;
   ok: boolean;
@@ -72,12 +71,10 @@ export interface HealthReport {
   execution: typeof PROVISION_EXECUTION;
   checks: {
     runtimeInstalled: boolean;
-    taskCompleted: boolean;
+    daemonAnswered: boolean;
     smokePassed: boolean;
     speechCaptured: boolean;
-    speechArtifact: boolean;
-    scheduledCmdNode: boolean;
-    freshArtifact: boolean;
+    transcriptArtifact: boolean;
   };
   runtime: ProvisioningStage[];
   artifacts: SmokeArtifacts;
@@ -86,50 +83,35 @@ export interface HealthReport {
     reporterNode: string;
     reporterPlatform: string;
     reporterArchitecture: string;
-    speechArtifactBytes: number;
-    taskOutput: string;
-    smoke?: SmokeResult["observed"];
+    transcriptBytes: number;
+    smokeOutput: string;
+    smoke?: SmokeResult;
   };
   failure?: string;
 }
 
 export interface ProvisioningEvidence {
   runtime: ProvisioningStage[];
-  taskCompleted: boolean;
   smoke: SmokeResult | undefined;
   artifacts: SmokeArtifacts;
-  freshArtifact: boolean;
   hostUrlProbe: HostUrlProbe;
   observed: HealthReport["observed"];
   failure?: string | undefined;
 }
 
-export function assessProvisioning({
-  runtime,
-  taskCompleted,
-  smoke,
-  artifacts,
-  freshArtifact,
-  hostUrlProbe,
-  observed,
-  failure,
-}: ProvisioningEvidence): HealthReport {
+export function assessProvisioning({ runtime, smoke, artifacts, hostUrlProbe, observed, failure }: ProvisioningEvidence): HealthReport {
   const checks: HealthReport["checks"] = {
     // An empty stage list is no evidence, not a pass.
     runtimeInstalled: runtime.length > 0 && runtime.every((stage) => stage.ok),
-    taskCompleted,
+    // The daemon is the posture: only the logon task's daemon, on the
+    // interactive desktop, can answer with speech. An SSH-started one
+    // answers every route and hears nothing.
+    daemonAnswered: smoke?.daemon === true,
     smokePassed: smoke?.ok === true,
-    // Whether speech was heard; `speechArtifact` is only whether the log a
-    // maintainer reads survived the run. The two fail for different reasons.
-    speechCaptured: smoke?.speechCaptured === true,
-    speechArtifact: observed.speechArtifactBytes > 0,
-    scheduledCmdNode:
-      smoke?.schemaVersion === SMOKE_RESULT_SCHEMA_VERSION &&
-      smoke.fixture === SMOKE_CONTROL_FIXTURE &&
-      smoke.observed.executionPosture === SCHEDULED_TASK_POSTURE &&
-      smoke.observed.platform === "win32" &&
-      smoke.observed.executable.toLowerCase().includes("\\nvda-rig\\node-v"),
-    freshArtifact,
+    // Whether speech was heard; `transcriptArtifact` is only whether the log
+    // a maintainer reads survived the run. The two fail for different reasons.
+    speechCaptured: (smoke?.spoke ?? 0) > 0,
+    transcriptArtifact: observed.transcriptBytes > 0,
   };
   return {
     schemaVersion: HEALTH_REPORT_SCHEMA_VERSION,

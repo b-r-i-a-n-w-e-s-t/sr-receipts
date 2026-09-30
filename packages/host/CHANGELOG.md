@@ -11,6 +11,10 @@ The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browse
   defines `ReaderSession`, the one interface a test uses for either reader,
   `EntryPage`, `Captured`, and the daemon's routes and bodies
   (`DaemonHealth`, `EnterBody`, `EntryResult`, `Spoken`, `PhraseLog`).
+  `EntryResult` is `{ ok: true, arrivedOn, lines }` or
+  `{ ok: false, lines, error }`: what the guards recorded either way, and
+  a failure's cause chain, so `createNvdaSession` records the lines and
+  throws the reason without parsing prose.
   `GET /desktop/windows` and `POST /desktop/activate`, with `Windows` and
   `Activation`, were part of this and are gone again: nothing on the Mac
   called them.

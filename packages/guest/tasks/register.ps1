@@ -10,11 +10,13 @@
   service in every other respect, is a logon-triggered interactive task rather
   than a Windows service.
 
-  Two tasks:
+  One task:
 
     nvda-daemon   the reader and a browser behind a port, at logon, so a booted
                   and signed-in guest is an appliance the Mac can use
-    nvda-smoke    one fixture, four commands: does the rig work right now?
+
+  The Smoke is a client of that daemon (`npm run smoke`, from any shell), so
+  it needs no task of its own.
 
     powershell -ExecutionPolicy Bypass -File tasks\register.ps1
 
@@ -118,9 +120,10 @@ function Register-RigTask {
   Write-Host "  $Name -> $Script"
 }
 
-# The tasks the run layer had, before the pivot to `page`, are unregistered
-# so a re-provisioned rig does not carry entry points that no longer exist.
-foreach ($retired in 'nvda-run', 'nvda-probe') {
+# The tasks the run layer had, before the pivot to `page`, and the smoke task
+# from before the Smoke became a client of the daemon, are unregistered so a
+# re-provisioned rig does not carry entry points that no longer exist.
+foreach ($retired in 'nvda-run', 'nvda-probe', 'nvda-smoke') {
   if (Get-ScheduledTask -TaskName $retired -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $retired -Confirm:$false
     Write-Host "  $retired unregistered (retired)"
@@ -129,8 +132,6 @@ foreach ($retired in 'nvda-run', 'nvda-probe') {
 
 Register-RigTask -Name 'nvda-daemon' -Script 'run-daemon.cmd' -AtLogon `
   -Description 'NVDA and a browser behind a port. Interactive by necessity: NVDA needs a desktop.'
-Register-RigTask -Name 'nvda-smoke' -Script 'run-smoke.cmd' `
-  -Description 'Does the rig work on this machine right now?'
 
 # -------------------------------------------------------------- the firewall
 

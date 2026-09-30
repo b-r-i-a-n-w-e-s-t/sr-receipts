@@ -14,31 +14,20 @@ import {
   probeHostUrl,
   type ProvisioningStage,
 } from "../provisioning/health.ts";
-import {
-  SMOKE_CONTROL_FIXTURE,
-  SMOKE_RESULT_SCHEMA_VERSION,
-  SCHEDULED_TASK_POSTURE,
-  smokeArtifacts,
-  type SmokeResult,
-} from "../lib/smoke-result.ts";
+import { SMOKE_COMMANDS, type SmokeResult } from "../lib/smoke-result.ts";
 
 /** A file of this package, read from wherever the tests were started. */
 const source = (path: string): string => readFileSync(join(import.meta.dirname, "..", path), "utf8");
 
 const smoke: SmokeResult = {
-  schemaVersion: SMOKE_RESULT_SCHEMA_VERSION, runId: "1", fixture: SMOKE_CONTROL_FIXTURE, ok: true,
-  expectedSteps: 4, completedSteps: 4, speechCaptured: true, error: null,
-  observed: {
-    node: "v22.18.0",
-    executable: String.raw`C:\Users\Rig\AppData\Local\nvda-rig\node-v22.18.0-win-arm64\node.exe`,
-    platform: "win32", architecture: "arm64", executionPosture: SCHEDULED_TASK_POSTURE,
-  },
+  ok: true, daemon: true, entered: true, commands: SMOKE_COMMANDS.length, spoke: 3, error: null,
+  environment: ["windows: 11 26100", "nvda: 2025.1", "edge: 153.0.4234.48"],
 };
-const artifacts = smokeArtifacts("1");
+const artifacts = { transcript: String.raw`C:\rig\artifacts\smoke-transcript.txt` };
 const observed = {
   reporterNode: "v22.18.0", reporterPlatform: "win32", reporterArchitecture: "arm64",
-  speechArtifactBytes: 2048,
-  taskOutput: `nvda-smoke result: ${artifacts.result}`, smoke: smoke.observed,
+  transcriptBytes: 2048,
+  smokeOutput: "SMOKE OK", smoke,
 };
 const runtime: ProvisioningStage[] = [
   { name: "architecture", ok: true, detail: "ARM64" },
@@ -46,37 +35,41 @@ const runtime: ProvisioningStage[] = [
   { name: "edge", ok: true, detail: "153.0.4234.48" },
   { name: "packages", ok: true, detail: "npm ci" },
   { name: "guidepup-nvda", ok: true, detail: "0.2.1-2026.2" },
-  { name: "tasks", ok: true, detail: "nvda-smoke registered" },
+  { name: "tasks", ok: true, detail: "nvda-daemon registered" },
+  { name: "daemon", ok: true, detail: "nvda-daemon Running" },
 ];
-const healthy = {
-  runtime, taskCompleted: true, smoke, artifacts, freshArtifact: true,
-  hostUrlProbe: NO_HOST_URL_PROBE, observed,
-};
+const healthy = { runtime, smoke, artifacts, hostUrlProbe: NO_HOST_URL_PROBE, observed };
 
-test("health proof uses the smoke JSON contract, not transcript text", () => {
+test("health proof uses the smoke's printed result, not transcript text", () => {
   const report = assessProvisioning(healthy);
   assert.equal(report.ok, true);
   assert.deepEqual(report.checks, {
-    runtimeInstalled: true, taskCompleted: true, smokePassed: true, speechCaptured: true,
-    speechArtifact: true, scheduledCmdNode: true, freshArtifact: true,
+    runtimeInstalled: true, daemonAnswered: true, smokePassed: true, speechCaptured: true, transcriptArtifact: true,
   });
-  assert.deepEqual(report.artifacts, {
-    result: "artifacts/smoke-result-1.json", speech: "artifacts/smoke-log-1.txt",
+  assert.deepEqual(report.artifacts, artifacts);
+});
+
+test("a daemon that never answered is the failure, and nothing after it can pass", () => {
+  const report = assessProvisioning({
+    ...healthy,
+    smoke: { ...smoke, ok: false, daemon: false, entered: false, spoke: 0, error: "the daemon did not answer within 60 s <- fetch failed", environment: [] },
+  });
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.checks, {
+    runtimeInstalled: true, daemonAnswered: false, smokePassed: false, speechCaptured: false, transcriptArtifact: true,
   });
 });
 
-test("silent speech cannot become a healthy report", () => {
-  const report = assessProvisioning({ ...healthy, smoke: { ...smoke, speechCaptured: false } });
+test("silent speech cannot become a healthy report, even if the smoke claimed to pass", () => {
+  const report = assessProvisioning({ ...healthy, smoke: { ...smoke, spoke: 0 } });
   assert.equal(report.ok, false);
   assert.equal(report.checks.speechCaptured, false);
 });
 
-test("an empty or missing speech artifact cannot become a healthy report", () => {
-  const report = assessProvisioning({
-    ...healthy, observed: { ...observed, speechArtifactBytes: 0 },
-  });
+test("an empty or missing transcript cannot become a healthy report", () => {
+  const report = assessProvisioning({ ...healthy, observed: { ...observed, transcriptBytes: 0 } });
   assert.equal(report.ok, false);
-  assert.equal(report.checks.speechArtifact, false);
+  assert.equal(report.checks.transcriptArtifact, false);
 });
 
 test("a failed runtime stage is named in the report instead of vanishing", () => {
@@ -86,12 +79,13 @@ test("a failed runtime stage is named in the report instead of vanishing", () =>
     { name: "edge", ok: false, detail: "no msedge.exe under Program Files" },
   ];
   const report = assessProvisioning({
-    ...healthy, runtime: failed, taskCompleted: false, smoke: undefined,
-    freshArtifact: false, observed: { ...observed, speechArtifactBytes: 0 },
+    ...healthy, runtime: failed, smoke: undefined,
+    observed: { reporterNode: "v22.18.0", reporterPlatform: "win32", reporterArchitecture: "arm64", transcriptBytes: 0, smokeOutput: "" },
     failure: 'runtime stage "edge" failed',
   });
   assert.equal(report.ok, false);
   assert.equal(report.checks.runtimeInstalled, false);
+  assert.equal(report.checks.daemonAnswered, false);
   assert.equal(report.failure, 'runtime stage "edge" failed');
   assert.deepEqual(report.runtime, failed);
 });
@@ -149,19 +143,8 @@ test("an unreachable host URL reports the cause, not just 'fetch failed'", async
   assert.match(probe.failure ?? "", /ECONNREFUSED/);
 });
 
-test("only the scheduled-task CMD posture using per-user Node proves the entry point", () => {
-  const report = assessProvisioning({
-    ...healthy,
-    smoke: { ...smoke, observed: { ...smoke.observed, executionPosture: null, executable: "C:\\node\\node.exe" } },
-  });
-  assert.equal(report.ok, false);
-  assert.equal(report.checks.scheduledCmdNode, false);
-});
-
-test("CMD entry points explicitly use the provisioned per-user Node wrapper", () => {
-  for (const entry of ["run-smoke.cmd", "run-daemon.cmd"]) {
-    assert.match(source(entry), /call "%~dp0run-node\.cmd"/i, entry);
-  }
+test("the daemon's CMD entry point explicitly uses the provisioned per-user Node wrapper", () => {
+  assert.match(source("run-daemon.cmd"), /call "%~dp0run-node\.cmd"/i);
   assert.match(
     source("run-node.cmd"),
     /%LOCALAPPDATA%\\nvda-rig\\node-v22\.18\.0-win-arm64\\node\.exe/i,
@@ -172,41 +155,39 @@ test("no script parameter default depends on $PSScriptRoot", () => {
   // Windows PowerShell binds a script's parameter defaults before the script's
   // own $PSScriptRoot exists, so such a default is an empty path and the
   // script dies on its first Join-Path. Resolve these in the body instead.
-  for (const script of [
-    "provisioning/provision.ps1",
-    "provisioning/run-smoke-task.ps1",
-    "tasks/register.ps1",
-  ]) {
+  for (const script of ["provisioning/provision.ps1", "tasks/register.ps1"]) {
     const block = /^param\(([\s\S]*?)^\)/m.exec(source(script));
     assert.ok(block?.[1], `${script} has no script parameter block`);
     assert.doesNotMatch(block[1], /\$PSScriptRoot/, script);
   }
 });
 
-test("the task protocol is result-controlled and cleans up on timeout", () => {
-  const task = source("provisioning/run-smoke-task.ps1");
-  assert.doesNotMatch(task, /LastRunTime/);
-  // The reporter owns both artifact paths, so the two scripts cannot disagree
-  // about which files this run's proof lives in.
-  assert.doesNotMatch(task, /smoke-result-|smoke-log-/);
-  assert.match(task, /\[Parameter\(Mandatory\)\]\[string\]\$Result/);
-  assert.match(task, /\[Parameter\(Mandatory\)\]\[string\]\$Speech/);
-  assert.match(task, /Stop-ScheduledTask/);
-  assert.match(task, /Remove-Item -Force -ErrorAction SilentlyContinue \$request, \$Result, \$Speech/);
-  // The request it writes is the SmokeRequest contract smoke.ts reads.
-  for (const key of ["runId", "result", "speech"]) {
-    assert.match(task, new RegExp(`${key} = `), key);
-  }
+test("the Smoke is a client of the logon daemon: one task, no smoke task, and the token reaches the reporter", () => {
+  const register = source("tasks/register.ps1");
+  assert.match(register, /Register-RigTask -Name 'nvda-daemon' -Script 'run-daemon\.cmd' -AtLogon/);
+  assert.doesNotMatch(register, /Register-RigTask -Name 'nvda-smoke'/);
+  // A rig provisioned before the change carries the old task; it is retired.
+  assert.match(register, /foreach \(\$retired in [^)]*'nvda-smoke'/);
+
+  const provision = source("provisioning/provision.ps1");
+  const daemon = provision.slice(provision.indexOf("Invoke-Stage 'daemon'"), provision.indexOf("New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StagePath)"));
+  assert.ok(daemon, "provision.ps1 has no daemon stage");
+  // Restarted, so the daemon proved is the one just provisioned.
+  assert.match(daemon, /Stop-ScheduledTask -InputObject \$task/);
+  assert.match(daemon, /Start-ScheduledTask -InputObject \$task/);
+  // The reporter's Smoke reaches the daemon with what the logon task inherits.
+  assert.match(daemon, /\$env:RIG_TOKEN = \[Environment\]::GetEnvironmentVariable\('RIG_TOKEN', 'User'\)/);
+  assert.doesNotMatch(provision, /nvda-smoke/);
 });
 
 test("the provisioner's no-Node fallback report cannot drift from the report type", () => {
   const script = source("provisioning/provision.ps1");
   // Shaped like the report PowerShell writes: no smoke ran, and a failure.
   const report = assessProvisioning({
-    ...healthy, smoke: undefined, taskCompleted: false, freshArtifact: false,
+    ...healthy, smoke: undefined,
     observed: {
       reporterNode: "", reporterPlatform: "win32", reporterArchitecture: "ARM64",
-      speechArtifactBytes: 0, taskOutput: "",
+      transcriptBytes: 0, smokeOutput: "",
     },
     failure: "no provisioned runtime",
   });
@@ -229,6 +210,7 @@ test("the provisioner's no-Node fallback report cannot drift from the report typ
   assert.deepEqual(keys("hostUrlProbe"), Object.keys(report.hostUrlProbe).sort());
   assert.deepEqual(keys("observed"), Object.keys(report.observed).sort());
   assert.match(script, new RegExp(`schemaVersion = ${report.schemaVersion}\\b`));
+  assert.ok(script.includes(`execution = "${report.execution}"`), "the fallback's execution text is the reporter's");
   // Two facts the fallback must observe rather than assert: a reporter crash
   // leaves the runtime installed, and Node's version is knowable from it.
   assert.match(script, /runtimeInstalled = \$runtimeInstalled/);
@@ -254,8 +236,8 @@ test("runtime stages are recorded rather than thrown away, and the probe never g
   const script = source("provisioning/provision.ps1");
   // Every manifest component is a named stage, so a dependency failure is
   // distinguishable from a desktop or speech-capture failure in the report.
-  for (const stage of ["architecture", "node", "edge", "packages", "guidepup-nvda", "tasks"]) {
-    assert.match(script, new RegExp(`'${stage}'`), stage);
+  for (const stage of ["architecture", "node", "edge", "packages", "guidepup-nvda", "tasks", "daemon"]) {
+    assert.match(script, new RegExp(`Invoke-Stage '${stage}'`), stage);
   }
   assert.match(script, /'--stages', \$StagePath/);
   // The probe belongs to the reporter now: nothing rewrites the finished report.
@@ -299,9 +281,9 @@ test("runtime manifest agrees with the locked packages and Guidepup NVDA manifes
   });
 });
 
-test("the reporter, run as the Provisioner runs it, names a failed stage and never starts the smoke", () => {
-  // Only the failed-stage path: any other would start the real smoke task on
-  // a Windows guest.
+test("the reporter, run as the Provisioner runs it, names a failed stage and never starts the smoke", async () => {
+  // Only the failed-stage path: any other would run the real smoke against a
+  // daemon, which needs a Windows guest.
   const dir = mkdtempSync(join(tmpdir(), "health-report-"));
   const stages = join(dir, "stages.json");
   const output = join(dir, "report.json");
@@ -318,6 +300,16 @@ test("the reporter, run as the Provisioner runs it, names a failed stage and nev
   assert.equal(report.ok, false);
   assert.equal(report.failure, 'runtime stage "edge" failed: no msedge.exe under Program Files');
   assert.equal(report.checks.runtimeInstalled, false);
-  assert.equal(report.checks.taskCompleted, false);
+  assert.equal(report.checks.daemonAnswered, false);
+  assert.equal(report.observed.smokeOutput, "");
   assert.deepEqual(report.hostUrlProbe, NO_HOST_URL_PROBE);
+});
+
+test("the smoke itself, with no token, refuses before touching anything", () => {
+  const run = spawnSync(process.execPath, [join(import.meta.dirname, "..", "smoke.ts")], {
+    encoding: "utf8",
+    env: { ...process.env, RIG_TOKEN: "" },
+  });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /RIG_TOKEN is not set/);
 });

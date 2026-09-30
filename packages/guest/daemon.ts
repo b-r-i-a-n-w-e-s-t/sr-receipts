@@ -21,7 +21,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { chromium } from "playwright-core";
-import { DEFAULT_BROWSER_PORT, DEFAULT_PORT, createNvdaDesktop, createRigServer, resolveToken } from "./lib/index.ts";
+import { DEFAULT_BROWSER_PORT, DEFAULT_PORT, createRigServer, resolveToken } from "./lib/daemon.ts";
+import { createNvdaDesktop } from "./lib/nvda.ts";
 
 let token: string;
 let generated: boolean;

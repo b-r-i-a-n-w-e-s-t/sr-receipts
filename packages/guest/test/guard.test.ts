@@ -77,9 +77,19 @@ function fakeDesktop({ titles = ["Component Library : Component Library - Micros
 
 const noDelay = async () => undefined;
 
+/** The guard, with what it recorded, so a test can read the transcript it left. */
+async function enter(desktop: Fake, options: Omit<Parameters<typeof enterDocument>[1], "delay">) {
+  const lines: string[] = [];
+  const outcome = await enterDocument(desktop, { ...options, delay: noDelay }, (...more) => void lines.push(...more)).then(
+    (arrivedOn) => ({ ok: true as const, arrivedOn }),
+    (error: Error) => ({ ok: false as const, error }),
+  );
+  return { ...outcome, lines };
+}
+
 test("a page in front, in the document, in browse mode passes on the first probe and ends at the top", async () => {
   const desktop = fakeDesktop();
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library : Component Library", delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library : Component Library" });
   assert.equal(entry.ok, true);
   assert.equal(entry.arrivedOn, "link, Skip to main content");
   assert.match(entry.lines.join("\n"), /### focus guard: in the document, in browse mode \(proved by moveToNextTable\)/);
@@ -91,9 +101,9 @@ test("a page in front, in the document, in browse mode passes on the first probe
 
 test("a browser that never comes to the front fails the title guard and names the windows on screen", async () => {
   const desktop = fakeDesktop({ titles: ["Administrator: Windows PowerShell"], windows: ["WindowsTerminal: Administrator: Windows PowerShell", "msedge: Component Library"] });
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library", activateAttempts: 3, delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library", activateAttempts: 3 });
   assert.equal(entry.ok, false);
-  assert.match(entry.lines[0] ?? "", /^### FOCUS GUARD FAILED: the browser is not in front/);
+  assert.match(entry.error?.message ?? "", /^FOCUS GUARD FAILED: the browser is not in front/);
   assert.equal(desktop.calls.filter((call) => call === "activate").length, 3);
   assert.match(entry.lines.join("\n"), /### windows on screen\nWindowsTerminal: Administrator: Windows PowerShell\nmsedge: Component Library/);
   // Nothing past the title guard ran: no F6, no probe.
@@ -103,7 +113,7 @@ test("a browser that never comes to the front fails the title guard and names th
 
 test("focus on the hidden menu bar is recovered with F6, and only F6", async () => {
   const desktop = fakeDesktop({ focus: ["menu", "tab, selected", "Component Library, document, focused"] });
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library", delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library" });
   assert.equal(entry.ok, true);
   assert.deepEqual(desktop.calls.filter((call) => call.startsWith("press ") && call !== "press Control+Home"), ["press F6", "press F6"]);
   assert.match(entry.lines.join("\n"), /focus attempt 1: menu\nfocus attempt 2: tab, selected\nfocus attempt 3: Component Library, document, focused/);
@@ -111,9 +121,11 @@ test("focus on the hidden menu bar is recovered with F6, and only F6", async () 
 
 test("focus that never reaches the document fails rather than certifying a menu", async () => {
   const desktop = fakeDesktop({ focus: ["menu"] });
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library", focusAttempts: 2, delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library", focusAttempts: 2 });
   assert.equal(entry.ok, false);
-  assert.match(entry.lines[0] ?? "", /focus never reached the document/);
+  assert.match(entry.error?.message ?? "", /focus never reached the document/);
+  // The windows on screen are recorded for the diagnosis, and nothing else after the failure.
+  assert.match(entry.lines.at(-2) ?? "", /^### windows on screen$/);
   assert.ok(!desktop.calls.includes("moveToNextTable"));
 });
 
@@ -121,7 +133,7 @@ test("focus mode is caught by silent probes, toggled, and then proved", async ()
   // Every NVDA run of the proof of concept looked like this: in the document,
   // every probe silent, one toggle, then the table answered.
   const desktop = fakeDesktop({ browseMode: [false, true] });
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library", delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library" });
   assert.equal(entry.ok, true);
   const probes = desktop.calls.filter((call) => MODE_PROBES.includes(call) || call === "toggleBetweenBrowseAndFocusMode");
   assert.deepEqual(probes, [...MODE_PROBES, "toggleBetweenBrowseAndFocusMode", "moveToNextTable"]);
@@ -130,15 +142,15 @@ test("focus mode is caught by silent probes, toggled, and then proved", async ()
 
 test("a mode that can never be proved fails, after every probe on every attempt", async () => {
   const desktop = fakeDesktop({ browseMode: [false] });
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library", modeAttempts: 2, delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library", modeAttempts: 2 });
   assert.equal(entry.ok, false);
-  assert.match(entry.lines[0] ?? "", /browse mode could not be proved/);
+  assert.match(entry.error?.message ?? "", /browse mode could not be proved/);
   assert.equal(desktop.calls.filter((call) => MODE_PROBES.includes(call)).length, MODE_PROBES.length * 2);
 });
 
 test("a page can name its own probes, and the second one answering is enough", async () => {
   const desktop = fakeDesktop();
-  const entry = await enterDocument(desktop, { pageTitle: "Component Library", modeProbes: ["moveToNextLandmark", "moveToNextHeading"], delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "Component Library", modeProbes: ["moveToNextLandmark", "moveToNextHeading"] });
   assert.equal(entry.ok, true);
   assert.match(entry.lines.join("\n"), /proved by moveToNextLandmark/);
 });
@@ -151,7 +163,7 @@ test("a title NVDA speaks with its symbols as words is matched on the window tit
     titles: ["Control: native less table greater (validates the rig, not the component) - Profile 1 - Microsoft Edge"],
     foreground: [`${pageTitle} - Profile 1 - Microsoft Edge`],
   });
-  const entry = await enterDocument(desktop, { pageTitle, delay: noDelay });
+  const entry = await enter(desktop, { pageTitle });
   assert.equal(entry.ok, true);
   assert.equal(desktop.calls.filter((call) => call === "activate").length, 1);
 
@@ -161,11 +173,11 @@ test("a title NVDA speaks with its symbols as words is matched on the window tit
     titles: ["Component Library, Component Library, Profile 1, Microsoft Edge"],
     foreground: ["(unknown)"],
   });
-  assert.equal((await enterDocument(spokenOnly, { pageTitle: "Component Library : Component Library", delay: noDelay })).ok, true);
+  assert.equal((await enter(spokenOnly, { pageTitle: "Component Library : Component Library" })).ok, true);
 });
 
 test("a page with no title is matched on the browser's name instead", async () => {
   const desktop = fakeDesktop({ titles: ["Untitled - Microsoft Edge"] });
-  const entry = await enterDocument(desktop, { pageTitle: "", delay: noDelay });
+  const entry = await enter(desktop, { pageTitle: "" });
   assert.equal(entry.ok, true);
 });

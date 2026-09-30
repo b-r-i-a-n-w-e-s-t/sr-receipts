@@ -1,48 +1,30 @@
-/** The machine-readable contract between the smoke entry point and provisioner. */
-import { join } from "node:path";
+/**
+ * What one Smoke leaves behind for the Provisioner, printed as the last line
+ * of `smoke.ts`'s stdout beside the transcript file it writes. Named here so
+ * the Smoke and the health reporter cannot disagree about it.
+ */
 
-export const SMOKE_RESULT_SCHEMA_VERSION = 2;
+/** The committed page the Smoke opens: it proves the rig, not any app. */
 export const SMOKE_CONTROL_FIXTURE = "control.html";
-export const SCHEDULED_TASK_POSTURE = "scheduled-task-cmd";
-
-/** Where one proof run's result and speech log live. */
-export interface SmokeArtifacts {
-  result: string;
-  speech: string;
-}
-
-/** What the provisioner asks the scheduled task to prove, and where. */
-export interface SmokeRequest extends SmokeArtifacts {
-  runId: string;
-}
 
 /**
- * Named here rather than in either script, so the provisioner, the scheduled
- * task and the smoke entry point cannot disagree about which files a run's
- * evidence is in.
+ * What is asked once the guards have passed: the title, the focus, and quick
+ * navigation twice. Any of them speaking proves the desktop is the daemon's.
  */
-export function smokeArtifacts(runId: string): SmokeArtifacts {
-  return {
-    result: join("artifacts", `smoke-result-${runId}.json`),
-    speech: join("artifacts", `smoke-log-${runId}.txt`),
-  };
-}
+export const SMOKE_COMMANDS = ["reportTitle", "reportCurrentFocus", "moveToNextTable", "moveToNextTable"];
 
 export interface SmokeResult {
-  schemaVersion: typeof SMOKE_RESULT_SCHEMA_VERSION;
-  /** The provisioner-generated identifier that owns this result, if any. */
-  runId: string | null;
-  fixture: string;
+  /** The daemon answered, the page was reached, and at least one command spoke. */
   ok: boolean;
-  expectedSteps: number;
-  completedSteps: number;
-  speechCaptured: boolean;
+  /** The daemon answered `/health` before the deadline. */
+  daemon: boolean;
+  /** The Focus Guard passed. */
+  entered: boolean;
+  /** Commands asked once entered, and how many of them answered with speech. */
+  commands: number;
+  spoke: number;
+  /** Why it stopped, outermost cause first, when it did not get to the end. */
   error: string | null;
-  observed: {
-    node: string;
-    executable: string;
-    platform: string;
-    architecture: string;
-    executionPosture: string | null;
-  };
+  /** The Environment Stamp the daemon serves, empty when it never answered. */
+  environment: string[];
 }

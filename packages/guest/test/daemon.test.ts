@@ -154,11 +154,13 @@ test("the capture window is two routes, and the guard route runs the guards", as
   assert.deepEqual(await (await post(url, "/reader/capture/end")).json(), { spoken: "1 row selected" });
   assert.deepEqual(calls, ["capture begin", "capture end"]);
 
-  const entry = (await (await post(url, "/reader/enter", { pageTitle: "Component Library" })).json()) as { ok: boolean; lines: string[] };
+  const entry = (await (await post(url, "/reader/enter", { pageTitle: "Component Library" })).json()) as { ok: boolean; lines: string[]; error: string[] };
   // The fake's probes are silent and its focus report never says "document",
-  // so the guards fail; what matters here is that they ran and reported.
+  // so the guards fail; what matters here is that they ran and reported, and
+  // that a failed proof is a 200 carrying what was recorded and the reason.
   assert.equal(entry.ok, false);
-  assert.match(entry.lines[0] ?? "", /FOCUS GUARD FAILED/);
+  assert.match(entry.lines[0] ?? "", /^activate browser \(attempt 1\)/);
+  assert.match(entry.error[0] ?? "", /^FOCUS GUARD FAILED/);
   assert.ok(calls.includes("activate"));
 
   const bad = await post(url, "/reader/enter", { pageTitle: "x", modeProbes: "moveToNextTable" });

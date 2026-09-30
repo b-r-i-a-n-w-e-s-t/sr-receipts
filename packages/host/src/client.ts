@@ -78,14 +78,11 @@ export function createNvdaSession({ url, token }: ClientOptions): ReaderSession 
       await page.bringToFront();
       const body: EnterBody = { pageTitle: await page.title(), ...(modeProbes && { modeProbes }) };
       const result = await call<EntryResult>("POST", "/reader/enter", body);
-      if (result.ok) {
-        record(...result.lines);
-        return result.arrivedOn;
-      }
-      // The guard's first line is its verdict; the rest is how it got there.
-      const [verdict = "the guards failed", ...lines] = result.lines;
-      record(...lines);
-      throw new Error(verdict.replace(/^#+\s*/, ""));
+      // What the guards recorded goes into the Transcript whether they passed
+      // or not; the session adds the heading and the reason after it.
+      record(...result.lines);
+      if (result.ok) return result.arrivedOn;
+      throw new Error(result.error.join(" <- "));
     },
 
     perform: (command) => spoken("/reader/perform", { command }),

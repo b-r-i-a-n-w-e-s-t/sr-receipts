@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkExact, checkVersion, SUPPORTED } from "../voiceover/evidence.ts";
-import { appleScriptControlCheck, expectedVoiceOverAsset, preferenceAccessCheck, voiceOverPreferenceDirectory } from "../voiceover/doctor.ts";
+import { SUPPORTED, appleScriptControlCheck, checkExact, checkVersion, expectedVoiceOverAsset, preferenceAccessCheck, voiceOverPreferenceDirectory } from "../voiceover/doctor.ts";
 
 test("VoiceOver is supported only on its pinned release family", () => {
   assert.equal(checkVersion("macOS", "26.6.2", SUPPORTED.macOS).ok, true);

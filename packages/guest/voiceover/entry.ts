@@ -8,9 +8,12 @@
  * sequence is the stock @guidepup/playwright one, with bounds on both loops,
  * which the stock ones lack. The marker input is the stock trick that makes
  * VoiceOver notice later Playwright interactions.
+ *
+ * What it sends is `EntrySteps`, which the session provides from Guidepup:
+ * this file decides the order and the bounds, and the session decides what a
+ * step is.
  */
 import { SILENCE, type EntryPage, type Recorder } from "@sr-receipts/host";
-import type { VoiceOverDesktop } from "./desktop.ts";
 
 /**
  * How VoiceOver says the Item Chooser opened. On macOS 26 it usually speaks
@@ -25,11 +28,36 @@ const ITEM_CHOOSER_ANNOUNCEMENT = /item chooser|voiceover menu|^on item /i;
 export const CHOOSER_ATTEMPTS = 10;
 export const SEARCH_ATTEMPTS = 5;
 
+/** The lone keys the Item Chooser sequence sends. */
+export type VoiceOverKey = "Control" | "Escape" | "Backspace" | "Enter";
+
+/**
+ * The Item Chooser's steps. Each returns what VoiceOver said as it happened,
+ * unstripped: the Entry matches on it, and no sentinel precedes it.
+ */
+export interface ItemChooser {
+  /** One lone key, uncaptured, with the settle the next key needs. */
+  key(name: VoiceOverKey): Promise<void>;
+  /** Stop speech, dismiss any menu, open the chooser; what VoiceOver said as it opened. */
+  open(): Promise<string>;
+  /** Type one character into the chooser's search; what VoiceOver said. */
+  type(character: string): Promise<string>;
+  /** Choose the highlighted entry and interact with it. */
+  choose(): Promise<void>;
+  /** With the logs cleared, move to the first item inside and return its text. */
+  firstItem(): Promise<string>;
+}
+
+/** What the Entry sends: the browser's activation, and the Item Chooser. */
+export interface EntrySteps {
+  /** Bring the browser application to the front. */
+  activate(applicationName: string): Promise<void>;
+  chooser: ItemChooser;
+}
+
 export interface EnterWebContentOptions {
   /** The browser's application name, as macOS knows it: "Playwright" for Playwright's WebKit. */
   applicationName: string;
-  chooserAttempts?: number | undefined;
-  searchAttempts?: number | undefined;
 }
 
 /**
@@ -45,13 +73,12 @@ declare const document: {
 
 /** Returns what the cursor landed on; throws, after recording each step, when the proof fails. */
 export async function enterWebContent(
-  desktop: VoiceOverDesktop,
+  { activate, chooser }: EntrySteps,
   page: EntryPage,
-  { applicationName, chooserAttempts = CHOOSER_ATTEMPTS, searchAttempts = SEARCH_ATTEMPTS }: EnterWebContentOptions,
+  { applicationName }: EnterWebContentOptions,
   record: Recorder,
 ): Promise<string> {
-  const { chooser } = desktop;
-  await desktop.activate(applicationName);
+  await activate(applicationName);
   await chooser.key("Control");
   await page.bringToFront();
   await page.evaluate(() => {
@@ -72,12 +99,12 @@ export async function enterWebContent(
       spoken = await chooser.open();
       record(`open item chooser (attempt ${attempt}): ${spoken || SILENCE}`);
       if (ITEM_CHOOSER_ANNOUNCEMENT.test(spoken)) break;
-      if (attempt >= chooserAttempts) {
-        throw new Error(`Item Chooser did not open in ${chooserAttempts} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
+      if (attempt >= CHOOSER_ATTEMPTS) {
+        throw new Error(`Item Chooser did not open in ${CHOOSER_ATTEMPTS} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
       }
     }
     let matched = false;
-    for (let round = 1; round <= searchAttempts && !matched; round++) {
+    for (let round = 1; round <= SEARCH_ATTEMPTS && !matched; round++) {
       for (const character of "web content") {
         spoken = await chooser.type(character);
         if (spoken.toLowerCase().includes("web content")) {
@@ -89,7 +116,7 @@ export async function enterWebContent(
       if (!matched) await chooser.key("Backspace");
     }
     if (!matched) {
-      throw new Error(`Item Chooser had no Web Content entry after ${searchAttempts} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
+      throw new Error(`Item Chooser had no Web Content entry after ${SEARCH_ATTEMPTS} attempts; VoiceOver last said ${JSON.stringify(spoken)}`);
     }
     await chooser.choose();
     const arrivedOn = await chooser.firstItem();

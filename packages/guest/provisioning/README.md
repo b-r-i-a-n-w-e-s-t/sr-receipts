@@ -19,8 +19,9 @@ network, the Mac is currently reachable from the guest at `192.168.64.1`; this
 is an operational fact, not discovery or a supported UTM-control contract.
 
 Run the Provisioner from PowerShell in that signed-in, **unlocked** desktop.
-The script registers the smoke task and the daemon's logon task as that user
-at limited privilege. Launch it unelevated; the one step that needs elevation,
+The script registers the daemon's logon task as that user at limited
+privilege, and restarts it, so the daemon it proves is the one just
+provisioned. Launch it unelevated; the one step that needs elevation,
 the firewall rule, is `tasks\register.ps1 -Firewall`, run once afterwards:
 
 ```powershell
@@ -31,13 +32,14 @@ NVDA and headed Edge must share the interactive desktop. Do not run this over
 SSH, as a service, or while the desktop is locked. Re-running is safe: the
 script verifies installed versions, uses `npm ci`, invokes Guidepup's `setup`
 then `install nvda` lifecycle, and re-registers the limited, interactive
-entry points. The proof itself is always launched through the unelevated
-`nvda-smoke` scheduled task, not the provisioning PowerShell process.
+entry point. The proof itself is a client of the unelevated `nvda-daemon`
+task's daemon, so the desktop it proves is the daemon's, never the
+provisioning PowerShell process's.
 
 ## Runtime stages
 
 Each manifest component is a named stage (`architecture`, `node`, `edge`,
-`packages`, `guidepup-nvda`, `tasks`), and every outcome is recorded in the
+`packages`, `guidepup-nvda`, `tasks`, `daemon`), and every outcome is recorded in the
 report's `runtime` list. A stage's detail is read back off the machine, not
 claimed: the installed Node version, the Edge version Windows ships, the
 `@guidepup/guidepup` and `playwright-core` versions `npm ci` actually left in
@@ -79,22 +81,21 @@ lockfile together.
 
 ## Evidence and optional network diagnosis
 
-With the runtime installed, provisioning always runs `smoke.ts`, which opens
-`fixtures/control.html` in headed Edge through Playwright, runs the guards,
-and asks real NVDA four commands. The reporter derives both
-artifact paths from `lib/smoke-result.ts` and hands them to the scheduled task,
-which writes a run-specific JSON smoke result and speech log under
-`artifacts/`; the result is the completion signal, so clock skew and a prior
-task's `LastRunTime` cannot satisfy the proof. Timeout stops the task and
-removes its request, result, and speech artifacts.
+With the runtime installed and the daemon restarted, provisioning always
+runs `smoke.ts` as a client of that daemon: it starts NVDA through the
+daemon's routes, opens `fixtures/control.html` in the daemon's browser
+server, runs the Focus Guard and asks real NVDA four commands through the
+same `ReaderSession` a test uses, and stops. The reporter reads the
+`SmokeResult` (`lib/smoke-result.ts`) from the last line the Smoke prints,
+and the Smoke writes its transcript to `artifacts/smoke-transcript.txt`. The
+daemon answering with speech is the posture check: a daemon started over SSH
+answers every route and hears nothing.
 
 Every `checks` entry gates the `ok` verdict, and only they do: an installed
-runtime, a completed task, the machine-readable smoke verdict, captured speech,
-a retained non-empty speech log (`artifacts.speech`, sized in
-`observed.speechArtifactBytes`), retained focus, a fresh result, and
-confirmation that Node ran from the provisioned per-user path in the
-scheduled-task CMD posture. The UTF-8 health report also retains the task
-diagnostics and both reporter and smoke runtime/environment observations.
+runtime, a daemon that answered, the Smoke's own verdict, captured speech,
+and a retained non-empty transcript (`artifacts.transcript`, sized in
+`observed.transcriptBytes`). The UTF-8 health report also retains the Smoke's
+output and result and the reporter's runtime observations.
 
 To diagnose a Mac-served app without making networking a provisioning
 requirement:

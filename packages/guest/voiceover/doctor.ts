@@ -3,27 +3,43 @@
  * not invoke Guidepup setup or alter macOS permissions.
  */
 import { accessSync, constants, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { checkExact, checkVersion, SUPPORTED, type DoctorCheck } from "./evidence.ts";
+import { packageVersion } from "../lib/system.ts";
 
-const require = createRequire(import.meta.url);
+/** The release family VoiceOver is supported on. */
+export const SUPPORTED = {
+  guidepup: "0.34.0",
+  macOS: /^26\.6(?:\.\d+)?$/,
+  voiceOverAsset: {
+    platformVersion: "25",
+    version: "0.0.1-VoiceOver4",
+    file: "guidepup-voiceover-preferences-macos-26.dmg",
+  },
+} as const;
+
+/** What the doctor records about one check. */
+export type DoctorCheck = {
+  name: string;
+  actual: string;
+  expected: string;
+  ok: boolean;
+};
+
+export function checkExact(name: string, actual: string, expected: string): DoctorCheck {
+  return { name, actual, expected, ok: actual === expected };
+}
+
+export function checkVersion(name: string, actual: string, expected: RegExp): DoctorCheck {
+  return { name, actual, expected: expected.source, ok: expected.test(actual) };
+}
 
 function command(command: string, args: string[]): string {
   try {
     return execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch (error) {
     return `unavailable: ${(error as Error).message}`;
-  }
-}
-
-function packageVersion(): string {
-  try {
-    return (require("@guidepup/guidepup/package.json") as { version: string }).version;
-  } catch {
-    return "not installed";
   }
 }
 
@@ -79,7 +95,7 @@ export function inspect(): DoctorCheck[] {
     checkExact("platform", process.platform, "darwin"),
     checkVersion("macOS", command("sw_vers", ["-productVersion"]), SUPPORTED.macOS),
     checkExact("bundled VoiceOver", existsSync("/System/Library/CoreServices/VoiceOver.app") ? "present" : "missing", "present"),
-    checkExact("Guidepup", packageVersion(), SUPPORTED.guidepup),
+    checkExact("Guidepup", packageVersion("@guidepup/guidepup"), SUPPORTED.guidepup),
     checkExact("Guidepup VoiceOver asset", existsSync(expectedVoiceOverAsset()) ? "present" : "missing", "present"),
     preferenceAccessCheck(preferences),
     appleScriptControlCheck(),

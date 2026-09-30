@@ -99,6 +99,10 @@ in the consuming repository's scratch space.
 12. **Each developer runs their own guest, as an appliance.** The daemon is
     registered at logon by the Provisioner, so a booted, signed-in VM answers
     `npm run sr-testing` with nothing else started by hand.
+    _Amended 2026-09-30:_ the Smoke proves that daemon, as its client through
+    the same `ReaderSession` a test uses, rather than a second NVDA lifecycle
+    of its own under a scheduled task of its own. The `nvda-smoke` task and
+    the smoke's request and artifact contract are gone.
 
 ## Consequences
 

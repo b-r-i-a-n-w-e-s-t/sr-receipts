@@ -112,8 +112,8 @@ test("a failed entry rejects with the guest's diagnosis, ending in the guard's v
   await session.start();
   await assert.rejects(session.enter(page), (error: Error) => {
     assert.match(error.message, /^NVDA did not reach the page:\n/);
-    assert.match(error.message, /### windows on screen\nmsedge: Component Library\nWindowsTerminal: Administrator/);
-    assert.match(error.message, /### NVDA DID NOT REACH THE PAGE\nFOCUS GUARD FAILED: the browser is not in front/);
+    assert.match(error.message, /title reported: Administrator: Windows PowerShell\n/);
+    assert.match(error.message, /### windows on screen\nmsedge: Component Library\nWindowsTerminal: Administrator\n### NVDA DID NOT REACH THE PAGE\nFOCUS GUARD FAILED: the browser is not in front \(page title "Component Library"\)$/);
     return true;
   });
 });

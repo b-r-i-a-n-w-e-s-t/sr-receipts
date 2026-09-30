@@ -25,7 +25,7 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { errorChain, type DaemonHealth, type EnterBody } from "@sr-receipts/host";
+import { errorChain, type DaemonHealth, type EnterBody, type EntryResult } from "@sr-receipts/host";
 import { enterDocument } from "./guard.ts";
 import type { NvdaDesktop } from "./nvda.ts";
 
@@ -147,7 +147,17 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
           throw new BadRequest("`modeProbes` must be a list of NVDA command names");
         }
         const pageTitle = typeof body.pageTitle === "string" ? body.pageTitle : "";
-        return enterDocument(desktop, { pageTitle, ...(modeProbes && { modeProbes }) });
+        // The guards record and throw like any Entry; this is where that
+        // becomes the wire's shape, and the client turns it back.
+        const lines: string[] = [];
+        const record = (...more: string[]): void => void lines.push(...more);
+        let result: EntryResult;
+        try {
+          result = { ok: true, arrivedOn: await enterDocument(desktop, { pageTitle, ...(modeProbes && { modeProbes }) }, record), lines };
+        } catch (error) {
+          result = { ok: false, lines, error: errorChain(error) };
+        }
+        return result;
       }
       case "POST /reader/perform":
         return { spoken: await desktop.perform(requireString(body, "command")) };

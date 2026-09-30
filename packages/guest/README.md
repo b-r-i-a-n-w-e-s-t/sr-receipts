@@ -28,9 +28,9 @@ Guidepup's own Playwright fixtures were not enough (ADR 0002).
 
 1. **The daemon must run in the interactive session, not over SSH.** An SSH
    session has no interactive desktop, so NVDA has no foreground window to
-   describe. `nvda-daemon` and `nvda-smoke` are scheduled tasks registered
-   with an interactive logon so they land in the logged-in console session
-   (see `tasks/register.ps1`). The same is why the browser's window can only
+   describe. `nvda-daemon` is a scheduled task registered with an interactive
+   logon so it lands in the logged-in console session (see
+   `tasks/register.ps1`); the Smoke is a client of it, so it needs no task. The same is why the browser's window can only
    be activated, and the desktop's windows only listed, by the daemon: a
    PowerShell over SSH sees no window titles at all.
 
@@ -64,23 +64,25 @@ Guidepup's own Playwright fixtures were not enough (ADR 0002).
 lib/
   nvda.ts       NVDA behind NvdaDesktop: Guidepup's actions one answer each,
                 the capture window, window listing and browser activation
-  guard.ts      enterDocument(): points 2, 3 and 4, in order, proved
+  guard.ts      enterDocument(): points 2, 3 and 4, in order, proved; records
+                each step and throws when the proof fails, like any Entry
   daemon.ts     the reader behind a port: routing, auth, calls serialized
-  voiceover.ts  VoiceOver as a ReaderSession: the adapter over VoiceOverDesktop
   stamp.ts      the Environment Stamp
   system.ts     delay, powershell, packageVersion
-  smoke-result.ts  the contract between smoke.ts and the Provisioner
+  smoke-result.ts  what the Smoke prints for the Provisioner
+  index.ts      the published interface: createVoiceOverSession, and nothing else
 daemon.ts       the daemon's entry point: NVDA behind a port, an Edge browser
                 server beside it
-smoke.ts        one fixture, the guards, four commands: does the rig work now?
-tasks/          register.ps1: the scheduled tasks, and the firewall rule
-fixtures/       committed pages: control.html for the smoke, and the pages
+smoke.ts        a client of the daemon: one fixture, the guards, four commands,
+                through the same ReaderSession a test has
+tasks/          register.ps1: the daemon's scheduled task, and the firewall rule
+fixtures/       committed pages: control.html for the Smoke, and the pages
                 past investigations were measured on
 provisioning/   the idempotent Provisioner for the Windows Guest Rig
-voiceover/      desktop.ts: VoiceOver behind VoiceOverDesktop, one answer per
-                action, with the retried start, the sentinel and the hints
-                settled inside; entry.ts: enterWebContent(), the bounded Item
-                Chooser walk; sentinel, hints, permissions, doctor
+voiceover/      session.ts: VoiceOver as a ReaderSession, with the retried
+                start, the sentinel and the hints settled inside;
+                entry.ts: enterWebContent(), the bounded Item Chooser walk;
+                permissions, doctor
 test/           the parts that need no desktop
 ```
 
@@ -97,7 +99,7 @@ interleave two callers' keystrokes.
 | `GET /health` | `{ ok, started, browser: { port, path }, rig }`, where `rig` is the environment stamp, taken once when the daemon starts. Not serialized, so it answers while a reader call is running. |
 | `POST /reader/start` | Start NVDA. A reader that is already up is restarted, so a test that never stopped its reader cannot hold it for the next. |
 | `POST /reader/stop` | |
-| `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok, arrivedOn, lines }`; when `ok` is false, `lines` is the entire diagnosis, ending with the windows on screen. |
+| `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok: true, arrivedOn, lines }`, or `{ ok: false, lines, error }` where `lines` is what the guards recorded, ending with the windows on screen, and `error` is the cause chain. |
 | `POST /reader/perform` | `{ command }`, one of NVDA's commands by Guidepup's name. `{ spoken }`, `""` for silence. |
 | `POST /reader/press` | `{ key }`, e.g. `"Control+Home"`. `{ spoken }` |
 | `POST /reader/next`, `/reader/previous` | `{ spoken }` |
@@ -111,16 +113,19 @@ reaches it with Playwright's own `connectOptions`. The token is the path:
 Playwright's own protection for a browser server is a secret path, and this
 keeps one secret rather than two.
 
-## The smoke
+## The Smoke
 
-```powershell
-Start-ScheduledTask nvda-smoke
+```
+npm run smoke
 ```
 
-Opens `fixtures/control.html` in Edge on the guest, runs the guards, and
-asks four commands. It asserts only that the rig works: NVDA started, the
-page was reached in browse mode, and quick navigation answered. The
-Provisioner runs it as its proof.
+A client of the daemon, from any shell on the guest, SSH included. It starts
+NVDA through the daemon's routes, opens `fixtures/control.html` in the
+daemon's browser server, runs the guards and asks four commands through the
+same `ReaderSession` a test on the Mac has, and stops. It asserts only that
+the rig works: the daemon answered, the page was reached in browse mode, and
+quick navigation spoke. Needs `RIG_TOKEN`, which `tasks/register.ps1` set for
+the user. The Provisioner restarts the daemon and runs this as its proof.
 
 ## Tests
 

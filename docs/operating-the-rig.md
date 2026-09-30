@@ -23,7 +23,8 @@ desktop session. That is why:
   `npm ci`;
 - the daemon is a scheduled task registered with an interactive logon, started
   at logon, and reachable over the network anyway;
-- the smoke is a scheduled task too.
+- the Smoke is a client of that daemon, so it runs from any shell, SSH
+  included, and what it proves is the daemon's desktop.
 
 Keep the guest signed in while you use it. A locked session is fine; a
 signed-out one is not.
@@ -36,8 +37,8 @@ signed-out one is not.
    reaches the Mac at `192.168.64.1`.
 2. **Clone this repository** into the signed-in user's own filesystem.
 3. **Run the Provisioner** from `packages\guest`. It installs the pinned Node,
-   npm packages and NVDA asset, verifies Edge, registers the daemon at logon
-   and the smoke task, and proves the result with a real NVDA run:
+   npm packages and NVDA asset, verifies Edge, registers the daemon at logon,
+   restarts it, and proves it with a real NVDA run through its own routes:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File provisioning\provision.ps1
@@ -112,24 +113,39 @@ match it.
 | Task | Runs | Output |
 |---|---|---|
 | `nvda-daemon` | The daemon, at logon: NVDA behind a port, and an Edge browser server beside it. | `artifacts\daemon.out` |
-| `nvda-smoke` | One fixture, the guards, four commands: does the rig work on this machine right now? | `artifacts\smoke-result.json`, `artifacts\smoke-log.txt` |
 
-Start either from a PowerShell on the guest:
+Start it from a PowerShell on the guest, or from SSH:
 
 ```powershell
-Start-ScheduledTask nvda-smoke
+Start-ScheduledTask nvda-daemon
 ```
 
-`npm run daemon` and `npm run smoke` also exist, but only work from a shell
-that is already on the interactive desktop, so the tasks are the reliable
-path.
+`npm run daemon` also exists, but only works from a shell that is already on
+the interactive desktop, so the task is the reliable path.
+
+## The Smoke
+
+```
+cd packages\guest
+npm run smoke
+```
+
+A client of the daemon, from any shell on the guest, SSH included: it starts
+NVDA through the daemon's routes, opens `fixtures/control.html` in the
+daemon's browser server, runs the Focus Guard and four commands through the
+same `ReaderSession` a test on the Mac has, and stops. It needs `RIG_TOKEN`,
+which `tasks\register.ps1` set for the user. The transcript is written to
+`artifacts\smoke-transcript.txt`, and the last line printed is its result as
+JSON. A daemon started over SSH answers every route and hears nothing, so the
+Smoke failing on its guard is the posture check.
 
 ## After pulling changes on the guest
 
 The daemon loads the rig's code once, when it starts. After a `git pull` on
 the guest, the simplest safe step is to **re-run the Provisioner** from the
 guest desktop (see first-time setup). It is idempotent, runs `npm ci` at the
-workspace root, re-registers the tasks, and proves the result with the smoke.
+workspace root, re-registers the task, restarts the daemon, and proves it
+with the Smoke.
 It does not touch the firewall. The steps below are the quick path when you
 know which one a pull needs; a guest that has not been provisioned since the
 pivot to `page` needs the first two, which is what re-running the

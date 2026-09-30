@@ -6,7 +6,8 @@
   Run this only in a signed-in, unlocked Windows desktop after the manual UTM
   and Windows first-run boundary described in provisioning/README.md. It
   installs the exact reviewed Runtime Manifest, configures Guidepup's portable
-  NVDA asset, then proves real NVDA reading a fixture in headed Edge.
+  NVDA asset, restarts the logon daemon, then proves it: real NVDA reading a
+  fixture in the daemon's Edge, through the same routes a test on the Mac uses.
 
   Every manifest step is a named stage whose outcome is recorded rather than
   thrown away, so the health report can tell a dependency failure apart from a
@@ -146,24 +147,23 @@ function Write-FallbackReport {
   $reporterNode = ''
   if (Test-Path $node) { $reporterNode = (& $node --version) }
   $fallback = [ordered]@{
-    schemaVersion = 4
+    schemaVersion = 5
     ok = $false
     fixture = 'control.html'
-    execution = 'unelevated interactive scheduled task: real NVDA with headed Edge'
+    execution = "the logon daemon, as a test uses it: real NVDA and headed Edge through the daemon's routes and browser server"
     checks = [ordered]@{
-      runtimeInstalled = $runtimeInstalled; taskCompleted = $false; smokePassed = $false
-      speechCaptured = $false; speechArtifact = $false
-      scheduledCmdNode = $false; freshArtifact = $false
+      runtimeInstalled = $runtimeInstalled; daemonAnswered = $false; smokePassed = $false
+      speechCaptured = $false; transcriptArtifact = $false
     }
     runtime = @($stages)
-    artifacts = [ordered]@{ result = ''; speech = '' }
+    artifacts = [ordered]@{ transcript = '' }
     hostUrlProbe = [ordered]@{ attempted = $false; ok = $null; url = $probeUrl; failure = $probeFailure }
     observed = [ordered]@{
       reporterNode = $reporterNode
       reporterPlatform = 'win32'
       reporterArchitecture = $env:PROCESSOR_ARCHITECTURE
-      speechArtifactBytes = 0
-      taskOutput = ''
+      transcriptBytes = 0
+      smokeOutput = ''
     }
     failure = $Failure
   }
@@ -245,10 +245,35 @@ try {
     if ($LASTEXITCODE) { throw "Interactive task registration exited $LASTEXITCODE." }
     # Read the tasks back, so the detail is what Windows now holds rather than
     # a claim that a registration script ran.
-    $registered = Get-ScheduledTask -TaskName 'nvda-smoke', 'nvda-daemon' -ErrorAction Stop
+    $registered = Get-ScheduledTask -TaskName 'nvda-daemon' -ErrorAction Stop
     Set-StageDetail (
       ($registered | ForEach-Object { "$($_.TaskName) ($($_.Principal.RunLevel), $($_.Principal.LogonType))" }) -join ', '
     )
+  }
+
+  <#
+    The Smoke is a client of the daemon a test uses, so the daemon has to be
+    the one just provisioned. Stopping the task ends only its cmd.exe;
+    run-daemon.cmd ends the node that kept the port, from the pid file, before
+    starting the new one. The reporter's Smoke needs what the logon task
+    inherits from the user's environment, which this process does not see
+    until it is copied in.
+  #>
+  Invoke-Stage 'daemon' {
+    $task = Get-ScheduledTask -TaskName 'nvda-daemon' -ErrorAction Stop
+    if ($task.State -eq 'Running') {
+      Stop-ScheduledTask -InputObject $task
+      Start-Sleep -Seconds 2
+    }
+    Start-ScheduledTask -InputObject $task
+    Start-Sleep -Seconds 2
+    $task = Get-ScheduledTask -TaskName 'nvda-daemon'
+    if ($task.State -ne 'Running') { throw "nvda-daemon is $($task.State) after Start-ScheduledTask; a stopped daemon cannot be proved." }
+    $env:RIG_TOKEN = [Environment]::GetEnvironmentVariable('RIG_TOKEN', 'User')
+    $env:RIG_PORT = [Environment]::GetEnvironmentVariable('RIG_PORT', 'User')
+    $env:RIG_BROWSER_PORT = [Environment]::GetEnvironmentVariable('RIG_BROWSER_PORT', 'User')
+    if (-not $env:RIG_TOKEN) { throw 'RIG_TOKEN is not set for this user; tasks\register.ps1 sets it, and the Smoke cannot reach the daemon without it.' }
+    Set-StageDetail "nvda-daemon $($task.State) on port $($env:RIG_PORT), RIG_TOKEN in the reporter's environment"
   }
 
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StagePath) | Out-Null

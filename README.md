@@ -129,4 +129,4 @@ npm test    # every package's tests, then a typecheck of the whole repository
 ```
 
 `npm test` needs no screen reader. Real-reader runs happen from a consuming
-repo's Playwright tests, and the guest's smoke from the guest.
+repo's Playwright tests, and the guest's Smoke from any shell on the guest.

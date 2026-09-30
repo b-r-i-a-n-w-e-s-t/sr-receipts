@@ -67,7 +67,7 @@ The span during which a page action's speech is recorded, opened before the
 action and closed after it. On the wire it is a pair of routes.
 
 **Fixture**:
-A committed HTML page in the Guest, used by the smoke to prove the rig without
+A committed HTML page in the Guest, used by the Smoke to prove the rig without
 any app.
 
 ### Evidence
@@ -90,5 +90,7 @@ never produces one.
 _Avoid_: result (for a simulated reader's output)
 
 **Smoke**:
-The Guest's own proof that the rig works right now: NVDA, Edge, the Focus
-Guard and quick navigation on a Fixture, run by the Provisioner.
+The Guest's own proof that the rig works right now, as a client of its
+daemon: NVDA, Edge, the Focus Guard and quick navigation on a Fixture,
+through the same Reader Session a test uses. Run by the Provisioner, and from
+any shell on the Guest.

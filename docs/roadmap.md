@@ -47,9 +47,23 @@ file is the working list and changes as items land.
    playwright.receipts.config.ts`, as its `package.json` has no script for
    them. Its lockfile still pins `@playwright/test` 1.62.1, with 1.63.0
    installed over it without saving; the client must share the guest's
-   major.minor, so that is settled before any of it is committed.
+   major.minor, so that is settled before any of it is committed. On
+   2026-09-30, after the Reader Session was built once in the host for both
+   readers, the specs passed on both readers (VoiceOver 4 of 4; NVDA 3 of 3
+   plus carbon-svelte#382 reproducing on `/demo/96`), with the guest on the
+   new daemon code. The `/demo/382` pages the other two echo specs need exist
+   only in a carbon-svelte stash, so those specs were excluded.
 2. **Re-provision the rig** with the Provisioner as it now is, on a fresh
    guest, and time it. Every developer will do this once; it is the product.
+   On 2026-09-30 the existing guest turned out never to have been
+   re-provisioned since the pivot: its `node_modules` dated from 2026-09-16
+   and lacked `playwright-core` and the workspace links, it had the retired
+   `nvda-run` and `nvda-probe` tasks and no `nvda-daemon`, the daemon had
+   been started by hand, and Windows had added inbound Block rules for the
+   rig's `node.exe`. It was repaired by hand with `npm ci`, `register.ps1`
+   and `-Firewall`, as `docs/operating-the-rig.md` now describes. The
+   Provisioner covers the first two but does not remove Block rules, which a
+   fresh guest's first dismissed "Allow access?" dialog creates.
 3. **A committed markdown receipt per failing test**, written by the fixture
    into the consuming repo, when a ticket needs a file rather than a report
    attachment. Deferred in ADR 0002 until a ticket asks.
@@ -89,6 +103,20 @@ file is the working list and changes as items land.
 - **Upstream Guidepup issues** (the unbounded Item Chooser loop, the
   `readTableColumnHeader` misfire, the unconfigurable polling constants), each
   filed only after a minimal reproduction and approval at the time.
+- **A stuck NVDA quit freezes the daemon.** Guidepup 0.34.0 runs
+  `nvda.exe --quit` with `spawnSync` and no timeout, in both `start` and
+  `stop` (`lib/windows/NVDA/quit.js`), so one quit that never returns blocks
+  every route, `/health` included. It happened once, on 2026-09-30, mid-run,
+  and the VM itself froze with it; why NVDA ignored the quit is not known.
+  The candidate fix is for `NvdaDesktop` to end NVDA itself after a timeout
+  rather than wait on Guidepup's quit. Also a Guidepup issue, under the same
+  rule as the others.
+- **`undici` wants a newer Node than the guest pins.** `@guidepup/setup`
+  0.25.3 pulls in `undici` 8.10.2, which requires Node 22.19 or later, and
+  the Runtime Manifest pins 22.18.0. `npm ci` warns (`EBADENGINE`) and
+  succeeds; the daemon does not load it, but the Provisioner's Guidepup setup
+  stage does. Raise the pin, or hold `@guidepup/setup`, before the next
+  provisioning run relies on it.
 - **A possible upstream NVDA issue**: an ARIA combo box whose input carries
   `aria-activedescendant` loses typed-character echo under "Only in edit
   controls". Same rule as the Guidepup issues; the two

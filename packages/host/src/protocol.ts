@@ -23,8 +23,6 @@
  *   POST /reader/capture/begin   opens the reader's speech window; answers
  *                                once the speech listener is attached
  *   POST /reader/capture/end     Spoken: closes it and returns what was said
- *   GET  /desktop/windows        Windows: every window title on the desktop
- *   POST /desktop/activate       Activation: bring the browser to the front
  *
  * The browser itself is not on these routes. The daemon launches a Playwright
  * browser server, and a test reaches it with Playwright's own `connectOptions`
@@ -136,13 +134,4 @@ export interface Spoken {
 
 export interface PhraseLog {
   phrases: string[];
-}
-
-export interface Windows {
-  windows: string[];
-}
-
-export interface Activation {
-  /** The window in front after the attempt, so a failure names the culprit. */
-  foreground: string;
 }

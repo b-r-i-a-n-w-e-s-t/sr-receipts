@@ -17,9 +17,11 @@ export {
   type RigServerOptions,
   type TokenResolution,
 } from "./daemon.ts";
+export { createVoiceOverSession, type VoiceOverSessionOptions } from "./voiceover.ts";
 export {
-  createVoiceOverSession,
+  createVoiceOverDesktop,
+  type GuidepupVoiceOver,
+  type ItemChooser,
   type VoiceOverDesktop,
-  type VoiceOverReader,
-  type VoiceOverSessionOptions,
-} from "./voiceover.ts";
+  type VoiceOverDesktopOptions,
+} from "../voiceover/desktop.ts";

@@ -1,4 +1,4 @@
-/** What the doctor and the VoiceOver session record about their checks and attempts. */
+/** What the doctor records about its checks, and the release family it checks against. */
 
 export const SUPPORTED = {
   guidepup: "0.34.0",
@@ -15,13 +15,6 @@ export type DoctorCheck = {
   actual: string;
   expected: string;
   ok: boolean;
-};
-
-/** An attempted action and whether it succeeded. */
-export type Outcome = {
-  action: string;
-  ok: boolean;
-  error?: string;
 };
 
 export function checkExact(name: string, actual: string, expected: string): DoctorCheck {

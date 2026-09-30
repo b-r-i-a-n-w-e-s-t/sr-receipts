@@ -109,9 +109,7 @@ test("a route's answer is the reader's own speech, and the bodies are checked", 
   assert.deepEqual(await (await post(url, "/reader/perform", { command: "reportTitle" })).json(), { spoken: "Component Library - Microsoft Edge" });
   assert.deepEqual(await (await post(url, "/reader/press", { key: "Control+Home" })).json(), { spoken: "" });
   assert.deepEqual(await (await get(url, "/reader/log")).json(), { phrases: ["a", "b"] });
-  assert.deepEqual(await (await get(url, "/desktop/windows")).json(), { windows: ["msedge: Component Library"] });
-  assert.deepEqual(await (await post(url, "/desktop/activate")).json(), { foreground: "Component Library - Microsoft Edge" });
-  assert.deepEqual(calls, ["perform reportTitle", "press Control+Home", "activate"]);
+  assert.deepEqual(calls, ["perform reportTitle", "press Control+Home"]);
 
   const missing = await post(url, "/reader/perform", {});
   assert.equal(missing.status, 400);

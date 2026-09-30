@@ -10,7 +10,10 @@ The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browse
 - **Breaking:** the protocol is a reader session, not runs. `src/protocol.ts`
   defines `ReaderSession`, the one interface a test uses for either reader,
   `EntryPage`, `Captured`, and the daemon's routes and bodies
-  (`DaemonHealth`, `EnterBody`, `EntryResult`, `Spoken`, and the rest).
+  (`DaemonHealth`, `EnterBody`, `EntryResult`, `Spoken`, `PhraseLog`).
+  `GET /desktop/windows` and `POST /desktop/activate`, with `Windows` and
+  `Activation`, were part of this and are gone again: nothing on the Mac
+  called them.
   `Scenario`, `RunRequest`, `RunReport`, `Receipt`, `RunEvent`,
   `DaemonRunBody` and the NDJSON stream are gone.
 - **Breaking:** `createClient` and `readFrames` are replaced by

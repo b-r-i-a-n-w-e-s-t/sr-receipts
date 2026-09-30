@@ -9,8 +9,7 @@ The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browse
 Nearly everything here is breaking.
 
 - **The daemon serves the reader, not runs.** `createRigServer({ token,
-  desktop, browser })` routes `/reader/*` and `/desktop/*` to an
-  `NvdaDesktop`, serializes calls on it, restarts on `start`, and answers
+  desktop, browser })` routes `/reader/*` to an `NvdaDesktop`, serializes calls on it, restarts on `start`, and answers
   `/health` with `{ started, browser, rig }`. `POST /runs` and the run
   readout routes are gone. `daemon.ts` also launches a Playwright browser
   server on the installed Edge, at `ws://<guest>:8766/<token>`.
@@ -22,10 +21,20 @@ Nearly everything here is breaking.
   proof, returning `{ ok, arrivedOn, lines }`. It replaces `session.ts`'s
   `openTarget` and `ensureReadyToNavigate`.
 - **`lib/voiceover.ts`** is VoiceOver as a `ReaderSession`, in process, for
-  the Playwright fixture: the doctor's checks and the permission probe before
-  the start, the launch retry, the bounded Item Chooser entry against
-  whatever browser Playwright launched, the sentinel before every command,
-  hints off and stripped, and `capture()`.
+  the Playwright fixture: the adapter over `VoiceOverDesktop`.
+- **`voiceover/desktop.ts`** is VoiceOver behind `VoiceOverDesktop`, the
+  shape `NvdaDesktop` has: `createVoiceOverDesktop()` answers each of
+  Guidepup's actions with what VoiceOver said, `""` for silence, with the
+  sentinel spoken and stripped and hints stripped inside it. Its `start`
+  runs the doctor's checks and the permission probe first, retries the
+  launch race only, and records every attempt through the session's
+  `Recorder`; `orchestrator.ts`, `launchWithRetry` and the `Outcome` type
+  are gone. Its `chooser` is the Item Chooser's steps, without the sentinel.
+- **`voiceover/entry.ts`** is `enterWebContent()`, VoiceOver's Entry: the
+  bounded Item Chooser walk against whatever browser Playwright launched,
+  tested on a fake desktop the way the Focus Guard is.
+- **`GET /desktop/windows` and `POST /desktop/activate` are gone.** No
+  session ever called them; the guards reach the desktop in process.
 - **The sentinel is VoiceOver's `output` command alone.** The Control press
   that followed it made VoiceOver drop the next announcement.
 - **The Environment Stamp names Edge and `playwright-core`** instead of

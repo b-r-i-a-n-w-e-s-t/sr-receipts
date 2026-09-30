@@ -60,7 +60,11 @@ in the consuming repository's scratch space.
    title and proves, in order, that the browser is in front, that focus is in
    the document, and that browse mode is on, by behaviour. Activation and
    window listing only work from inside the interactive session, which is
-   why they are routes. A test whose entry fails is never certified.
+   why the guards run there. A test whose entry fails is never certified.
+   _Amended 2026-09-30:_ activation and window listing were also standalone
+   routes, `GET /desktop/windows` and `POST /desktop/activate`; nothing on
+   the Mac ever called them, so they are gone. `/reader/enter` is where they
+   run.
 4. **`capture(action)` is how a page action's speech is heard.** Guidepup
    records speech only inside one of its own actions. `capture` runs a
    foreign action inside that window. Over the wire it is two routes, `begin`

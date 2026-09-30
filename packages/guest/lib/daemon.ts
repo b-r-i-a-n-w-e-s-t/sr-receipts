@@ -9,7 +9,7 @@
  *
  * - **One reader, one desktop, so calls are serialized.** Two requests
  *   interleaving keystrokes on one NVDA would produce two transcripts of
- *   nothing. Every reader and desktop route waits its turn.
+ *   nothing. Every reader route waits its turn.
  *
  * - **`start` restarts.** A test that never reached `stop` would otherwise hold
  *   the reader for every test after it. Starting fresh costs a few seconds and
@@ -119,7 +119,7 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
   if (!token) throw new Error("a daemon with no token would expose the guest; set RIG_TOKEN");
 
   let started = false;
-  // The mutex: every reader and desktop route runs after the one before it.
+  // The mutex: every reader route runs after the one before it.
   let turn: Promise<unknown> = Promise.resolve();
   const serialized = <T>(work: () => Promise<T>): Promise<T> => {
     const next = turn.then(work, work);
@@ -167,10 +167,6 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
         return { ok: true };
       case "POST /reader/capture/end":
         return { spoken: await desktop.captureEnd() };
-      case "GET /desktop/windows":
-        return { windows: await desktop.windows() };
-      case "POST /desktop/activate":
-        return { foreground: await desktop.activateBrowser() };
       default:
         return null;
     }

@@ -66,7 +66,7 @@ lib/
                 the capture window, window listing and browser activation
   guard.ts      enterDocument(): points 2, 3 and 4, in order, proved
   daemon.ts     the reader behind a port: routing, auth, calls serialized
-  voiceover.ts  VoiceOver as a ReaderSession, in process, behind VoiceOverDesktop
+  voiceover.ts  VoiceOver as a ReaderSession: the adapter over VoiceOverDesktop
   stamp.ts      the Environment Stamp
   system.ts     delay, powershell, packageVersion
   smoke-result.ts  the contract between smoke.ts and the Provisioner
@@ -77,8 +77,10 @@ tasks/          register.ps1: the scheduled tasks, and the firewall rule
 fixtures/       committed pages: control.html for the smoke, and the pages
                 past investigations were measured on
 provisioning/   the idempotent Provisioner for the Windows Guest Rig
-voiceover/      VoiceOver's mechanics: launch retry, sentinel, hints,
-                permissions, doctor
+voiceover/      desktop.ts: VoiceOver behind VoiceOverDesktop, one answer per
+                action, with the retried start, the sentinel and the hints
+                settled inside; entry.ts: enterWebContent(), the bounded Item
+                Chooser walk; sentinel, hints, permissions, doctor
 test/           the parts that need no desktop
 ```
 
@@ -102,8 +104,6 @@ interleave two callers' keystrokes.
 | `GET /reader/log`, `POST /reader/clear` | Guidepup's own log, which has one entry per action. |
 | `POST /reader/capture/begin` | Open the speech window. Answers once Guidepup's listener is attached, so a page action sent next is inside it. |
 | `POST /reader/capture/end` | Close it. `{ spoken }`: what was said inside it. |
-| `GET /desktop/windows` | `{ windows }`: every window title on the desktop. |
-| `POST /desktop/activate` | Bring the browser's window to the front. `{ foreground }`: what is in front afterwards. |
 
 The browser is not on these routes. The daemon launches a Playwright browser
 server on the installed Edge at `ws://<guest>:8766/<token>`, and a test

@@ -79,6 +79,20 @@ Move the reader with `locator.focus()` inside a `capture`, not with a click.
 Use `expect.soft` for a test with several findings, so the first one does not
 hide the rest.
 
+Check that the page loaded before entering it. A missing route does not fail
+fast: the reader's entry succeeds on a 404 page, which has content like any
+other, and the next locator then waits out the whole test timeout. One line
+turns four minutes into a clear failure:
+
+```ts
+expect((await page.goto('/demo/columnlist'))?.ok()).toBe(true)
+```
+
+`--grep` and `--grep-invert` match test titles, not what a test does, so a
+path or issue number that appears only inside the test body selects nothing.
+Put what you will want to filter on in the title, and check a filter with
+`--list` before a long run.
+
 Give it a config of its own, so the repo's ordinary `playwright test` never
 asks for a reader, and a test directory the ordinary config does not match:
 
@@ -166,7 +180,12 @@ What it offers:
 - **`perform(command)`, `press(key)`, `next()`, `previous()`** return what the
   reader said, `""` for silence. Commands are Guidepup's names.
 - **`capture(action)`** runs a `page` action inside the reader's speech window
-  and returns `{ result, spoken }`.
+  and returns `{ result, spoken }`. The action must not call the reader; such
+  a call is refused rather than left waiting for the capture it is inside.
+- **Calls run one at a time**, in the order they were made, on either reader,
+  so a `Promise.all` over two reader calls never interleaves keystrokes.
+  Every call rejects rather than throws, and a failed one leaves a line in
+  the transcript.
 - **`transcript`** is every call and its answer. The fixture attaches it to
   the test as `reader-transcript`, with the environment stamp as
   `environment`, whatever the outcome, so a passing test in the HTML report

@@ -75,7 +75,7 @@ before starting the reader.
   finished launching it: AppleScript `-600`, "application isn't running".
   Roughly one start in seven failed this way in the pivot's proof of concept.
   Five attempts with a ten second settle, every attempt in the transcript;
-  anything else fails on the first attempt. See `orchestrator.ts`.
+  anything else fails on the first attempt. See `start` in `desktop.ts`.
 - **Web content is entered through the Item Chooser**, the sequence
   Guidepup's own fixture uses, with both loops bounded: ten attempts to open
   the chooser, five rounds of typing "web content". On macOS 26 the chooser

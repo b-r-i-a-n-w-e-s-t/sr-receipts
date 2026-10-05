@@ -3,7 +3,11 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased (0.2.0)
+## 0.2.1
+
+- No changes; released with the other three packages.
+
+## 0.2.0
 
 Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 

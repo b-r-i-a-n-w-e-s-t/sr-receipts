@@ -8,6 +8,10 @@
  * anything. A package whose version is already on the registry is skipped,
  * so a release that stopped partway is finished by running this again.
  *
+ * The registry can take minutes to serve a package it has just accepted, a
+ * new one most of all. Each publish is waited for before the next, because
+ * the next one pins it, and the daemon's shrinkwrap resolves it.
+ *
  * The daemon is published last, from a staging copy carrying an
  * npm-shrinkwrap.json. A published package does not carry package-lock.json,
  * and the shrinkwrap is what makes every guest install the same tree: the one
@@ -19,6 +23,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 /** In dependency order: each is published after everything it pins. */
 const PACKAGES = ["host", "voiceover", "playwright", "daemon"];
@@ -46,6 +51,16 @@ function published({ name, version }: Manifest): boolean {
   } catch {
     return false;
   }
+}
+
+/** Wait for the registry to serve a version it has accepted. */
+async function served(manifest: Manifest): Promise<void> {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (published(manifest)) return;
+    if (attempt === 0) console.log(`Waiting for the registry to serve ${manifest.name}@${manifest.version}...`);
+    await sleep(10_000);
+  }
+  fail(`${manifest.name}@${manifest.version} was accepted but is not served after 10 minutes; run this again once it is.`);
 }
 
 function fail(message: string): never {
@@ -84,5 +99,6 @@ for (const [index, name] of PACKAGES.entries()) {
     run("npm", ["shrinkwrap"], directory);
   }
   run("npm", ["publish", ...registry], directory);
+  await served(manifest);
 }
 console.log(`Released ${version}.`);

@@ -3,7 +3,12 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased (0.2.0)
+## 0.2.1
+
+- **The bin path has no leading `./`,** which npm corrected, with a warning,
+  on every publish.
+
+## 0.2.0
 
 Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 

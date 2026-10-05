@@ -110,8 +110,13 @@ scripts to get one function.
   receives built JavaScript. That also frees the guest's Node pin from type
   stripping, so it can be raised past the `undici` engine warning.
 - **The guest's code can no longer be edited in place** and restarted.
-- **The Windows half is unproven until a fresh guest is provisioned this
-  way.** The packages, the release and the shrinkwrapped install were run on
-  the Mac; the bootstrap, the upgrade and the moved state were reasoned from
-  the scripts.
+- **The Windows half is proven on the existing guest, not yet on a fresh
+  one.** On 2026-10-05 the Bootstrap moved the guest off its git clone with
+  the published 0.2.0: it ended the old daemon, unpacked the package,
+  installed Node and ran `npm ci` from the shrinkwrap. The Provisioner then
+  failed at Guidepup's setup, which looks for `@guidepup/guidepup` from the
+  directory it is run in, and the Provisioner now works in the state
+  directory. With that fixed and delivered as a packed tarball, the tasks,
+  the daemon and the Smoke passed, and carbon-svelte's NVDA specs ran from
+  the published packages against it. The fix is not in 0.2.0.
 - **"Guest" stops naming a package.** `CONTEXT.md` changes with the rename.

@@ -3,7 +3,15 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
-## Unreleased (0.2.0)
+## 0.2.1
+
+- **Fixed: the Provisioner could not install the NVDA asset.** Guidepup's
+  setup looks for `@guidepup/guidepup` from the directory it is run in, and
+  the Provisioner works in the state directory, so its `guidepup-nvda` stage
+  failed with "No local installation" and 0.2.0 could not provision a guest.
+  The stage now runs Guidepup's setup from the package.
+
+## 0.2.0
 
 Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 

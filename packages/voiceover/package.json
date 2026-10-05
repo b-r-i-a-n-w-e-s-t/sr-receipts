@@ -1,6 +1,6 @@
 {
   "name": "@sr-receipts/voiceover",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "VoiceOver as a reader session, in process on a Mac, for the sr-receipts Playwright fixture; and a read-only doctor for its prerequisites.",
   "license": "MIT",
   "type": "module",
@@ -21,7 +21,7 @@
     "access": "public"
   },
   "bin": {
-    "sr-voiceover-doctor": "./dist/bin/doctor.js"
+    "sr-voiceover-doctor": "dist/bin/doctor.js"
   },
   "scripts": {
     "test": "node --test test/*.test.ts",
@@ -29,6 +29,6 @@
   },
   "dependencies": {
     "@guidepup/guidepup": "0.34.0",
-    "@sr-receipts/host": "0.2.0"
+    "@sr-receipts/host": "0.2.1"
   }
 }

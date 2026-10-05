@@ -232,6 +232,24 @@ test("the provisioner reads packages where Node resolves them from the daemon pa
   assert.match(packages, /Resolve-FromRig "require\.resolve\('@guidepup\/setup\/bin\/guidepup'\)"/);
 });
 
+/**
+ * Guidepup's setup looks for `@guidepup/guidepup` from the directory it is run
+ * in, not from where it is installed. The Provisioner works in the state
+ * directory, which has no packages, so the stage steps into the package for
+ * both commands. The first Bootstrap on a guest failed here (2026-10-05).
+ */
+test("Guidepup's setup runs from the daemon package, where it looks for Guidepup", () => {
+  const script = source("provisioning/provision.ps1");
+  const stage = script.slice(script.indexOf("Invoke-Stage 'guidepup-nvda'"), script.indexOf("Invoke-Stage 'tasks'"));
+  const entered = stage.indexOf("Push-Location $rig");
+  const left = stage.indexOf("Pop-Location");
+  assert.notEqual(entered, -1);
+  for (const command of ["& $node $guidepup setup", "& $node $guidepup install nvda"]) {
+    const at = stage.indexOf(command);
+    assert.ok(at > entered && at < left, `${command} runs between Push-Location $rig and Pop-Location`);
+  }
+});
+
 test("the daemon, the reporter and the Provisioner's records live in the state directory, not the package", () => {
   const node = source("provisioning/node.ps1");
   assert.match(node, /\$RigState = Join-Path \$env:LOCALAPPDATA 'nvda-rig'/);

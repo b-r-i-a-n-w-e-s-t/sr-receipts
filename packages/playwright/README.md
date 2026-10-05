@@ -261,8 +261,8 @@ for p in host playwright voiceover; do (cd packages/$p && npm pack --pack-destin
 and in the consumer, every tarball in one command, so each finds the others:
 
 ```bash
-npm install --no-save @playwright/test@1.63.0 /tmp/sr-receipts/sr-receipts-host-0.2.0.tgz \
-  /tmp/sr-receipts/sr-receipts-playwright-0.2.0.tgz /tmp/sr-receipts/sr-receipts-voiceover-0.2.0.tgz
+npm install --no-save @playwright/test@1.63.0 /tmp/sr-receipts/sr-receipts-host-0.2.1.tgz \
+  /tmp/sr-receipts/sr-receipts-playwright-0.2.1.tgz /tmp/sr-receipts/sr-receipts-voiceover-0.2.1.tgz
 ```
 
 Any later `npm ci` or `npm install` in the consumer undoes an unsaved

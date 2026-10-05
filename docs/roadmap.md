@@ -35,6 +35,15 @@ file is the working list and changes as items land.
   cause was the Control press after the sentinel, now removed (see
   `packages/voiceover/src/session.ts`).
 
+- **0.2.0 on npm** (2026-10-05, [ADR 0003](adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md)).
+  `@sr-receipts/host`, `voiceover`, `playwright` and `daemon`, public, from
+  `node scripts/release.ts`. The daemon's tarball carries its
+  `npm-shrinkwrap.json`: 51 packages, `undici` 8.11.2. npmjs.org advertises
+  it (`_hasShrinkwrap: true`), which nothing depends on. npmjs.org took about
+  three minutes to serve a new package after accepting it, behind a
+  `0.0.0-stage` placeholder version, so the release now waits for each
+  package before publishing the next.
+
 ## Next, in order
 
 1. **carbon-svelte's receipts** on a real issue: reproduce it on both
@@ -53,18 +62,14 @@ file is the working list and changes as items land.
    plus carbon-svelte#382 reproducing on `/demo/96`), with the guest on the
    new daemon code. The `/demo/382` pages the other two echo specs need exist
    only in a carbon-svelte stash, so those specs were excluded.
-2. **Publish 0.2.0** ([ADR 0003](adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md)).
-   Claim the `sr-receipts` org on npm, log in, and run
-   `node scripts/release.ts` from a clean, committed tree. The release was
-   proved end to end against a local registry on 2026-10-05; the first real
-   one will also show whether npmjs.org advertises the daemon's shrinkwrap,
-   which nothing depends on, since the guest installs it with `npm ci`.
-   The consuming repositories then install the packages instead of linking
-   this checkout.
-3. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
-   Every developer will do this once; it is the product. It is also the
-   first run of the Bootstrap, the upgrade path and the moved state, which
-   were written on a Mac and have only been reasoned through.
+2. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
+   Every developer will do this once; it is the product. The existing guest
+   went through the Bootstrap on 2026-10-05 (see ADR 0003's consequences):
+   0.2.0 fails at the Provisioner's Guidepup stage, so the fix needs a
+   release before a fresh guest can be provisioned from npm, and the guest is
+   on a packed tarball until then. jsDelivr did not serve
+   `provisioning/bootstrap.ps1` in the first minutes after the publish; the
+   script was taken from the registry's tarball instead.
    On 2026-09-30 the existing guest turned out never to have been
    re-provisioned since the pivot: its `node_modules` dated from 2026-09-16
    and lacked `playwright-core` and the workspace links, it had the retired
@@ -74,10 +79,10 @@ file is the working list and changes as items land.
    and `-Firewall`, as `docs/operating-the-rig.md` now describes. The
    Provisioner covers the first two but does not remove Block rules, which a
    fresh guest's first dismissed "Allow access?" dialog creates.
-4. **A committed markdown receipt per failing test**, written by the fixture
+3. **A committed markdown receipt per failing test**, written by the fixture
    into the consuming repo, when a ticket needs a file rather than a report
    attachment. Deferred in ADR 0002 until a ticket asks.
-5. **A second consuming app**: a TXST app other than carbon-svelte. This is
+4. **A second consuming app**: a TXST app other than carbon-svelte. This is
    what shows the setup cost to someone who did not build it.
 
 ## Research, after that
@@ -121,6 +126,18 @@ file is the working list and changes as items land.
   The candidate fix is for `NvdaDesktop` to end NVDA itself after a timeout
   rather than wait on Guidepup's quit. Also a Guidepup issue, under the same
   rule as the others.
+- **The VoiceOver launch race is a window, not slowness.** Guidepup 0.34.0
+  runs VoiceOverStarter, waits a fixed 500 ms and activates VoiceOver once.
+  Measured on 2026-10-05 (macOS 26.6.2, build 25G83): activation asked 0,
+  250, 1000 or 2000 ms after the starter was accepted 30 times in 30, and
+  asked at 500 ms it was refused 4 times in 4 with `-600`, then accepted
+  between 690 and 870 ms. Every retry, Guidepup's two and the session's
+  five, repeats the same timing, so a run can lose all of them: carbon-svelte
+  on the published 0.2.0 failed two VoiceOver tests of four this way, and
+  twenty minutes later passed four of four with one start retried. The
+  candidates are an upstream fix (retry the activation on `-600`), under the
+  same rule as the other Guidepup issues, or the session launching VoiceOver
+  itself. Why the window sits there is not known.
 - **A possible upstream NVDA issue**: an ARIA combo box whose input carries
   `aria-activedescendant` loses typed-character echo under "Only in edit
   controls". Same rule as the Guidepup issues; the two

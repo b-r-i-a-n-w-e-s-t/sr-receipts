@@ -1,6 +1,6 @@
 {
   "name": "@sr-receipts/daemon",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The Windows Guest Rig's daemon: NVDA and headed Edge behind an authenticated port, the guards that prove a test reached the page, the Smoke, and the Provisioner.",
   "license": "MIT",
   "type": "module",
@@ -30,7 +30,7 @@
   "dependencies": {
     "@guidepup/guidepup": "0.34.0",
     "@guidepup/setup": "0.25.3",
-    "@sr-receipts/host": "0.2.0",
+    "@sr-receipts/host": "0.2.1",
     "playwright-core": "1.63.0"
   }
 }

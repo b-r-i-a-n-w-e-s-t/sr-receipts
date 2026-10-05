@@ -211,13 +211,21 @@ try {
 
   Invoke-Stage 'guidepup-nvda' {
     $guidepup = Resolve-FromRig "require.resolve('@guidepup/setup/bin/guidepup')"
-    # On Windows `setup` is intentionally a no-op today, but keeping the
-    # documented lifecycle explicit makes a future Guidepup setup action part
-    # of this reviewed provisioner rather than an untracked manual step.
-    & $node $guidepup setup
-    if ($LASTEXITCODE) { throw "Guidepup environment setup exited $LASTEXITCODE." }
-    & $node $guidepup install nvda
-    if ($LASTEXITCODE) { throw "Guidepup NVDA setup exited $LASTEXITCODE." }
+    # Guidepup's setup looks for @guidepup/guidepup from the directory it is
+    # run in, not from where it is installed, so both commands run in the
+    # package rather than the state directory.
+    Push-Location $rig
+    try {
+      # On Windows `setup` is intentionally a no-op today, but keeping the
+      # documented lifecycle explicit makes a future Guidepup setup action part
+      # of this reviewed provisioner rather than an untracked manual step.
+      & $node $guidepup setup
+      if ($LASTEXITCODE) { throw "Guidepup environment setup exited $LASTEXITCODE." }
+      & $node $guidepup install nvda
+      if ($LASTEXITCODE) { throw "Guidepup NVDA setup exited $LASTEXITCODE." }
+    } finally {
+      Pop-Location
+    }
     # The asset cache src/lib/stamp.ts reads, so the detail is the NVDA build that
     # landed rather than the manifest's intention that it should.
     $cache = Join-Path $env:LOCALAPPDATA 'guidepup\nvda\all'

@@ -42,6 +42,7 @@ function fakeSession({ answers = ["title", "", "table", "table"], environmentFai
       return answers[asked++] ?? "";
     },
     press: async () => "",
+    type: async () => "",
     next: async () => "",
     previous: async () => "",
     capture: async (action) => ({ result: await action(), spoken: "" }),

@@ -3,6 +3,13 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
+## Unreleased
+
+- **`type(text)`**, as `ReaderSession` now requires: Guidepup's own `type`,
+  preceded by the sentinel like any command. A `delay` is refused, because
+  Guidepup hands VoiceOver the text as one keystroke command. Not yet run
+  against a real VoiceOver.
+
 ## 0.2.1
 
 - **The bin path has no leading `./`,** which npm corrected, with a warning,

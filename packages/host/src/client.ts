@@ -6,7 +6,7 @@
  * this adapter, and the guest's daemon. The contract test that runs the two
  * together is in `@sr-receipts/daemon`, which can depend on this package.
  */
-import { PROTOCOL_VERSION, type DaemonHealth, type EnterBody, type EntryResult, type PhraseLog, type ReaderSession, type Spoken } from "./protocol.ts";
+import { PROTOCOL_VERSION, type DaemonHealth, type EnterBody, type EntryResult, type PhraseLog, type ReaderSession, type Spoken, type TypeBody } from "./protocol.ts";
 import { createReaderSession } from "./session.ts";
 
 export interface ClientOptions {
@@ -94,6 +94,7 @@ export function createNvdaSession({ url, token }: ClientOptions): ReaderSession 
 
     perform: (command) => spoken("/reader/perform", { command }),
     press: (key) => spoken("/reader/press", { key }),
+    type: (text, { delay }) => spoken("/reader/type", { text, ...(delay !== undefined && { delay }) } satisfies TypeBody),
     next: () => spoken("/reader/next"),
     previous: () => spoken("/reader/previous"),
 

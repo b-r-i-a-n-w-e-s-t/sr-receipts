@@ -3,6 +3,18 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
+## Unreleased
+
+- **`ReaderSession.type(text, { delay })`**, with `TypeOptions`: the
+  characters of a text as keys, `delay` milliseconds apart, inside one speech
+  window, answering with everything said. `press` waits out the speech after
+  each key, so nothing could ask what a reader says at typing speed.
+  `ReaderAdapter` gains `type(text, options)`, which every adapter has to
+  implement.
+- **The wire is at protocol 2.** `POST /reader/type` takes `TypeBody`,
+  `{ text, delay? }`, and answers `Spoken`. A host at 2 refuses a daemon at 1
+  when it starts, and the reverse.
+
 ## 0.2.1
 
 - No changes; released with the other three packages.

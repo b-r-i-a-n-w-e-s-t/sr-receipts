@@ -33,7 +33,10 @@ export const DEFAULT_PORT = 8765;
 /** Where the Playwright browser server listens; the daemon's port plus one. */
 export const DEFAULT_BROWSER_PORT = 8766;
 
-/** A body is a command name, a key, or a page title. Anything larger is a mistake or an attack. */
+/** The longest pause between typed keys a request may ask for. */
+const MAX_TYPE_DELAY = 10_000;
+
+/** A body is a command name, a key, a text to type, or a page title. Anything larger is a mistake or an attack. */
 const MAX_BODY = 1024 * 16;
 
 export interface TokenResolution {
@@ -163,6 +166,15 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
         return { spoken: await desktop.perform(requireString(body, "command")) };
       case "POST /reader/press":
         return { spoken: await desktop.press(requireString(body, "key")) };
+      case "POST /reader/type": {
+        // Not `requireString`: a space is a text to type.
+        const { text, delay = 0 } = body;
+        if (typeof text !== "string" || !text) throw new BadRequest("`text` must be a non-empty string");
+        if (typeof delay !== "number" || !Number.isInteger(delay) || delay < 0 || delay > MAX_TYPE_DELAY) {
+          throw new BadRequest(`\`delay\` must be a whole number of milliseconds from 0 to ${MAX_TYPE_DELAY}`);
+        }
+        return { spoken: await desktop.type(text, delay) };
+      }
       case "POST /reader/next":
         return { spoken: await desktop.next() };
       case "POST /reader/previous":

@@ -17,7 +17,7 @@
  *   must not mask the error that caused it.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Captured, EntryOptions, EntryPage, Reader, ReaderSession } from "./protocol.ts";
+import type { Captured, EntryOptions, EntryPage, Reader, ReaderSession, TypeOptions } from "./protocol.ts";
 
 /**
  * What a transcript records for a call that made the reader say nothing.
@@ -47,6 +47,8 @@ export interface ReaderAdapter {
   enter(page: EntryPage, options: EntryOptions, record: Recorder): Promise<string>;
   perform(command: string): Promise<string>;
   press(key: string): Promise<string>;
+  /** The characters of `text` as keys, inside one speech window. */
+  type(text: string, options: TypeOptions): Promise<string>;
   next(): Promise<string>;
   previous(): Promise<string>;
   capture<T>(action: () => Promise<T>): Promise<Captured<T>>;
@@ -150,6 +152,8 @@ export function createReaderSession(adapter: ReaderAdapter): ReaderSession {
 
     perform: (command) => said(command, () => adapter.perform(command)),
     press: (key) => said(`press ${key}`, () => adapter.press(key)),
+    type: (text, options = {}) =>
+      said(`type ${JSON.stringify(text)}${options.delay ? `, ${options.delay} ms between keys` : ""}`, () => adapter.type(text, options)),
     next: () => said("next", () => adapter.next()),
     previous: () => said("previous", () => adapter.previous()),
 

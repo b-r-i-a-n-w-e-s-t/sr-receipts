@@ -104,6 +104,7 @@ interleave two callers' keystrokes.
 | `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok: true, arrivedOn, lines }`, or `{ ok: false, lines, error }` where `lines` is what the guards recorded, ending with the windows on screen, and `error` is the cause chain. |
 | `POST /reader/perform` | `{ command }`, one of NVDA's commands by Guidepup's name. `{ spoken }`, `""` for silence. |
 | `POST /reader/press` | `{ key }`, e.g. `"Control+Home"`. `{ spoken }` |
+| `POST /reader/type` | `{ text, delay? }`: the characters of `text` as keys, `delay` milliseconds apart (0 when absent), inside one speech window. `{ spoken }`: everything said from the first key until the speech after the last one ended. The keys are sent by one PowerShell through Windows' input queue, not through Guidepup, whose `press` waits out the speech after every key. A control character is refused; a named key is `press`'s. |
 | `POST /reader/next`, `/reader/previous` | `{ spoken }` |
 | `GET /reader/log`, `POST /reader/clear` | Guidepup's own log, which has one entry per action. |
 | `POST /reader/capture/begin` | Open the speech window. Answers once Guidepup's listener is attached, so a page action sent next is inside it. |

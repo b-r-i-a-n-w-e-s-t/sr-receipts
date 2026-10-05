@@ -205,6 +205,15 @@ test("every command is preceded by the sentinel, and a command that leaves it in
   assert.deepEqual(vo.transcript, ["findNextTable: said t", "press Tab: pressed Tab", "press F13: (silence)"]);
 });
 
+test("typing is preceded by the sentinel like any command, and a delay between keys is refused before either", async () => {
+  const fake = fakeGuidepup();
+  const vo = session(fake);
+  assert.equal(await vo.type("ban"), "web content");
+  await assert.rejects(vo.type("ban", { delay: 100 }), /a delay between keys cannot be honoured/);
+  assert.deepEqual(fake.calls, ["sentinel", "type ban"]);
+  assert.match(vo.transcript.at(-1) ?? "", /^type "ban", 100 ms between keys: failed: /);
+});
+
 test("a command VoiceOver lacks is refused before the sentinel or a keystroke, and recorded as failed", async () => {
   const fake = fakeGuidepup();
   const vo = session(fake);

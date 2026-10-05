@@ -321,6 +321,12 @@ function createVoiceOverAdapter(
       return said(() => reader.perform(keyCommand));
     },
     press: (key) => said(() => reader.press(key)),
+    type(text, { delay }) {
+      // Guidepup hands VoiceOver the whole text as one keystroke command, so
+      // there is no gap here to lengthen.
+      if (delay) throw new Error("VoiceOver types a text in one keystroke command, so a delay between keys cannot be honoured; leave it out");
+      return said(() => reader.type(text));
+    },
     next: () => said(() => reader.next()),
     previous: () => said(() => reader.previous()),
 

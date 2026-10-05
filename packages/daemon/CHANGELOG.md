@@ -3,6 +3,17 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
+## Unreleased
+
+- **`POST /reader/type`**, `{ text, delay? }`: types the text at a set pace
+  inside one speech window and answers with everything said. The keys are
+  sent by one PowerShell through `SendKeys`, so the gap between them is the
+  delay and not Guidepup's wait for speech to end; the script carries
+  character codes and never the text. A control character, a delay that is
+  not a whole number from 0 to 10000, and typing inside an open capture are
+  refused.
+- **Built against wire protocol 2**, which `/health` reports.
+
 ## 0.2.1
 
 - **Fixed: the Provisioner could not install the NVDA asset.** Guidepup's

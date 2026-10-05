@@ -17,6 +17,8 @@
  *                                what they recorded either way
  *   POST /reader/perform         { command } -> Spoken
  *   POST /reader/press           { key } -> Spoken
+ *   POST /reader/type            TypeBody -> Spoken: the characters, one
+ *                                speech window around all of them
  *   POST /reader/next            Spoken
  *   POST /reader/previous        Spoken
  *   GET  /reader/log             PhraseLog
@@ -50,6 +52,14 @@ export interface EntryOptions {
    * proof. A page with no table, heading or landmark needs its own probe.
    */
   modeProbes?: string[] | undefined;
+}
+
+export interface TypeOptions {
+  /**
+   * Milliseconds to wait between one key and the next, as in Playwright's
+   * `keyboard.type`. Defaults to 0: as fast as the reader's desktop sends them.
+   */
+  delay?: number | undefined;
 }
 
 /** What a page action made the reader say, beside the action's own result. */
@@ -89,6 +99,15 @@ export interface ReaderSession {
   perform(command: string): Promise<string>;
   /** A key combination, e.g. "Control+Home". Returns what was said. */
   press(key: string): Promise<string>;
+  /**
+   * Type text into whatever has focus, a key per character, as a keyboard
+   * user's hands would: the reader is not asked between keys, so the keys
+   * arrive at the pace `delay` sets rather than the pace of `press`, which
+   * waits out the speech after each one. Returns everything said from the
+   * first key until the speech after the last one ended. For a named key,
+   * such as "Enter", use `press`.
+   */
+  type(text: string, options?: TypeOptions): Promise<string>;
   next(): Promise<string>;
   previous(): Promise<string>;
   /**
@@ -112,7 +131,7 @@ export interface ReaderSession {
  * NVDA session refuses a daemon reporting another: a mismatch fails at start
  * with both named, rather than later on whichever route changed. See ADR 0003.
  */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export interface DaemonHealth {
   ok: true;
@@ -149,6 +168,12 @@ export type EntryResult =
       lines: string[];
     }
   | { ok: false; lines: string[]; error: string[] };
+
+export interface TypeBody {
+  text: string;
+  /** Milliseconds between keys; 0 when absent. */
+  delay?: number | undefined;
+}
 
 export interface Spoken {
   spoken: string;

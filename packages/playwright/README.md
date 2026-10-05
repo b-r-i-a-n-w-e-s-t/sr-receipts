@@ -179,6 +179,16 @@ What it offers:
   attempt in the message when the proof fails.
 - **`perform(command)`, `press(key)`, `next()`, `previous()`** return what the
   reader said, `""` for silence. Commands are Guidepup's names.
+- **`type(text, { delay })`** types the text into whatever has focus, a key
+  per character, and returns everything the reader said from the first key
+  until the speech after the last one ended. `press` waits out the speech
+  after each key, about a second on NVDA, so a string of presses is slow
+  typing; `type` is for what a reader does at the pace of someone's hands.
+  `delay` is the milliseconds between keys, 0 when left out, as in
+  Playwright's `keyboard.type`. On NVDA the gap is the delay plus what Windows
+  takes to send a key, so read the real spacing from the page's own
+  `keydown` times when it matters. VoiceOver types a text in one keystroke
+  command and refuses a `delay`.
 - **`capture(action)`** runs a `page` action inside the reader's speech window
   and returns `{ result, spoken }`. The action must not call the reader; such
   a call is refused rather than left waiting for the capture it is inside.

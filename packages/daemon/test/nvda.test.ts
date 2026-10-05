@@ -3,15 +3,16 @@
  *
  * What is worth proving without NVDA: that a command's answer is that
  * command's speech and nothing else, that an unknown command is refused before
- * a keystroke goes anywhere, and that the capture window is really open when
- * `captureBegin` returns, which is the whole point of the two-route design.
+ * a keystroke goes anywhere, that the capture window is really open when
+ * `captureBegin` returns, which is the whole point of the two-route design,
+ * and that typing is one speech window around one script that carries no text.
  *
  * Run: npm test
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createNvdaDesktop, type GuidepupNvda } from "../src/lib/nvda.ts";
+import { createNvdaDesktop, typingScript, type GuidepupNvda } from "../src/lib/nvda.ts";
 
 interface Fake extends GuidepupNvda {
   calls: string[];
@@ -102,6 +103,44 @@ test("a second begin while one is open, or an end with none open, is refused", a
   await assert.rejects(desktop.captureEnd(), /no capture is open/);
   await desktop.captureBegin();
   await assert.rejects(desktop.captureBegin(), /already open/);
+  await desktop.captureEnd();
+});
+
+test("typing runs one script inside one speech window, and answers with everything said in it", async () => {
+  const guidepup = fakeGuidepup();
+  const scripts: string[] = [];
+  const desktop = createNvdaDesktop({
+    reader: guidepup,
+    environment: async () => [],
+    powershell: async (script) => {
+      // The keys are sent while Guidepup is listening, and before it settles.
+      assert.deepEqual(guidepup.calls, ["capture: listener attached"]);
+      scripts.push(script);
+      return "";
+    },
+  });
+  assert.equal(await desktop.type("ban", 120), "1 row selected");
+  assert.deepEqual(guidepup.calls, ["capture: listener attached", "capture: action done, settling"]);
+  assert.deepEqual(scripts, [typingScript("ban", 120)]);
+});
+
+test("the typing script carries character codes, never the text, and makes SendKeys' own characters literal", () => {
+  const script = typingScript("a+'\"", 120);
+  // a, {+}, ', "
+  assert.match(script, /\$keys = @\(\(-join \[char\[\]\]\(97\)\), \(-join \[char\[\]\]\(123,43,125\)\), \(-join \[char\[\]\]\(39\)\), \(-join \[char\[\]\]\(34\)\)\)/);
+  assert.match(script, /Start-Sleep -Milliseconds 120/);
+  assert.doesNotMatch(script.replace(/Add-Type.*\n/, ""), /['"]/);
+  // An astral character is one key, sent as its two code units.
+  assert.match(typingScript("\u{1F600}", 0), /@\(\(-join \[char\[\]\]\(55357,56832\)\)\)/);
+});
+
+test("a control character is refused before anything is sent, and so is typing inside an open capture", async () => {
+  const guidepup = fakeGuidepup();
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [], powershell: async () => "" });
+  await assert.rejects(desktop.type("a\n", 0), /U\+000A is not one; use press for a key such as Enter or Tab/);
+  assert.deepEqual(guidepup.calls, []);
+  await desktop.captureBegin();
+  await assert.rejects(desktop.type("a", 0), /a capture is open; type cannot run inside it/);
   await desktop.captureEnd();
 });
 

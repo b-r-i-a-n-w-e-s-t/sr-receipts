@@ -47,6 +47,10 @@ function fakeAdapter(overrides: Partial<ReaderAdapter> = {}): Fake {
       calls.push(`press ${key}`);
       return "pressed";
     },
+    async type(text, { delay }) {
+      calls.push(`type ${text} ${delay ?? "no delay"}`);
+      return "b. a. n";
+    },
     async next() {
       calls.push("next");
       return "row 2";
@@ -90,6 +94,15 @@ test("the transcript records each call with its answer, names silence, and keeps
     "page action: 1 row selected",
   ]);
   assert.deepEqual(await session.environment(), ["windows: test"]);
+});
+
+test("typing is one call with one answer, and the transcript names the text and the pace", async () => {
+  const adapter = fakeAdapter();
+  const session = createReaderSession(adapter);
+  assert.equal(await session.type("ban"), "b. a. n");
+  assert.equal(await session.type("a b", { delay: 150 }), "b. a. n");
+  assert.deepEqual(adapter.calls, ["type ban no delay", "type a b 150"]);
+  assert.deepEqual(session.transcript, ['type "ban": b. a. n', 'type "a b", 150 ms between keys: b. a. n']);
 });
 
 test("a call that throws synchronously rejects, and leaves a line saying why", async () => {

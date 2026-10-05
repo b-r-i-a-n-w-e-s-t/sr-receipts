@@ -55,6 +55,10 @@ function fakeDesktop(): Fake {
       calls.push(`press ${key}`);
       return key === "Control+Home" ? "link, Skip to main content" : "";
     },
+    async type(text, delayMs) {
+      calls.push(`type ${JSON.stringify(text)} ${delayMs}`);
+      return "b. a. n";
+    },
     next: async () => "row 2",
     previous: async () => "row 1",
     spokenPhraseLog: async () => ["a", "b"],
@@ -153,6 +157,15 @@ test("each answer crosses as it was said, and the transcript names silence", asy
   assert.deepEqual(await session.spokenPhraseLog(), ["a", "b"]);
   await session.clearSpokenPhraseLog();
   assert.deepEqual(session.transcript.slice(1), [`moveToNextTable: ${SILENCE}`, "press Control+Home: link, Skip to main content", "next: row 2"]);
+});
+
+test("typing crosses with its text and its pace, and a pace left out is none", async (t) => {
+  const { url, desktop } = await daemon(t);
+  const session = createNvdaSession({ url, token: TOKEN });
+  assert.equal(await session.type("ban", { delay: 120 }), "b. a. n");
+  assert.equal(await session.type("a b"), "b. a. n");
+  assert.deepEqual(desktop.calls, ['type "ban" 120', 'type "a b" 0']);
+  assert.deepEqual(session.transcript, ['type "ban", 120 ms between keys: b. a. n', 'type "a b": b. a. n']);
 });
 
 test("a reader failure on the guest arrives with its whole cause chain, and is recorded", async (t) => {

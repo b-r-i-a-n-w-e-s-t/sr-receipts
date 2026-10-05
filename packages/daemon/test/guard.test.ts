@@ -60,6 +60,7 @@ function fakeDesktop({ titles = ["Component Library : Component Library - Micros
       calls.push(`press ${key}`);
       return key === "Control+Home" ? "link, Skip to main content" : "";
     },
+    type: async () => "",
     next: () => spoken("next"),
     previous: () => spoken("previous"),
     spokenPhraseLog: async () => [],

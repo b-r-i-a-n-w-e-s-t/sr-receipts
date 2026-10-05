@@ -47,6 +47,10 @@ async function harness(t: test.TestContext): Promise<Harness> {
       calls.push(`press ${key}`);
       return "";
     },
+    async type(text, delayMs) {
+      calls.push(`type ${JSON.stringify(text)} ${delayMs}`);
+      return "b. a. n";
+    },
     async next() {
       calls.push("next started");
       await new Promise<void>((resolve) => {
@@ -117,6 +121,25 @@ test("a route's answer is the reader's own speech, and the bodies are checked", 
   assert.match(((await missing.json()) as { error: string }).error, /`command` must be a non-empty string/);
   const notJson = await fetch(`${url}/reader/press`, { method: "POST", headers: auth, body: "{" });
   assert.equal(notJson.status, 400);
+});
+
+test("typing takes any text, a space included, and a pace that is a whole number of milliseconds", async (t) => {
+  const { url, calls } = await harness(t);
+  assert.deepEqual(await (await post(url, "/reader/type", { text: "ban", delay: 120 })).json(), { spoken: "b. a. n" });
+  assert.equal((await post(url, "/reader/type", { text: " " })).status, 200);
+  assert.deepEqual(calls, ['type "ban" 120', 'type " " 0']);
+
+  for (const body of [{}, { text: "" }, { text: 7 }]) {
+    const refused = await post(url, "/reader/type", body);
+    assert.equal(refused.status, 400);
+    assert.match(((await refused.json()) as { error: string }).error, /`text` must be a non-empty string/);
+  }
+  for (const delay of [-1, 1.5, "100", 10_001]) {
+    const refused = await post(url, "/reader/type", { text: "ban", delay });
+    assert.equal(refused.status, 400);
+    assert.match(((await refused.json()) as { error: string }).error, /`delay` must be a whole number of milliseconds from 0 to 10000/);
+  }
+  assert.equal(calls.length, 2);
 });
 
 test("a reader failure is a 500 carrying the cause chain", async (t) => {

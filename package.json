@@ -5,11 +5,13 @@
   "type": "module",
   "workspaces": [
     "packages/host",
-    "packages/guest",
-    "packages/playwright"
+    "packages/voiceover",
+    "packages/playwright",
+    "packages/daemon"
   ],
   "scripts": {
-    "test": "npm test --workspaces && npm run typecheck",
+    "build": "tsc -b packages/host packages/voiceover packages/playwright packages/daemon",
+    "test": "npm run build && npm test --workspaces && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

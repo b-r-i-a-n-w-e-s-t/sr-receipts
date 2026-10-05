@@ -10,7 +10,7 @@ This package owns:
 - `ReaderSession` in `src/protocol.ts`: the one interface a test sees for
   either reader, with Guidepup's method names
 - the wire protocol, also in `src/protocol.ts`: the daemon's routes and their
-  bodies
+  bodies, and `PROTOCOL_VERSION`, bumped by hand when either changes shape
 - `createReaderSession` in `src/session.ts`: the Reader Session every
   reader is built with. It wraps a reader adapter and owns the transcript,
   the serialization of calls, the rule that every call rejects rather than
@@ -18,9 +18,13 @@ This package owns:
 - `createNvdaSession`, NVDA's adapter over the daemon's routes
 
 It does not know how any screen reader is driven, and it depends on nothing
-but Node's `fetch`. `@sr-receipts/guest` implements the protocol and depends
-on this package for it. A change to `src/protocol.ts` is a change to both
-packages and belongs in both changelogs.
+but Node's `fetch`. `@sr-receipts/daemon` implements the protocol and
+depends on this package for it. A change to `src/protocol.ts` is a change to
+both packages and belongs in both changelogs. A change to the routes or their
+bodies also bumps `PROTOCOL_VERSION`: the daemon reports the version it was
+built against in `/health`, and `createNvdaSession`'s `start` refuses a
+daemon reporting another, naming both, because the Mac and the guest are
+installed at different times.
 
 ## Use
 
@@ -47,8 +51,8 @@ failure on the guest arrives with its cause chain.
 ## Versioning
 
 Pre-1.0 semantic versioning: a minor version may break the contract, and says
-so in [`CHANGELOG.md`](CHANGELOG.md). Private to this repository until an
-external consumer exists.
+so in [`CHANGELOG.md`](CHANGELOG.md). Released with the other three packages,
+always at the same version.
 
 ## Tests
 
@@ -57,5 +61,5 @@ npm test
 ```
 
 The Reader Session against a fake adapter. The NVDA session is tested against
-the real daemon in `@sr-receipts/guest`'s `test/wire.test.ts`, since the guest
-can depend on this package and not the other way round.
+the real daemon in `@sr-receipts/daemon`'s `test/wire.test.ts`, since the
+daemon can depend on this package and not the other way round.

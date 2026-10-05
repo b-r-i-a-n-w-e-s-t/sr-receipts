@@ -62,19 +62,25 @@ test('selecting a row is announced', async ({ page, reader }) => {
 })
 ```
 
-Three packages:
+Four packages:
 
 | Package | Owns | Runs on |
 |---|---|---|
 | [`@sr-receipts/host`](packages/host/README.md) | The `ReaderSession` interface a test uses, the wire to a guest daemon, and NVDA as a session over it. Knows no reader's commands. | The Mac you develop on |
-| [`@sr-receipts/guest`](packages/guest/README.md) | The daemon that serves NVDA and launches the browser server, the guards, the VoiceOver session, the smoke, and the Provisioner for the Windows Guest Rig | The guest, and the Mac for VoiceOver |
 | [`@sr-receipts/playwright`](packages/playwright/README.md) | The `reader` fixture, so a consuming repo drives a real reader from its own `playwright test`. Depends on the host. | The Mac you develop on |
+| [`@sr-receipts/voiceover`](packages/voiceover/README.md) | VoiceOver as a `ReaderSession`, in process, and its doctor. An optional peer of the Playwright package: only a VoiceOver project installs it. | The Mac you develop on |
+| [`@sr-receipts/daemon`](packages/daemon/README.md) | The daemon that serves NVDA and launches the browser server, the guards, the Smoke, the Bootstrap and the Provisioner for the Windows Guest Rig | The guest |
 
-The guest depends on the host for the protocol, never the other way round. All
-three are private workspace packages, versioned and changelogged separately,
-and not published. Why it is shaped this way, what it cost, and what was
-retired to get here are in
-[ADR 0002](docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
+The daemon and VoiceOver depend on the host for the protocol, never the other
+way round. All four are released publicly under the MIT license, at one
+version, together, by `scripts/release.ts`; none has been published yet.
+Until then a consumer installs them from tarballs, as
+[`packages/playwright/README.md`](packages/playwright/README.md#installing-it-in-a-consumer)
+describes. Why it is shaped this
+way is in
+[ADR 0002](docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md)
+and, for the packaging,
+[ADR 0003](docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 
 ### The life of a test
 
@@ -104,7 +110,7 @@ retired to get here are in
   [`docs/operating-the-rig.md`](docs/operating-the-rig.md).
 - **Against VoiceOver**, `playwright test` has to be launched from the
   application holding the macOS grants in
-  [`packages/guest/voiceover/README.md`](packages/guest/voiceover/README.md),
+  [`packages/voiceover/README.md`](packages/voiceover/README.md),
   and it takes over the Mac while it runs.
 
 ## Where to read next
@@ -114,10 +120,10 @@ retired to get here are in
 | Drive a reader from a consuming repo's Playwright tests | [`packages/playwright/README.md`](packages/playwright/README.md) |
 | See and read a receipt | [`packages/playwright/README.md#reading-a-receipt`](packages/playwright/README.md#reading-a-receipt) |
 | Set up and run the Windows Guest Rig | [`docs/operating-the-rig.md`](docs/operating-the-rig.md) |
-| Run VoiceOver on a Mac, and what is known about capturing it | [`packages/guest/voiceover/README.md`](packages/guest/voiceover/README.md) |
-| Understand the guards and the daemon's routes | [`packages/guest/README.md`](packages/guest/README.md) |
+| Run VoiceOver on a Mac, and what is known about capturing it | [`packages/voiceover/README.md`](packages/voiceover/README.md) |
+| Understand the guards and the daemon's routes | [`packages/daemon/README.md`](packages/daemon/README.md) |
 | Call the daemon from code | [`packages/host/README.md`](packages/host/README.md) |
-| Provision a new Windows Guest Rig | [`packages/guest/provisioning/README.md`](packages/guest/provisioning/README.md) |
+| Provision a new Windows Guest Rig | [`packages/daemon/provisioning/README.md`](packages/daemon/provisioning/README.md) |
 | See what is planned and why | [`docs/roadmap.md`](docs/roadmap.md), [`docs/adr/`](docs/adr/) |
 | Look up a term | [`CONTEXT.md`](CONTEXT.md) |
 
@@ -125,8 +131,14 @@ retired to get here are in
 
 ```bash
 npm ci      # at the repository root: installs every package from one lockfile
-npm test    # every package's tests, then a typecheck of the whole repository
+npm test    # builds every package's dist/, runs every package's tests, then a typecheck of the whole repository
+node scripts/release.ts   # publishes all four at the version in their package.json files
 ```
 
 `npm test` needs no screen reader. Real-reader runs happen from a consuming
 repo's Playwright tests, and the guest's Smoke from any shell on the guest.
+
+The source is TypeScript that Node runs directly, which is how the tests run.
+A package reaches its siblings through their built `dist/`, so a change to the
+host is seen by the others after `npm run build`, which `npm test` does
+first.

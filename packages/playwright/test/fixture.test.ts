@@ -1,7 +1,8 @@
 /**
  * The fixture, tested without Playwright or a reader: which session a
- * project gets, what VoiceOver is told to activate, what a missing guest
- * says, and that every test's reader is stopped and leaves its receipt.
+ * project gets, what VoiceOver is told to activate, what a missing VoiceOver
+ * package says, and that every test's reader is stopped and leaves its
+ * receipt.
  *
  * Run: npm test
  */
@@ -10,7 +11,7 @@ import assert from "node:assert/strict";
 
 import type { ReaderSession } from "@sr-receipts/host";
 
-import { applicationNameFor, createSession, environmentStamp, loadGuest, readerFixture, readerFixtures, withReader } from "../src/fixture.ts";
+import { applicationNameFor, createSession, environmentStamp, loadVoiceOver, readerFixture, readerFixtures, withReader } from "../src/fixture.ts";
 
 test("VoiceOver activates the application Playwright launched, by browser or channel", () => {
   assert.equal(applicationNameFor("webkit", undefined), "Playwright");
@@ -20,14 +21,14 @@ test("VoiceOver activates the application Playwright launched, by browser or cha
   assert.equal(applicationNameFor("firefox", undefined), "Nightly");
 });
 
-test("an NVDA project gets a session over the wire and never loads the guest", async () => {
+test("an NVDA project gets a session over the wire and never loads VoiceOver", async () => {
   const session = await createSession({ reader: "nvda", url: "http://127.0.0.1:1", token: "t" }, { browserName: "chromium", channel: "msedge" }, async () => {
     throw new Error("must not be loaded");
   });
   assert.equal(session.reader, "nvda");
 });
 
-test("a VoiceOver project loads the guest and passes the application name through", async () => {
+test("a VoiceOver project loads VoiceOver and passes the application name through", async () => {
   const names: string[] = [];
   const session = await createSession({ reader: "voiceover" }, { browserName: "webkit", channel: undefined }, async () => ({
     createVoiceOverSession: ({ applicationName }) => {
@@ -46,15 +47,15 @@ test("a VoiceOver project loads the guest and passes the application name throug
   assert.equal(names[1], "Safari");
 });
 
-test("a VoiceOver project without the guest installed says what to install", async () => {
+test("a VoiceOver project without VoiceOver installed says what to install", async () => {
   await assert.rejects(
-    loadGuest(async () => {
-      throw Object.assign(new Error("Cannot find package '@sr-receipts/guest'"), { code: "ERR_MODULE_NOT_FOUND" });
+    loadVoiceOver(async () => {
+      throw Object.assign(new Error("Cannot find package '@sr-receipts/voiceover'"), { code: "ERR_MODULE_NOT_FOUND" });
     }),
-    /needs @sr-receipts\/guest installed beside @sr-receipts\/playwright/,
+    /needs @sr-receipts\/voiceover installed beside @sr-receipts\/playwright/,
   );
   await assert.rejects(
-    loadGuest(async () => {
+    loadVoiceOver(async () => {
       throw Object.assign(new Error("Cannot find module 'plist'"), { code: "ERR_MODULE_NOT_FOUND" });
     }),
     /Cannot find module 'plist'/,

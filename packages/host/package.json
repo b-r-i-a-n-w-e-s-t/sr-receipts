@@ -1,11 +1,24 @@
 {
   "name": "@sr-receipts/host",
   "version": "0.2.0",
-  "private": true,
   "description": "The Mac-facing half of sr-receipts: the reader interface a test uses, the wire to a guest daemon, and NVDA as a session over it.",
+  "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "test": "node --test test/*.test.ts"

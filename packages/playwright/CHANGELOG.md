@@ -5,6 +5,15 @@ break the contract.
 
 ## Unreleased (0.2.0)
 
+Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
+
+- **Ships built JavaScript and declarations** in `dist/`, which `exports`
+  points at, because Node will not strip types under `node_modules`. MIT.
+- **Breaking:** the optional peer for a VoiceOver project is
+  `@sr-receipts/voiceover`, not `@sr-receipts/guest`, and the error for a
+  missing one names it. The fixture's declarations no longer reference the
+  peer's types, so an NVDA-only consumer typechecks without it installed.
+
 The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
 - **Breaking:** `receiptsFixtures` and the `receipts` fixture are replaced by

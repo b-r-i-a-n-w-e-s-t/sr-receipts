@@ -1,11 +1,24 @@
 {
   "name": "@sr-receipts/playwright",
   "version": "0.2.0",
-  "private": true,
   "description": "A reader fixture for Playwright Test: drive a real screen reader beside page from a consuming repo's own tests.",
+  "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "test": "node --test test/*.test.ts"
@@ -15,10 +28,10 @@
   },
   "peerDependencies": {
     "@playwright/test": "^1.63.0",
-    "@sr-receipts/guest": "0.2.0"
+    "@sr-receipts/voiceover": "0.2.0"
   },
   "peerDependenciesMeta": {
-    "@sr-receipts/guest": {
+    "@sr-receipts/voiceover": {
       "optional": true
     }
   }

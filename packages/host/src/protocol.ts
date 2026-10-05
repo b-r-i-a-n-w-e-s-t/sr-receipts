@@ -105,8 +105,23 @@ export interface ReaderSession {
 
 /* --------------------------------------------------------------------- wire */
 
+/**
+ * The wire's version, bumped by hand when a route or a body changes shape,
+ * and only then. The Mac and the guest are installed at different times, so
+ * the daemon reports the version it was built against in `/health`, and the
+ * NVDA session refuses a daemon reporting another: a mismatch fails at start
+ * with both named, rather than later on whichever route changed. See ADR 0003.
+ */
+export const PROTOCOL_VERSION = 1;
+
 export interface DaemonHealth {
   ok: true;
+  /**
+   * The `PROTOCOL_VERSION` this daemon was built against. Optional, because a
+   * daemon built without the field answers without it, and the session has
+   * to say so rather than assume it.
+   */
+  protocol?: number;
   /** Whether NVDA is up. */
   started: boolean;
   /** Where Playwright's `connectOptions.wsEndpoint` points on the guest. */

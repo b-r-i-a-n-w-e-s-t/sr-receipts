@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "node": {
+    "version": "22.23.3",
+    "architecture": "arm64",
+    "kind": "zip",
+    "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-win-arm64.zip",
+    "sha256": "33dad22e4cef5ee8f9fbb1b0d037fdacd0e56d12a4580f0d63f68b894deab535"
+  },
+  "edge": {
+    "source": "preinstalled with Windows 11",
+    "note": "Verified present, never downloaded. Playwright ships no Windows ARM64 browsers; the installed Edge is driven through channel msedge."
+  },
+  "playwright": {
+    "version": "1.63.0",
+    "note": "playwright-core on the guest. A consumer's @playwright/test must share this major.minor to connect to the browser server."
+  },
+  "guidepup": {
+    "version": "0.34.0",
+    "setupVersion": "0.25.3",
+    "nvdaAsset": {
+      "manifest": "node_modules/@guidepup/guidepup/manifest.json",
+      "id": "nvda",
+      "version": "0.2.1-2026.2",
+      "repository": "guidepup/nvda",
+      "asset": "guidepup-nvda-0.2.1-2026.2.zip",
+      "sha256": "7df0ca3c1c9e8c6521bc7553486ca360ed6f0b4f9bdbd6603131e38b5c1497a1"
+    }
+  }
+}

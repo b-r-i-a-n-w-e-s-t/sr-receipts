@@ -4,9 +4,9 @@
  * `fetch` and nothing else, so it has no dependency and runs on whatever Node
  * the Mac has. The wire format has exactly one implementation on each side:
  * this adapter, and the guest's daemon. The contract test that runs the two
- * together is in `@sr-receipts/guest`, which can depend on this package.
+ * together is in `@sr-receipts/daemon`, which can depend on this package.
  */
-import type { DaemonHealth, EnterBody, EntryResult, PhraseLog, ReaderSession, Spoken } from "./protocol.ts";
+import { PROTOCOL_VERSION, type DaemonHealth, type EnterBody, type EntryResult, type PhraseLog, type ReaderSession, type Spoken } from "./protocol.ts";
 import { createReaderSession } from "./session.ts";
 
 export interface ClientOptions {
@@ -61,13 +61,20 @@ export function createNvdaSession({ url, token }: ClientOptions): ReaderSession 
     reader: "nvda",
 
     async start() {
+      let daemon: DaemonHealth;
       try {
-        await health();
+        daemon = await health();
       } catch (error) {
         if (error instanceof RigError) throw error;
         throw new Error(`the guest daemon at ${url} is not reachable; is the VM booted, signed in, and nvda-daemon running?`, {
           cause: error,
         });
+      }
+      if (daemon.protocol !== PROTOCOL_VERSION) {
+        throw new Error(
+          `the guest daemon at ${url} speaks wire protocol ${daemon.protocol ?? "none"}, and this host speaks ${PROTOCOL_VERSION}; ` +
+            "bring the older side up to date: bootstrap.ps1 on the guest, or npm on the Mac",
+        );
       }
       await call("POST", "/reader/start");
     },

@@ -10,18 +10,24 @@ live on, and keeps what each one said as evidence. Formerly named Dogwalk.
 
 **Host**:
 The machine a developer works on, where their Playwright tests run, and the
-`@sr-receipts/host` package that reaches a Guest's daemon from it. It owns the
+`@sr-receipts/host` package that reaches a Guest's Daemon from it. It owns the
 Reader Session and the wire. The wire is an NVDA wire: NVDA is the only
 reader that crosses it, and its routes, health and entry options (the mode
 probes) are NVDA's. The host still knows no reader's commands; a command
 crosses as Guidepup's name for it, and the Guest checks it.
 
 **Guest**:
-The side that runs a screen reader on its own interactive desktop, and the
-`@sr-receipts/guest` package. It holds the daemon, the guards, and the
-VoiceOver session, so "guest" means the reader's side rather than a virtual
-machine.
+The far side of the wire, as the Host sees it: a Windows Guest Rig, answered
+by its Daemon. No package is named for it. VoiceOver is not a Guest: it runs
+in process on the Host.
 _Avoid_: VM (for the Guest as a whole)
+
+**Daemon**:
+The authenticated process on a Windows Guest Rig that serves NVDA as routes
+and launches the Browser Server beside it, started at logon. Also the
+`@sr-receipts/daemon` package, which carries it with the Focus Guard, the
+Smoke and the Provisioner.
+_Avoid_: guest (for the package), server
 
 **Windows Guest Rig**:
 A Windows 11 ARM64 virtual machine operated with UTM on a developer's Mac,
@@ -31,7 +37,11 @@ _Avoid_: the VM, the Windows box, shared rig
 **Provisioner**:
 The idempotent setup process that turns an approved Windows Guest Rig into a
 provisioned rig after Windows' unavoidable first-run and activation steps, and
-registers the daemon to start at logon.
+registers the Daemon to start at logon.
+
+**Bootstrap**:
+The one script that brings a Windows Guest Rig to an exact release of the
+Daemon, first install or upgrade alike, and hands it to the Provisioner.
 
 **Runtime Manifest**:
 The reviewed compatibility record of the exact runtime components installed
@@ -44,12 +54,12 @@ One screen reader, started for one test, behind the one interface a test
 uses: Guidepup's method names, plus entering a page and capturing a page
 action. Built once, in the host, around a reader adapter, so the Transcript,
 serialized calls, and rejecting rather than throwing hold on every reader.
-VoiceOver in process on a Mac and NVDA through the Guest's daemon are the two
+VoiceOver in process on a Mac and NVDA through the Guest's Daemon are the two
 adapters.
 _Avoid_: Execution Target (retired), driver, target
 
 **Browser Server**:
-The Playwright browser server the Guest's daemon launches beside NVDA, which a
+The Playwright browser server the Guest's Daemon launches beside NVDA, which a
 test's `page` drives through Playwright's own `connectOptions`.
 
 **Entry**:
@@ -67,8 +77,8 @@ The span during which a page action's speech is recorded, opened before the
 action and closed after it. On the wire it is a pair of routes.
 
 **Fixture**:
-A committed HTML page in the Guest, used by the Smoke to prove the rig without
-any app.
+A committed HTML page shipped with the Daemon, used by the Smoke to prove the
+rig without any app.
 
 ### Evidence
 
@@ -91,6 +101,6 @@ _Avoid_: result (for a simulated reader's output)
 
 **Smoke**:
 The Guest's own proof that the rig works right now, as a client of its
-daemon: NVDA, Edge, the Focus Guard and quick navigation on a Fixture,
+Daemon: NVDA, Edge, the Focus Guard and quick navigation on a Fixture,
 through the same Reader Session a test uses. Run by the Provisioner, and from
 any shell on the Guest.

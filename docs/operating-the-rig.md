@@ -4,12 +4,16 @@ The Windows Guest Rig is where NVDA runs: a Windows 11 ARM64 virtual machine
 under UTM on your Mac, with NVDA and headed Edge on its own interactive
 desktop. Each developer has one. This is the operator's guide to setting it
 up, keeping it running, and pointing tests at it. Why the rig works the way it
-does is in [`packages/guest/README.md`](../packages/guest/README.md);
+does is in [`packages/daemon/README.md`](../packages/daemon/README.md);
 VoiceOver needs none of this and is covered in
-[`packages/guest/voiceover/README.md`](../packages/guest/voiceover/README.md).
+[`packages/voiceover/README.md`](../packages/voiceover/README.md).
 
-Commands on the guest run from `packages\guest` in its checkout. Commands on
-the Mac run from the consuming repository.
+The guest runs the published `@sr-receipts/daemon`, unpacked by the Bootstrap
+into `%LOCALAPPDATA%\nvda-rig\daemon`. Everything the rig writes (the
+daemon's log and pid file, the Smoke's transcript, the Provisioner's reports)
+and the pinned Node live beside it in `%LOCALAPPDATA%\nvda-rig`. Commands on
+the guest run from `%LOCALAPPDATA%\nvda-rig\daemon` unless they say
+otherwise. Commands on the Mac run from the consuming repository.
 
 ## The one rule behind all of it
 
@@ -35,19 +39,26 @@ signed-out one is not.
    Provisioner starts after that point. The reviewed shape is 4 vCPUs, 8 GiB
    RAM, 64 GiB storage and UTM Shared (NAT) networking, on which the guest
    reaches the Mac at `192.168.64.1`.
-2. **Clone this repository** into the signed-in user's own filesystem.
-3. **Run the Provisioner** from `packages\guest`. It installs the pinned Node,
-   npm packages and NVDA asset, verifies Edge, registers the daemon at logon,
-   restarts it, and proves it with a real NVDA run through its own routes:
+2. **Run the Bootstrap** for the version the Mac's packages are on, from an
+   unelevated PowerShell on the guest desktop. It fetches that version of
+   `@sr-receipts/daemon`, checks it against the registry, unpacks it,
+   installs the pinned Node and the package's dependencies from its
+   shrinkwrap, and runs the Provisioner, which installs the NVDA asset,
+   verifies Edge, registers the daemon at logon, restarts it, and proves it
+   with a real NVDA run through its own routes:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File provisioning\provision.ps1
+   $v = '0.2.0'
+   Invoke-WebRequest "https://cdn.jsdelivr.net/npm/@sr-receipts/daemon@$v/provisioning/bootstrap.ps1" -OutFile bootstrap.ps1 -UseBasicParsing
+   powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Version $v
    ```
 
-   It is idempotent, so re-run it after changing anything it installs. The
+   Both are idempotent. The Provisioner alone, after changing anything it
+   installs, is `provisioning\provision.ps1` in the daemon directory. The
    details, including what its health report checks, are in
-   [`packages/guest/provisioning/README.md`](../packages/guest/provisioning/README.md).
-4. **Open the two ports**, once, from an elevated PowerShell:
+   [`packages/daemon/provisioning/README.md`](../packages/daemon/provisioning/README.md).
+3. **Open the two ports**, once, from an elevated PowerShell in the daemon
+   directory:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File tasks\register.ps1 -Firewall
@@ -64,7 +75,7 @@ signed-out one is not.
    ```powershell
    Get-NetFirewallRule -DisplayName node.exe | Where-Object Action -eq Block | Remove-NetFirewallRule
    ```
-5. **Start the daemon now** without logging out, or sign out and in:
+4. **Start the daemon now** without logging out, or sign out and in:
 
    ```powershell
    Start-ScheduledTask nvda-daemon
@@ -108,11 +119,16 @@ browser server of the same major.minor. The guest's `playwright-core` is
 pinned in the Runtime Manifest; the consumer's `@playwright/test` has to
 match it.
 
+**The wire's protocol versions must match.** The daemon reports the protocol
+version it was built against in `/health`, and the Mac's NVDA session refuses
+any other at start, naming both. Any two releases with the same protocol work
+together; when they differ, upgrade whichever side is older.
+
 ## The scheduled tasks
 
 | Task | Runs | Output |
 |---|---|---|
-| `nvda-daemon` | The daemon, at logon: NVDA behind a port, and an Edge browser server beside it. | `artifacts\daemon.out` |
+| `nvda-daemon` | The daemon, at logon: NVDA behind a port, and an Edge browser server beside it. | `%LOCALAPPDATA%\nvda-rig\artifacts\daemon.out` |
 
 Start it from a PowerShell on the guest, or from SSH:
 
@@ -120,14 +136,14 @@ Start it from a PowerShell on the guest, or from SSH:
 Start-ScheduledTask nvda-daemon
 ```
 
-`npm run daemon` also exists, but only works from a shell that is already on
-the interactive desktop, so the task is the reliable path.
+The task runs `run-daemon.cmd` from the daemon directory, which runs the
+daemon from the state directory, so a reinstall can replace the package.
 
 ## The Smoke
 
 ```
-cd packages\guest
-npm run smoke
+cd /d %LOCALAPPDATA%\nvda-rig
+daemon\run-node.cmd daemon\dist\smoke.js
 ```
 
 A client of the daemon, from any shell on the guest, SSH included: it starts
@@ -135,62 +151,53 @@ NVDA through the daemon's routes, opens `fixtures/control.html` in the
 daemon's browser server, runs the Focus Guard and four commands through the
 same `ReaderSession` a test on the Mac has, and stops. It needs `RIG_TOKEN`,
 which `tasks\register.ps1` set for the user. The transcript is written to
-`artifacts\smoke-transcript.txt`, and the last line printed is its result as
+`artifacts\smoke-transcript.txt` in the directory it is run from, and the last line printed is its result as
 JSON. A daemon started over SSH answers every route and hears nothing, so the
 Smoke failing on its guard is the posture check.
 
-## After pulling changes on the guest
+## Upgrading the guest
 
-The daemon loads the rig's code once, when it starts. After a `git pull` on
-the guest, the simplest safe step is to **re-run the Provisioner** from the
-guest desktop (see first-time setup). It is idempotent, runs `npm ci` at the
-workspace root, re-registers the task, restarts the daemon, and proves it
-with the Smoke.
-It does not touch the firewall. The steps below are the quick path when you
-know which one a pull needs; a guest that has not been provisioned since the
-pivot to `page` needs the first two, which is what re-running the
-Provisioner does.
+The daemon loads its code once, when it starts. To move the guest to another
+release, run the Bootstrap again, from the guest desktop, with that version
+(see first-time setup). It stops the daemon, replaces the package whole,
+installs its Node and dependencies, re-registers the task, restarts the
+daemon, and proves it with the Smoke. It does not touch the firewall.
 
-1. Run `npm ci` at the repository root if `package-lock.json` changed. A
-   `node_modules` from before the workspace split lacks `playwright-core` and
-   the `@sr-receipts/*` links, and the daemon dies at startup with
-   `ERR_MODULE_NOT_FOUND` at the end of `artifacts\daemon.out`. `npm ci` needs
-   no desktop, so it can run over SSH, with the provisioned Node first on the
-   `PATH`:
+To try a change before it is published, pack the daemon on the Mac and give
+the Bootstrap the tarball instead of a version. Only a release carries a
+shrinkwrap, so the Bootstrap resolves the tarball's dependencies as it
+installs them, and warns that they are not the reviewed tree. They still
+come from the registry, so a change that also needs an unpublished host has
+to be published first:
 
-   ```powershell
-   $env:Path = "$env:LOCALAPPDATA\nvda-rig\node-v22.18.0-win-arm64;$env:Path"; npm ci
-   ```
+```bash
+npm run build && (cd packages/daemon && npm pack)   # on the Mac
+```
 
-2. Make sure the `nvda-daemon` task exists. A guest set up before the pivot
-   to `page` has the retired `nvda-run` and `nvda-probe` tasks instead, and
-   `Stop-ScheduledTask nvda-daemon` fails with "The system cannot find the
-   file specified". Register the tasks once, from an unelevated PowerShell on
-   the guest desktop; this also unregisters the retired ones:
+```powershell
+powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Tarball sr-receipts-daemon-0.2.0.tgz
+```
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File tasks\register.ps1
-   ```
+**A guest still running from a git checkout** of this repository moves over
+with one Bootstrap run. The Provisioner re-registers `nvda-daemon` against
+the installed package and retires older tasks, the stored `RIG_TOKEN` is
+reused, so the Mac's `.env.rig` stays as it is, and the checkout can then be
+deleted.
 
-   It reuses the token stored for the user, or generates and prints a new
-   one. A new token changes both `RIG_TOKEN` and `RIG_BROWSER` in the
-   consumer's `.env.rig`.
+To restart the daemon without upgrading, pause between the two commands.
+Ending a task is asynchronous, and ending and starting back to back has let
+the termination land on the freshly started instance:
 
-3. Restart the daemon so it runs the new code, with a pause between the two
-   commands. Ending a task is asynchronous, and ending and starting back to
-   back has let the termination land on the freshly started instance:
+```powershell
+Stop-ScheduledTask nvda-daemon; Start-Sleep 3; Start-ScheduledTask nvda-daemon
+```
 
-   ```powershell
-   Stop-ScheduledTask nvda-daemon; Start-Sleep 3; Start-ScheduledTask nvda-daemon
-   ```
-
-   Task Scheduler ends only the task's own `cmd.exe`; the daemon's node
-   process would survive and keep the ports. So the daemon records its PID in
-   `artifacts\daemon.pid`, and `run-daemon.cmd` ends that process before
-   starting the next one. A daemon that will not come back is diagnosed with
-   `netstat -ano | findstr :8765` and `artifacts\daemon.out`.
-
-4. Re-run the Provisioner if `runtime-manifest.json` changed.
+Task Scheduler ends only the task's own `cmd.exe`; the daemon's node process
+would survive and keep the ports. So the daemon records its PID in
+`artifacts\daemon.pid` under the state directory, and `run-daemon.cmd` ends
+that process before starting the next one, as the Bootstrap does before an
+upgrade. A daemon that will not come back is diagnosed with
+`netstat -ano | findstr :8765` and `artifacts\daemon.out`.
 
 ## Before a run
 
@@ -223,7 +230,8 @@ problem with the page if you do not know it:
 | `the guest daemon ... is not reachable` | The VM is not booted or signed in, the daemon task is not running, or the ports are closed. |
 | `/health` answers 403, `token not accepted` | The consumer's token is stale: `register.ps1` generates a new one when none is stored for the user. Read the stored one on the guest with `[Environment]::GetEnvironmentVariable('RIG_TOKEN','User')`, and update both `RIG_TOKEN` and `RIG_BROWSER` in `.env.rig`, since the browser endpoint's path is the token. |
 | The daemon's ports are `LISTENING` in `netstat` on the guest, but closed from the Mac | Inbound Block rules named `node.exe`, left by a dismissed "Allow access?" dialog. See step 4 of first-time setup. |
-| `artifacts\daemon.out` ends with `ERR_MODULE_NOT_FOUND` | The guest's `node_modules` is stale. Run `npm ci` at the repository root; see "After pulling changes". |
+| `artifacts\daemon.out` ends with `ERR_MODULE_NOT_FOUND` | The daemon's dependencies are missing or partial. Run the Bootstrap again for the same version; see "Upgrading the guest". |
+| `the guest daemon ... speaks wire protocol N, and this host speaks M` | The Mac's packages and the guest's daemon are from releases with different wire protocols. Upgrade the older side: the Bootstrap on the guest, npm on the Mac. A daemon from before protocol versions reports `none`. |
 | `Test timeout ... while setting up "reader"`, then `fetch failed` with `HeadersTimeoutError` about five minutes in, and `/health` never answers although the ports accept connections | NVDA did not quit. Guidepup runs `nvda.exe --quit` synchronously with no timeout, in both start and stop, so one stuck quit freezes every route. Confirm over SSH: the daemon's node process has a `cmd.exe` child running `nvda.exe --quit`. End NVDA and that `cmd.exe`, then restart the daemon task. On 2026-09-30 the whole VM froze with it and had to be restarted. |
 | `connect` fails with a version message | The consumer's `@playwright/test` and the guest's `playwright-core` differ in major.minor. |
 | The transcript has plausible silences | Read the entry lines at its top first: they are the only uncontaminated measurement of where the reader was. |

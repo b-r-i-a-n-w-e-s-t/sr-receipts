@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // The source runs two ways. In this repository Node strips its types and
+    // runs the .ts directly, which is how the tests run. Under a consumer's
+    // node_modules Node refuses to strip types, so each package also ships
+    // JavaScript and declarations that `npm run build` emits into its dist/.
+    // Both have to work, so the source must contain nothing that needs
+    // compiling. These two keep it that way: no enums, no parameter
+    // properties, no namespaces, and every type-only import written as
+    // `import type`.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+
+    // Node resolves the real file, so imports carry the real extension, and
+    // the build rewrites `./x.ts` to `./x.js` in what it emits.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true
+  }
+}

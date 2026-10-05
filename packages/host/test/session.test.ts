@@ -6,7 +6,7 @@
  * call rejects rather than throws, a reader call from inside a capture is
  * refused rather than deadlocking, `start` restarts, and `stop` neither
  * throws nor waits behind a hung call. NVDA's adapter over the real daemon is
- * tested in `@sr-receipts/guest`, which can depend on this package.
+ * tested in `@sr-receipts/daemon`, which can depend on this package.
  *
  * Run: npm test
  */

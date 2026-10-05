@@ -1,0 +1,36 @@
+{
+  "name": "@sr-receipts/daemon",
+  "version": "0.2.0",
+  "description": "The Windows Guest Rig's daemon: NVDA and headed Edge behind an authenticated port, the guards that prove a test reached the page, the Smoke, and the Provisioner.",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist",
+    "npm-shrinkwrap.json",
+    "fixtures/control.html",
+    "provisioning/*.ps1",
+    "provisioning/runtime-manifest.json",
+    "provisioning/README.md",
+    "tasks",
+    "run-daemon.cmd",
+    "run-node.cmd",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "smoke": "node dist/smoke.js",
+    "daemon": "node dist/daemon.js"
+  },
+  "dependencies": {
+    "@guidepup/guidepup": "0.34.0",
+    "@guidepup/setup": "0.25.3",
+    "@sr-receipts/host": "0.2.0",
+    "playwright-core": "1.63.0"
+  }
+}

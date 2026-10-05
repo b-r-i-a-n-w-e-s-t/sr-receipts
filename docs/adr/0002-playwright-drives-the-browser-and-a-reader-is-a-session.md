@@ -56,6 +56,8 @@ in the consuming repository's scratch space.
    could run under Guidepup's own fixtures with a one-line swap if the runner
    ever moves into the guest. VoiceOver implements it in process in
    `@sr-receipts/guest`; NVDA implements it over the wire in the host package.
+   _Amended 2026-10-05:_ VoiceOver's implementation is now its own package,
+   `@sr-receipts/voiceover` (ADR 0003).
 3. **The guards run on the guest.** `POST /reader/enter` takes the page's
    title and proves, in order, that the browser is in front, that focus is in
    the document, and that browse mode is on, by behaviour. Activation and
@@ -96,6 +98,9 @@ in the consuming repository's scratch space.
     The guest owns the daemon, the guards, the VoiceOver session and the
     Provisioner. The Playwright package owns the fixture. An NVDA-only
     consumer never installs Guidepup.
+    _Amended 2026-10-05:_ replaced by ADR 0003. There are four packages
+    now: the guest is `@sr-receipts/daemon`, and the VoiceOver session moved
+    out of it into `@sr-receipts/voiceover`.
 12. **Each developer runs their own guest, as an appliance.** The daemon is
     registered at logon by the Provisioner, so a booted, signed-in VM answers
     `npm run sr-testing` with nothing else started by hand.

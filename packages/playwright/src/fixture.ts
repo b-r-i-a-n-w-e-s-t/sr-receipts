@@ -4,7 +4,7 @@
  * Playwright drives the browser. For a VoiceOver project that is the browser
  * Playwright launched on this Mac; for an NVDA project it is the guest's Edge,
  * reached through Playwright's own `connectOptions`. The reader comes from
- * here: VoiceOver in process through `@sr-receipts/guest`, NVDA through the
+ * here: VoiceOver in process through `@sr-receipts/voiceover`, NVDA through the
  * guest daemon's routes in `@sr-receipts/host`. Both are the same
  * `ReaderSession`, so a spec never says which one it has. See ADR 0002.
  *
@@ -55,18 +55,25 @@ export function applicationNameFor(browserName: string, channel: string | undefi
   return APPLICATION_NAMES[channel ?? browserName] ?? APPLICATION_NAMES[browserName] ?? browserName;
 }
 
-/** What the VoiceOver half needs from `@sr-receipts/guest`, an optional peer. */
-export type Guest = Pick<typeof import("@sr-receipts/guest"), "createVoiceOverSession">;
+/**
+ * What the VoiceOver half needs from `@sr-receipts/voiceover`, an optional
+ * peer. Written out rather than taken from that package's types, so an
+ * NVDA-only consumer's typecheck finds nothing here it has not installed. The
+ * default `load` below holds it to the real package when this one builds.
+ */
+export interface VoiceOverPackage {
+  createVoiceOverSession(options: { applicationName: string }): ReaderSession;
+}
 
-export async function loadGuest(load: () => Promise<Guest> = () => import("@sr-receipts/guest")): Promise<Guest> {
+export async function loadVoiceOver(load: () => Promise<VoiceOverPackage> = () => import("@sr-receipts/voiceover")): Promise<VoiceOverPackage> {
   try {
     return await load();
   } catch (error) {
-    // Only the guest itself missing: a missing module inside it is a broken
+    // Only the package itself missing: a missing module inside it is a broken
     // install, and its own message says which.
     const { code, message } = error as { code?: string; message?: string };
-    if (code === "ERR_MODULE_NOT_FOUND" && message?.includes("'@sr-receipts/guest'")) {
-      throw new Error("a VoiceOver project needs @sr-receipts/guest installed beside @sr-receipts/playwright", { cause: error });
+    if (code === "ERR_MODULE_NOT_FOUND" && message?.includes("'@sr-receipts/voiceover'")) {
+      throw new Error("a VoiceOver project needs @sr-receipts/voiceover installed beside @sr-receipts/playwright", { cause: error });
     }
     throw error;
   }
@@ -76,10 +83,10 @@ export async function loadGuest(load: () => Promise<Guest> = () => import("@sr-r
 export async function createSession(
   options: ReaderOptions,
   browser: { browserName: string; channel: string | undefined },
-  load?: () => Promise<Guest>,
+  load?: () => Promise<VoiceOverPackage>,
 ): Promise<ReaderSession> {
   if (options.reader === "nvda") return createNvdaSession({ url: options.url, token: options.token });
-  const { createVoiceOverSession } = await loadGuest(load);
+  const { createVoiceOverSession } = await loadVoiceOver(load);
   return createVoiceOverSession({ applicationName: options.applicationName ?? applicationNameFor(browser.browserName, browser.channel) });
 }
 

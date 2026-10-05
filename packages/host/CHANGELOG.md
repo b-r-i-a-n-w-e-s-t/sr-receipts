@@ -5,6 +5,15 @@ the contract.
 
 ## Unreleased (0.2.0)
 
+Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
+
+- **Ships built JavaScript and declarations** in `dist/`, which `exports`
+  points at, because Node will not strip types under `node_modules`. MIT.
+- **The wire has a version.** `PROTOCOL_VERSION`, bumped by hand when a
+  route or a body changes shape. `DaemonHealth` carries the daemon's as
+  `protocol`, and `createNvdaSession`'s `start` refuses a daemon reporting
+  another, or none, naming both, before the reader starts.
+
 The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
 - **Breaking:** the protocol is a reader session, not runs. `src/protocol.ts`

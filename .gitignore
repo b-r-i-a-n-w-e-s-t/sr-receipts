@@ -7,13 +7,16 @@ node_modules/
 runs/
 voiceover-runs/
 
-# Rig output: the daemon's and the smoke's logs, results and pid file, and the
-# Provisioner's report.
+# Rig output, when the daemon or the Smoke is run from a checkout rather than
+# the rig's state directory: logs, results and the pid file.
 artifacts/
-packages/guest/provisioning/health-report.json
 
-# Written by `npm run voiceover:doctor`, and specific to this Mac.
-packages/guest/voiceover/doctor.json
+# Written by `npm run doctor` in packages/voiceover, and specific to this Mac.
+packages/voiceover/doctor.json
 
 # The guest daemon's URL and token, for driving the rig from the host.
 .env.rig
+
+# Built by `npm run build`; published, never committed.
+dist/
+*.tsbuildinfo

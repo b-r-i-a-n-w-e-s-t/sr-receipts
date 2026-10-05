@@ -19,8 +19,8 @@ session, and attaching the transcript and the environment stamp.
 
 It depends on `@sr-receipts/host` for the interface and the NVDA session, and
 imports only types from `@playwright/test`, which is a peer dependency.
-`@sr-receipts/guest` is an optional peer, loaded only when a VoiceOver project
-runs, so an NVDA-only consumer never installs Guidepup.
+`@sr-receipts/voiceover` is an optional peer, loaded only when a VoiceOver
+project runs, so an NVDA-only consumer never installs Guidepup.
 
 ## Use
 
@@ -164,8 +164,8 @@ export default defineConfig<{}, { readerOptions: ReaderOptions }>({
   so no HTML report is written and the folder keeps the previous run's.
 - **A VoiceOver test takes over the Mac's desktop**, and `playwright test`
   has to be launched from the app holding the grants in
-  [`packages/guest/voiceover/README.md`](../guest/voiceover/README.md). Run
-  `npm run voiceover:doctor` in `packages/guest` first. The VoiceOver project's
+  [`@sr-receipts/voiceover`'s README](../voiceover/README.md). Run
+  `npx sr-voiceover-doctor` in the consumer first. The VoiceOver project's
   browser is whatever Playwright launched; `readerOptions.applicationName`
   overrides the name VoiceOver activates, which defaults from the project's
   `browserName` and `channel`.
@@ -238,29 +238,35 @@ Reading what was said:
   `aria-atomic` region once per changed text node, and can pair a new node
   with a stale one.
 
-## Linking it into a consumer
-
-Until the package is published, link it without saving, so the consumer's
-`package.json` and lockfile stay untouched:
+## Installing it in a consumer
 
 ```bash
-npm install --no-save file:/path/to/sr-receipts/packages/playwright
+npm install --save-dev @sr-receipts/playwright @playwright/test@1.63.0
+npm install --save-dev @sr-receipts/voiceover    # only for a voiceover project
 ```
 
-The link is a symlink, and Playwright compiles the linked TypeScript because
-its real path is outside `node_modules`. Imports resolve from that real path
-too, so `@sr-receipts/host` and, for a VoiceOver project, `@sr-receipts/guest`
-come from this repository's workspace without being linked themselves. The
-consumer installs its own `@playwright/test`, at the guest's major.minor. If
-its lockfile pins another version, install the guest's over it in the same
-command, also without saving:
+The consumer's `@playwright/test` must share the guest's major.minor, which is
+the Runtime Manifest's Playwright version.
+
+Until the packages are published, or to try a change before it is, install
+them from tarballs without saving, so the consumer's `package.json` and
+lockfile stay untouched. In this repository:
 
 ```bash
-npm install --no-save @playwright/test@1.63.0 file:/path/to/sr-receipts/packages/playwright
+npm run build
+mkdir -p /tmp/sr-receipts
+for p in host playwright voiceover; do (cd packages/$p && npm pack --pack-destination /tmp/sr-receipts); done
 ```
 
-Any later `npm ci` or `npm install` in the consumer undoes both, so check
-`npx playwright --version` before a run.
+and in the consumer, every tarball in one command, so each finds the others:
+
+```bash
+npm install --no-save @playwright/test@1.63.0 /tmp/sr-receipts/sr-receipts-host-0.2.0.tgz \
+  /tmp/sr-receipts/sr-receipts-playwright-0.2.0.tgz /tmp/sr-receipts/sr-receipts-voiceover-0.2.0.tgz
+```
+
+Any later `npm ci` or `npm install` in the consumer undoes an unsaved
+install, so check `npx playwright --version` before a run.
 
 To keep the config, the specs and the report out of the consumer's git
 without touching its `.gitignore`, list them in its `.git/info/exclude`,
@@ -269,8 +275,8 @@ which is local to the clone.
 ## Versioning
 
 Pre-1.0 semantic versioning: a minor version may break the contract, and says
-so in [`CHANGELOG.md`](CHANGELOG.md). Private to this repository until it is
-published.
+so in [`CHANGELOG.md`](CHANGELOG.md). Released with the other three packages,
+always at the same version.
 
 ## Tests
 

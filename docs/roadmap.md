@@ -33,7 +33,7 @@ file is the working list and changes as items land.
   carried a transcript and an environment stamp on both readers. The first
   VoiceOver run under the refactored session heard nothing after entry; the
   cause was the Control press after the sentinel, now removed (see
-  `packages/guest/voiceover/session.ts`).
+  `packages/voiceover/src/session.ts`).
 
 ## Next, in order
 
@@ -53,8 +53,18 @@ file is the working list and changes as items land.
    plus carbon-svelte#382 reproducing on `/demo/96`), with the guest on the
    new daemon code. The `/demo/382` pages the other two echo specs need exist
    only in a carbon-svelte stash, so those specs were excluded.
-2. **Re-provision the rig** with the Provisioner as it now is, on a fresh
-   guest, and time it. Every developer will do this once; it is the product.
+2. **Publish 0.2.0** ([ADR 0003](adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md)).
+   Claim the `sr-receipts` org on npm, log in, and run
+   `node scripts/release.ts` from a clean, committed tree. The release was
+   proved end to end against a local registry on 2026-10-05; the first real
+   one will also show whether npmjs.org advertises the daemon's shrinkwrap,
+   which nothing depends on, since the guest installs it with `npm ci`.
+   The consuming repositories then install the packages instead of linking
+   this checkout.
+3. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
+   Every developer will do this once; it is the product. It is also the
+   first run of the Bootstrap, the upgrade path and the moved state, which
+   were written on a Mac and have only been reasoned through.
    On 2026-09-30 the existing guest turned out never to have been
    re-provisioned since the pivot: its `node_modules` dated from 2026-09-16
    and lacked `playwright-core` and the workspace links, it had the retired
@@ -64,10 +74,10 @@ file is the working list and changes as items land.
    and `-Firewall`, as `docs/operating-the-rig.md` now describes. The
    Provisioner covers the first two but does not remove Block rules, which a
    fresh guest's first dismissed "Allow access?" dialog creates.
-3. **A committed markdown receipt per failing test**, written by the fixture
+4. **A committed markdown receipt per failing test**, written by the fixture
    into the consuming repo, when a ticket needs a file rather than a report
    attachment. Deferred in ADR 0002 until a ticket asks.
-4. **A second consuming app**: a TXST app other than carbon-svelte. This is
+5. **A second consuming app**: a TXST app other than carbon-svelte. This is
    what shows the setup cost to someone who did not build it.
 
 ## Research, after that
@@ -111,12 +121,6 @@ file is the working list and changes as items land.
   The candidate fix is for `NvdaDesktop` to end NVDA itself after a timeout
   rather than wait on Guidepup's quit. Also a Guidepup issue, under the same
   rule as the others.
-- **`undici` wants a newer Node than the guest pins.** `@guidepup/setup`
-  0.25.3 pulls in `undici` 8.10.2, which requires Node 22.19 or later, and
-  the Runtime Manifest pins 22.18.0. `npm ci` warns (`EBADENGINE`) and
-  succeeds; the daemon does not load it, but the Provisioner's Guidepup setup
-  stage does. Raise the pin, or hold `@guidepup/setup`, before the next
-  provisioning run relies on it.
 - **A possible upstream NVDA issue**: an ARIA combo box whose input carries
   `aria-activedescendant` loses typed-character echo under "Only in edit
   controls". Same rule as the Guidepup issues; the two

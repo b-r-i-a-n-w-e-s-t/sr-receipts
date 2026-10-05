@@ -1,0 +1,12 @@
+{
+  // Builds this package's dist/: what a consumer's node_modules loads.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [{ "path": "../host" }, { "path": "../voiceover" }]
+}

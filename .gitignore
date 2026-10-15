@@ -1,12 +1,6 @@
 # Dependencies
 node_modules/
 
-# Output of the retired runners and the VoiceOver spike. Nothing writes here
-# now; the directories are kept ignored because local copies still hold
-# evidence from past investigations.
-runs/
-voiceover-runs/
-
 # Rig output, when the daemon or the Smoke is run from a checkout rather than
 # the rig's state directory: logs, results and the pid file.
 artifacts/

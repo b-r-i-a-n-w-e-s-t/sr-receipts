@@ -121,6 +121,23 @@ test("a failing test still stops the reader and gets its receipt, and the failur
   assert.ok(attached.environment);
 });
 
+test("a reader that never starts still leaves its receipt, with every start attempt, and the failure is the start's", async () => {
+  const calls: string[] = [];
+  const transcript = ["start VoiceOver (attempt 1): -600", "start VoiceOver (attempt 2): -600"];
+  const session = fakeSession(calls, {
+    transcript,
+    start: async () => {
+      calls.push("start");
+      throw new Error("VoiceOver cannot be started");
+    },
+  });
+  const { done, attached } = run(session, calls);
+  await assert.rejects(done, /VoiceOver cannot be started/);
+  assert.deepEqual(calls, ["create", "start", "stop"]);
+  assert.equal(attached["reader-transcript"], transcript.join("\n"));
+  assert.ok(attached.environment);
+});
+
 test("a stamp that cannot be read is attached as unavailable rather than failing the test", async () => {
   const calls: string[] = [];
   const session = fakeSession(calls, {

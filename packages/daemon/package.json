@@ -3,6 +3,15 @@
   "version": "0.2.1",
   "description": "The Windows Guest Rig's daemon: NVDA and headed Edge behind an authenticated port, the guards that prove a test reached the page, the Smoke, and the Provisioner.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts.git",
+    "directory": "packages/daemon"
+  },
+  "homepage": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/tree/main/packages/daemon#readme",
+  "bugs": {
+    "url": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/issues"
+  },
   "type": "module",
   "files": [
     "dist",

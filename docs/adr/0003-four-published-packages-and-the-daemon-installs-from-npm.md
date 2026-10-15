@@ -118,5 +118,7 @@ scripts to get one function.
   directory it is run in, and the Provisioner now works in the state
   directory. With that fixed and delivered as a packed tarball, the tasks,
   the daemon and the Smoke passed, and carbon-svelte's NVDA specs ran from
-  the published packages against it. The fix is not in 0.2.0.
+  the published packages against it. The fix is in 0.2.1, which the guest
+  was then bootstrapped to from npm with a healthy report, shrinkwrap and
+  all; 0.2.0 cannot provision a guest.
 - **"Guest" stops naming a package.** `CONTEXT.md` changes with the rename.

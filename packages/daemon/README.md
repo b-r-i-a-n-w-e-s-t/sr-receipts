@@ -2,9 +2,9 @@
 
 The Windows Guest Rig's half of sr-receipts: NVDA with headed Edge on the
 guest's own interactive desktop, behind an authenticated port, and the record
-of what it said. The Mac's half, [`@sr-receipts/host`](../host/README.md),
+of what it said. The Mac's half, [`@sr-receipts/host`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/host/README.md),
 reaches this package's daemon. VoiceOver is not here: it runs in process on
-the Mac, from [`@sr-receipts/voiceover`](../voiceover/README.md).
+the Mac, from [`@sr-receipts/voiceover`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/voiceover/README.md).
 
 The guest gets this package from npm through the Bootstrap, never from a
 checkout; see [`provisioning/README.md`](provisioning/README.md).
@@ -12,10 +12,10 @@ checkout; see [`provisioning/README.md`](provisioning/README.md).
 This README is about how the rig works and why. For the rest:
 
 - what sr-receipts is for, and how a test flows through it:
-  [the repository README](../../README.md)
+  [the repository README](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/README.md)
 - setting up, running and pointing tests at the Windows Guest Rig:
-  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md)
-- writing the tests: [`@sr-receipts/playwright`](../playwright/README.md)
+  [`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md)
+- writing the tests: [`@sr-receipts/playwright`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/playwright/README.md)
 
 On the guest, commands below run from the installed package,
 `%LOCALAPPDATA%\nvda-rig\daemon`. In this repository, `npm test` here needs
@@ -30,9 +30,10 @@ Guidepup's own Playwright fixtures were not enough (ADR 0002).
    session has no interactive desktop, so NVDA has no foreground window to
    describe. `nvda-daemon` is a scheduled task registered with an interactive
    logon so it lands in the logged-in console session (see
-   `tasks/register.ps1`); the Smoke is a client of it, so it needs no task. The same is why the browser's window can only
-   be activated, and the desktop's windows only listed, by the daemon: a
-   PowerShell over SSH sees no window titles at all.
+   `tasks/register.ps1`); the Smoke is a client of it, so it needs no task.
+   The same is why the browser's window can only be activated, and the
+   desktop's windows only listed, by the daemon: a PowerShell over SSH sees
+   no window titles at all.
 
 2. **The browser has to be activated, and an elevated window blocks it.**
    SetForegroundWindow is refused from a background process unless it has

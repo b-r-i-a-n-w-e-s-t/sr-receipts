@@ -8,6 +8,14 @@ break the contract.
 - **`reader.type(text, { delay })`**, through `@sr-receipts/host`: what the
   reader says while a text is typed at a set pace. See the README's session
   list.
+- **Fixed: a reader that never started left no receipt.** The fixture
+  started the session before the `try` that attaches the transcript and the
+  environment stamp, so a failed start attached neither, and the record of
+  every start attempt was lost with them. A failed start now leaves both.
+- **Ships the `sr-receipts` agent skill** in `skills/`: the method for
+  settling a screen reader question with receipts, and a recording spec to
+  start from. `npx skills add ./node_modules/@sr-receipts/playwright`
+  installs it; see the README.
 
 ## 0.2.1
 
@@ -15,7 +23,7 @@ break the contract.
 
 ## 0.2.0
 
-Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
+Packaged for npm with the other three packages, [ADR 0003](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 
 - **Ships built JavaScript and declarations** in `dist/`, which `exports`
   points at, because Node will not strip types under `node_modules`. MIT.
@@ -24,7 +32,7 @@ Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-f
   missing one names it. The fixture's declarations no longer reference the
   peer's types, so an NVDA-only consumer typechecks without it installed.
 
-The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
+The pivot to `page`, [ADR 0002](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
 - **Breaking:** `receiptsFixtures` and the `receipts` fixture are replaced by
   `readerFixtures` and the `reader` fixture: a `ReaderSession` beside

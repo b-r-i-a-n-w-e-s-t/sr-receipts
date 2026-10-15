@@ -6,9 +6,9 @@ Safari. Deliberately narrow: **macOS 26.6.x**, the **bundled VoiceOver**,
 English, and **`@guidepup/guidepup` 0.34.0**.
 
 Two things live here: the doctor, a read-only check of the prerequisites, and
-the session itself, [`src/session.ts`](src/session.ts), with the launch retry,
+the session itself, [`src/session.ts`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/voiceover/src/session.ts), with the launch retry,
 the sentinel and the hints settled inside it, the Item Chooser walk in
-[`src/entry.ts`](src/entry.ts), and the permission probe. A VoiceOver test
+[`src/entry.ts`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/voiceover/src/entry.ts), and the permission probe. A VoiceOver test
 needs the authorization below, and takes over the Mac while it runs.
 
 A consumer installs this package beside `@sr-receipts/playwright`, which loads
@@ -44,7 +44,7 @@ Do these actions manually, while signed in to the interactive Mac desktop:
    Quit and reopen that application after changing Full Disk Access.
 6. Keep the system language list containing English and use the bundled
    VoiceOver. Do not run this against a manually installed replacement.
-7. Download the asset matched to this repository's Guidepup version:
+7. Download the asset matched to this package's Guidepup version:
 
    ```bash
    npx @guidepup/setup install voiceover
@@ -73,8 +73,8 @@ npm run doctor             # here
 
 Read-only: platform, macOS version, the bundled VoiceOver, Guidepup and its
 asset, access to VoiceOver's preferences, AppleScript control, and the
-language. It writes `doctor.json` in the directory it was run from. It cannot see Accessibility or
-Automation; the session probes those itself, with a lone Control press,
+language. It writes `doctor.json` in the directory it was run from. It
+cannot see Accessibility or Automation; the session probes those itself, with a lone Control press,
 before starting the reader.
 
 ## What a run does, and why

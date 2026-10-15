@@ -129,10 +129,13 @@ export function readerFixture(create: typeof createSession = createSession) {
       throw new Error("this project has no readerOptions: set use.readerOptions in its Playwright config");
     }
     const session = await create(readerOptions, { browserName, channel });
-    await session.start();
     try {
+      // Inside the `try`: a start that fails has recorded every attempt and
+      // its cause, and that record is the receipt a failed start leaves.
+      await session.start();
       await use(session);
     } finally {
+      // Never throws, so it cannot mask the error that brought us here.
       await session.stop();
       // The durable record: what was asked, what was said, and what produced
       // it. Attached whatever the outcome, and kept by Playwright on failure.

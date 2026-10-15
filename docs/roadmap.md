@@ -35,6 +35,15 @@ file is the working list and changes as items land.
   cause was the Control press after the sentinel, now removed (see
   `packages/voiceover/src/session.ts`).
 
+- **A real issue, on both readers** (2026-09-29). carbon-svelte#393's specs
+  found NVDA speaking a stray "dot" and a stale status, and both readers
+  passed after the component changed. carbon-svelte's receipts config and
+  specs stay in the maintainer's clone, out of that repository's history.
+- **0.2.1 on npm and on both ends** (2026-10-05). carbon-svelte ran from
+  the published packages, installed without saving: NVDA 3 of 3 plus
+  carbon-svelte#382 reproducing on `/demo/96`, against the guest bootstrapped
+  from npm; VoiceOver 4 of 4 on 0.2.0, whose VoiceOver package differs from
+  0.2.1 only in its manifest.
 - **0.2.0 on npm** (2026-10-05, [ADR 0003](adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md)).
   `@sr-receipts/host`, `voiceover`, `playwright` and `daemon`, public, from
   `node scripts/release.ts`. The daemon's tarball carries its
@@ -44,32 +53,33 @@ file is the working list and changes as items land.
   `0.0.0-stage` placeholder version, so the release now waits for each
   package before publishing the next.
 
+- **Unreleased, for 0.3.0.** `reader.type`, typing at a set pace inside one
+  speech window, at wire protocol 2. The fixture attaches the receipt when a
+  reader never starts: on 2026-10-05 two VoiceOver tests failed with
+  "VoiceOver cannot be started" and their reports showed only the error, not
+  the five attempts behind it. The `sr-receipts` agent skill ships in
+  `@sr-receipts/playwright`, installed with `npx skills`.
+
 ## Next, in order
 
-1. **carbon-svelte's receipts** on a real issue: reproduce it on both
-   readers, try a fix, and cite the transcript in the ticket. On 2026-09-29,
-   carbon-svelte#393 went through the first two: the specs found NVDA
-   speaking a stray "dot" and a stale status, and both readers passed after
-   the component changed. No transcript has been cited in a ticket yet. The
-   consumer's config and specs are untracked in that repository and hidden by
-   its `.git/info/exclude`; they run with `npx playwright test --config
-   playwright.receipts.config.ts`, as its `package.json` has no script for
-   them. Its lockfile still pins `@playwright/test` 1.62.1, with 1.63.0
-   installed over it without saving; the client must share the guest's
-   major.minor, so that is settled before any of it is committed. On
-   2026-09-30, after the Reader Session was built once in the host for both
-   readers, the specs passed on both readers (VoiceOver 4 of 4; NVDA 3 of 3
-   plus carbon-svelte#382 reproducing on `/demo/96`), with the guest on the
-   new daemon code. The `/demo/382` pages the other two echo specs need exist
-   only in a carbon-svelte stash, so those specs were excluded.
+1. **Ready the repository to go public**, before 0.3.0 is released:
+   - **`reader.type` on a real VoiceOver.** It has run on NVDA only. The
+     VoiceOver adapter hands Guidepup the text, which VoiceOver types in one
+     keystroke command; nothing has heard it yet.
+   - **Rename the GitHub repository to `sr-receipts`.** The packages'
+     `repository` fields, their READMEs' links outside the package, and the
+     skill already point there, and 404 until the rename.
+   - **CI.** `npm test` needs no reader, so it runs on a stock Linux runner.
+   - **0.3.0**, then the guest Bootstrapped to it: wire protocol 2 means a
+     0.3.0 host refuses a 0.2.x daemon, and the reverse.
 2. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
    Every developer will do this once; it is the product. The existing guest
    went through the Bootstrap on 2026-10-05 (see ADR 0003's consequences):
-   0.2.0 fails at the Provisioner's Guidepup stage, so the fix needs a
-   release before a fresh guest can be provisioned from npm, and the guest is
-   on a packed tarball until then. jsDelivr did not serve
-   `provisioning/bootstrap.ps1` in the first minutes after the publish; the
-   script was taken from the registry's tarball instead.
+   0.2.0 fails at the Provisioner's Guidepup stage, 0.2.1 fixes it, and the
+   guest is on 0.2.1 from npm with a healthy report. What is left is a guest
+   that has never held a rig, and the timing. jsDelivr did not serve
+   `provisioning/bootstrap.ps1` in the first minutes after 0.2.0's publish;
+   the script was taken from the registry's tarball instead.
    On 2026-09-30 the existing guest turned out never to have been
    re-provisioned since the pivot: its `node_modules` dated from 2026-09-16
    and lacked `playwright-core` and the workspace links, it had the retired

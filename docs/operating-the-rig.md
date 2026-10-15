@@ -151,8 +151,8 @@ NVDA through the daemon's routes, opens `fixtures/control.html` in the
 daemon's browser server, runs the Focus Guard and four commands through the
 same `ReaderSession` a test on the Mac has, and stops. It needs `RIG_TOKEN`,
 which `tasks\register.ps1` set for the user. The transcript is written to
-`artifacts\smoke-transcript.txt` in the directory it is run from, and the last line printed is its result as
-JSON. A daemon started over SSH answers every route and hears nothing, so the
+`artifacts\smoke-transcript.txt` in the directory it is run from, and the
+last line printed is its result as JSON. A daemon started over SSH answers every route and hears nothing, so the
 Smoke failing on its guard is the posture check.
 
 ## Upgrading the guest
@@ -229,7 +229,7 @@ problem with the page if you do not know it:
 | `browse mode could not be proved` | The page has no table, heading or landmark for the default probes; pass `modeProbes` to `enter`. |
 | `the guest daemon ... is not reachable` | The VM is not booted or signed in, the daemon task is not running, or the ports are closed. |
 | `/health` answers 403, `token not accepted` | The consumer's token is stale: `register.ps1` generates a new one when none is stored for the user. Read the stored one on the guest with `[Environment]::GetEnvironmentVariable('RIG_TOKEN','User')`, and update both `RIG_TOKEN` and `RIG_BROWSER` in `.env.rig`, since the browser endpoint's path is the token. |
-| The daemon's ports are `LISTENING` in `netstat` on the guest, but closed from the Mac | Inbound Block rules named `node.exe`, left by a dismissed "Allow access?" dialog. See step 4 of first-time setup. |
+| The daemon's ports are `LISTENING` in `netstat` on the guest, but closed from the Mac | Inbound Block rules named `node.exe`, left by a dismissed "Allow access?" dialog. See step 3 of first-time setup. |
 | `artifacts\daemon.out` ends with `ERR_MODULE_NOT_FOUND` | The daemon's dependencies are missing or partial. Run the Bootstrap again for the same version; see "Upgrading the guest". |
 | `the guest daemon ... speaks wire protocol N, and this host speaks M` | The Mac's packages and the guest's daemon are from releases with different wire protocols. Upgrade the older side: the Bootstrap on the guest, npm on the Mac. A daemon from before protocol versions reports `none`. |
 | `Test timeout ... while setting up "reader"`, then `fetch failed` with `HeadersTimeoutError` about five minutes in, and `/health` never answers although the ports accept connections | NVDA did not quit. Guidepup runs `nvda.exe --quit` synchronously with no timeout, in both start and stop, so one stuck quit freezes every route. Confirm over SSH: the daemon's node process has a `cmd.exe` child running `nvda.exe --quit`. End NVDA and that `cmd.exe`, then restart the daemon task. On 2026-09-30 the whole VM froze with it and had to be restarted. |

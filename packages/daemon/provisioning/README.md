@@ -66,13 +66,13 @@ provisioning PowerShell process's.
 ## Runtime stages
 
 Each manifest component is a named stage (`architecture`, `node`, `edge`,
-`packages`, `guidepup-nvda`, `tasks`, `daemon`), and every outcome is recorded in the
-report's `runtime` list. A stage's detail is read back off the machine, not
+`packages`, `guidepup-nvda`, `tasks`, `daemon`), and every outcome is
+recorded in the report's `runtime` list. A stage's detail is read back off the machine, not
 claimed: the installed Node version, the Edge version Windows ships, the
 `@guidepup/guidepup` and `playwright-core` versions Node resolves from the
 daemon package, the NVDA asset Guidepup unpacked into its cache, and the
-scheduled tasks Windows now holds with their run level. A failed stage records its error, skips the remaining stages, and
-skips the NVDA proof, because there is no runtime left to prove; the report
+scheduled tasks Windows now holds with their run level. A failed stage
+records its error, skips the remaining stages, and skips the NVDA proof, because there is no runtime left to prove; the report
 still names the stage that failed, so a dependency failure is never confused
 with a desktop, network, or speech-capture failure.
 
@@ -112,8 +112,8 @@ release and so can be newer than the repository's lockfile.
 ## Evidence and optional network diagnosis
 
 With the runtime installed and the daemon restarted, provisioning always
-runs the Smoke (`src/smoke.ts`) as a client of that daemon: it starts NVDA through the
-daemon's routes, opens `fixtures/control.html` in the daemon's browser
+runs the Smoke (`src/smoke.ts`) as a client of that daemon: it starts NVDA
+through the daemon's routes, opens `fixtures/control.html` in the daemon's browser
 server, runs the Focus Guard and asks real NVDA four commands through the
 same `ReaderSession` a test uses, and stops. The reporter reads the
 `SmokeResult` (`src/lib/smoke-result.ts`) from the last line the Smoke

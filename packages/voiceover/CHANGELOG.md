@@ -17,7 +17,7 @@ break the contract.
 
 ## 0.2.0
 
-Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
+Packaged for npm with the other three packages, [ADR 0003](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 
 - **New package,** carved out of `@sr-receipts/guest` (now
   `@sr-receipts/daemon`), whose changelog holds this code's history up to

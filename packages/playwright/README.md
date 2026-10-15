@@ -9,92 +9,44 @@ reached through Playwright's own `connectOptions`. The reader comes from the
 fixture: VoiceOver in process, NVDA through the guest daemon. Both are the
 same `ReaderSession`, so a spec never says which one it has. Why, and what was
 given up for it, is in
-[ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
+[ADR 0002](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
-## Ownership
+## Installing it in a consumer
 
-This package owns `withReader` and `readerFixtures`, the `reader` fixture and
-its `readerOptions`, the speech matchers, and what happens around a test: starting and stopping the
-session, and attaching the transcript and the environment stamp.
-
-It depends on `@sr-receipts/host` for the interface and the NVDA session, and
-imports only types from `@playwright/test`, which is a peer dependency.
-`@sr-receipts/voiceover` is an optional peer, loaded only when a VoiceOver
-project runs, so an NVDA-only consumer never installs Guidepup.
-
-## Use
-
-Pass the consumer's own `test` to `withReader`. The package takes it as an
-argument rather than exporting a `test`, because a linked package would
-otherwise load a second copy of Playwright, which Playwright refuses to run
-with. `withReader` also names the fixture types for the type checker:
-Playwright's `extend` cannot infer them, so `base.extend(readerFixtures)`
-runs but leaves `reader` untyped. `readerFixtures` stays exported for a
-consumer composing its own fixtures, with the type arguments written out.
-
-```ts
-// receipts/columnlist-selection.spec.ts
-import { test as base, expect as baseExpect } from '@playwright/test'
-import { readerMatchers, withReader } from '@sr-receipts/playwright'
-
-const test = withReader(base)
-const expect = baseExpect.extend(readerMatchers)
-
-test('selecting a row through the page is announced', async ({ page, reader }) => {
-  await page.goto('/demo/columnlist')
-  const firstRow = page.locator('input[type="checkbox"][id*="-select-"]:not([id$="-select-all"])').first()
-  await firstRow.waitFor()
-  await reader.enter(page)
-
-  // Carbon's label covers the checkbox, so click the label, as a mouse user does.
-  const selected = await reader.capture(async () => {
-    await page.locator(`label[for="${await firstRow.getAttribute('id')}"]`).click()
-    await expect(firstRow).toBeChecked()
-  })
-  expect.soft(selected).toAnnounce('1 row selected.')
-  expect.soft(selected).toAnnounceCleanly()
-
-  // Neither reader follows a click, but both follow page focus.
-  await reader.capture(() => firstRow.focus())
-  expect.soft(await reader.next()).toAnnounce('column 2')
-})
+```bash
+npm install --save-dev @sr-receipts/playwright @playwright/test@1.63
+npm install --save-dev @sr-receipts/voiceover    # only for a voiceover project
 ```
 
-The matchers take a `capture`'s result or a spoken string:
+The consumer's `@playwright/test` must share the guest's major.minor, which is
+the Runtime Manifest's Playwright version. An NVDA project also needs a
+Windows Guest Rig on the same release of sr-receipts; see
+[`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md). A VoiceOver
+project needs the macOS grants in
+[`@sr-receipts/voiceover`'s README](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/voiceover/README.md).
 
-- **`toAnnounce(text)`** passes when the reader said the text. It matches
-  literally, so a period needs no escaping; case-insensitively; across
-  whatever whitespace the reader put between words; and never inside a longer
-  word or number, so `'1 row selected'` does not match `21 rows selected`.
-  A RegExp is used as it is, for what text cannot say.
-- **`toAnnounceCleanly()`** fails on punctuation a listener hears as noise: a
-  symbol read as a word ("dot", "period", "ellipsis"), an ellipsis, or a
-  period standing alone between words. NVDA's `. ` between utterances is not
-  noise.
+### The agent skill
 
-Extend `expect` in the consumer, as with `test`, so only one Playwright is
-loaded.
+This package ships `sr-receipts`, an [agent skill](https://agentskills.io)
+that teaches a coding agent the method for settling a screen reader question
+with receipts: variants and a control, one test before the matrix, repeated
+runs before a finding is reported, and the gotchas of reading speech. Install
+it from the package, so the skill always matches the API beside it:
 
-Move the reader with `locator.focus()` inside a `capture`, not with a click.
-Use `expect.soft` for a test with several findings, so the first one does not
-hide the rest.
-
-Check that the page loaded before entering it. A missing route does not fail
-fast: the reader's entry succeeds on a 404 page, which has content like any
-other, and the next locator then waits out the whole test timeout. One line
-turns four minutes into a clear failure:
-
-```ts
-expect((await page.goto('/demo/columnlist'))?.ok()).toBe(true)
+```bash
+npx skills add ./node_modules/@sr-receipts/playwright -a claude-code
 ```
 
-`--grep` and `--grep-invert` match test titles, not what a test does, so a
-path or issue number that appears only inside the test body selects nothing.
-Put what you will want to filter on in the title, and check a filter with
-`--list` before a long run.
+That copies it into the project's `.claude/skills/`; add `-g` for every
+project, or drop `-a` to choose among the agents the
+[`skills`](https://github.com/vercel-labs/skills) CLI supports. Run it again
+after upgrading this package.
 
-Give it a config of its own, so the repo's ordinary `playwright test` never
-asks for a reader, and a test directory the ordinary config does not match:
+## Configuring it
+
+Give the receipts a config of their own, so the repo's ordinary `playwright
+test` never asks for a reader, and a test directory the ordinary config does
+not match:
 
 ```ts
 // playwright.receipts.config.ts
@@ -145,30 +97,81 @@ export default defineConfig<{}, { readerOptions: ReaderOptions }>({
 - **`workers: 1` and `retries: 0` are required.** One reader holds one
   desktop. A retry that turns a finding green destroys the evidence.
 - **`headless: false`.** A screen reader needs a window to read.
+- **`timeout`** is the consumer's to set. An NVDA entry costs about 28
+  seconds, a VoiceOver entry 15 to 25, a captured page action 1.5 seconds on
+  NVDA and 5 on VoiceOver; 240 seconds covers a test of a dozen steps.
 - **`baseURL` is wherever the reader's browser reaches the app.** For NVDA
   that is the Mac as the guest sees it, and the dev server has to listen on
-  that interface (`vite dev --host 0.0.0.0`), not only on `localhost`. For
-  VoiceOver the browser runs on the Mac, so it is `localhost`.
+  that interface (`--host 0.0.0.0` for Vite, or your server's equivalent),
+  not only on `localhost`. For VoiceOver the browser runs on the Mac, so it
+  is `localhost`.
 - **`RIG_URL`, `RIG_BROWSER` and `RIG_TOKEN`** are the guest daemon's, for the
   NVDA project only; see
-  [`docs/operating-the-rig.md`](../../docs/operating-the-rig.md). The config
+  [`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md). The config
   above reads them from `.env.rig`; sourcing that file in the shell works too.
-  The consumer's `@playwright/test` must share the guest's Playwright
-  major.minor, or `connect` refuses. The guest's version is in `/health`'s
-  environment stamp.
 - **`webServer` listens on every interface** for the NVDA project's sake, and
   `reuseExistingServer` lets a dev server you already started serve both
   projects.
 - **`reporter` writes its own report folder**, apart from the ordinary
   config's. Passing `--reporter` on the command line replaces both reporters,
   so no HTML report is written and the folder keeps the previous run's.
-- **A VoiceOver test takes over the Mac's desktop**, and `playwright test`
-  has to be launched from the app holding the grants in
-  [`@sr-receipts/voiceover`'s README](../voiceover/README.md). Run
-  `npx sr-voiceover-doctor` in the consumer first. The VoiceOver project's
-  browser is whatever Playwright launched; `readerOptions.applicationName`
-  overrides the name VoiceOver activates, which defaults from the project's
-  `browserName` and `channel`.
+- **The VoiceOver project's browser is whatever Playwright launched.**
+  `readerOptions.applicationName` overrides the name VoiceOver activates,
+  which defaults from the project's `browserName` and `channel`.
+
+To try receipts in a repo without committing them, list the config, the test
+directory and the report folder in its `.git/info/exclude`, which is local to
+the clone and leaves `.gitignore` alone.
+
+## Writing a test
+
+Pass the consumer's own `test` to `withReader`, and extend the consumer's own
+`expect` with `readerMatchers`. A linked or duplicated package would otherwise
+load a second copy of Playwright, which Playwright refuses to run with.
+
+```ts
+// receipts/row-selection.spec.ts
+import { test as base, expect as baseExpect } from '@playwright/test'
+import { readerMatchers, withReader } from '@sr-receipts/playwright'
+
+const test = withReader(base)
+const expect = baseExpect.extend(readerMatchers)
+
+test('selecting a row through the page is announced', async ({ page, reader }) => {
+  expect((await page.goto('/orders'))?.ok()).toBe(true)
+  await reader.enter(page)
+
+  const checkbox = page.getByRole('checkbox', { name: 'Select row' }).first()
+  const selected = await reader.capture(() => checkbox.check())
+  expect.soft(selected).toAnnounce('1 row selected')
+  expect.soft(selected).toAnnounceCleanly()
+
+  // Neither reader follows a click, but both follow page focus.
+  await reader.capture(() => checkbox.focus())
+  expect.soft(await reader.next()).toAnnounce('column 2')
+})
+```
+
+Run it with `npx playwright test --config playwright.receipts.config.ts`,
+adding `--project nvda` or `--project voiceover` for one reader. A VoiceOver
+test takes over the Mac's keyboard and speech while it runs, and has to be
+launched from the app holding the grants; run `npx sr-voiceover-doctor`
+first.
+
+- **Check that the page loaded before entering it.** The reader's entry
+  succeeds on a 404 page, which has content like any other, and the next
+  locator then waits out the whole test timeout. The `ok()` line above turns
+  four minutes into a clear failure.
+- **Move the reader with `locator.focus()` inside a `capture`**, not with a
+  click.
+- **Use `expect.soft`** for a test with several findings, so the first one
+  does not hide the rest.
+- **Put what you will filter on in the title.** `--grep` and `--grep-invert`
+  match test titles, not what a test does, so a path or issue number that
+  appears only inside the test body selects nothing. Check a filter with
+  `--list` before a long run.
+
+### The reader
 
 The `reader` fixture starts a fresh reader for each test and stops it after.
 What it offers:
@@ -199,11 +202,25 @@ What it offers:
 - **`transcript`** is every call and its answer. The fixture attaches it to
   the test as `reader-transcript`, with the environment stamp as
   `environment`, whatever the outcome, so a passing test in the HTML report
-  carries them too.
+  carries them too, and so does a test whose reader never started.
 
-A test's timeout is the consumer's to set. An NVDA entry costs about 28
-seconds, a VoiceOver entry 15 to 25, a captured page action 1.5 seconds on
-NVDA and 5 on VoiceOver; 240 seconds covers a test of a dozen steps.
+Keys a reader must hear go through the reader. `page.keyboard` injects into
+the browser below the operating system's input queue, so NVDA neither echoes
+nor intercepts those keys.
+
+### The matchers
+
+The matchers take a `capture`'s result or a spoken string:
+
+- **`toAnnounce(text)`** passes when the reader said the text. It matches
+  literally, so a period needs no escaping; case-insensitively; across
+  whatever whitespace the reader put between words; and never inside a longer
+  word or number, so `'1 row selected'` does not match `21 rows selected`.
+  A RegExp is used as it is, for what text cannot say.
+- **`toAnnounceCleanly()`** fails on punctuation a listener hears as noise: a
+  symbol read as a word ("dot", "period", "ellipsis"), an ellipsis, or a
+  period standing alone between words. NVDA's `. ` between utterances is not
+  noise.
 
 ## Reading a receipt
 
@@ -248,19 +265,30 @@ Reading what was said:
   `aria-atomic` region once per changed text node, and can pair a new node
   with a stale one.
 
-## Installing it in a consumer
+## Ownership
 
-```bash
-npm install --save-dev @sr-receipts/playwright @playwright/test@1.63.0
-npm install --save-dev @sr-receipts/voiceover    # only for a voiceover project
-```
+This package owns `withReader` and `readerFixtures`, the `reader` fixture and
+its `readerOptions`, the speech matchers, the agent skill, and what happens
+around a test: starting and stopping the session, and attaching the
+transcript and the environment stamp.
 
-The consumer's `@playwright/test` must share the guest's major.minor, which is
-the Runtime Manifest's Playwright version.
+It depends on `@sr-receipts/host` for the interface and the NVDA session, and
+imports only types from `@playwright/test`, which is a peer dependency.
+`@sr-receipts/voiceover` is an optional peer, loaded only when a VoiceOver
+project runs, so an NVDA-only consumer never installs Guidepup.
 
-Until the packages are published, or to try a change before it is, install
-them from tarballs without saving, so the consumer's `package.json` and
-lockfile stay untouched. In this repository:
+`withReader` takes the consumer's `test` as an argument rather than this
+package exporting one, so only the consumer's Playwright is loaded. It also
+names the fixture types for the type checker: Playwright's `extend` cannot
+infer them, so `base.extend(readerFixtures)` runs but leaves `reader`
+untyped. `readerFixtures` stays exported for a consumer composing its own
+fixtures, with the type arguments written out.
+
+## Trying an unreleased change
+
+To run a consumer against this repository's working tree, install tarballs
+without saving, so the consumer's `package.json` and lockfile stay untouched.
+In this repository:
 
 ```bash
 npm run build
@@ -271,16 +299,13 @@ for p in host playwright voiceover; do (cd packages/$p && npm pack --pack-destin
 and in the consumer, every tarball in one command, so each finds the others:
 
 ```bash
-npm install --no-save @playwright/test@1.63.0 /tmp/sr-receipts/sr-receipts-host-0.2.1.tgz \
-  /tmp/sr-receipts/sr-receipts-playwright-0.2.1.tgz /tmp/sr-receipts/sr-receipts-voiceover-0.2.1.tgz
+npm install --no-save @playwright/test@1.63 /tmp/sr-receipts/sr-receipts-*.tgz
 ```
 
 Any later `npm ci` or `npm install` in the consumer undoes an unsaved
-install, so check `npx playwright --version` before a run.
-
-To keep the config, the specs and the report out of the consumer's git
-without touching its `.gitignore`, list them in its `.git/info/exclude`,
-which is local to the clone.
+install, so check `npx playwright --version` before a run. An NVDA project
+also needs the guest on the same change; see "Upgrading the guest" in
+[`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md).
 
 ## Versioning
 
@@ -296,4 +321,5 @@ npm test
 
 What the fixture decides before a reader starts is tested here without
 Playwright or a reader. The fixture against a real reader is run from a
-consumer.
+consumer. The skill's spec template is typechecked by the repository's
+`npm test`.

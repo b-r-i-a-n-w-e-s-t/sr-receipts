@@ -21,7 +21,7 @@ the contract.
 
 ## 0.2.0
 
-Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
+Packaged for npm with the other three packages, [ADR 0003](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 
 - **Ships built JavaScript and declarations** in `dist/`, which `exports`
   points at, because Node will not strip types under `node_modules`. MIT.
@@ -30,7 +30,7 @@ Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-f
   `protocol`, and `createNvdaSession`'s `start` refuses a daemon reporting
   another, or none, naming both, before the reader starts.
 
-The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
+The pivot to `page`, [ADR 0002](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 
 - **Breaking:** the protocol is a reader session, not runs. `src/protocol.ts`
   defines `ReaderSession`, the one interface a test uses for either reader,

@@ -3,6 +3,15 @@
   "version": "0.2.1",
   "description": "The Mac-facing half of sr-receipts: the reader interface a test uses, the wire to a guest daemon, and NVDA as a session over it.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts.git",
+    "directory": "packages/host"
+  },
+  "homepage": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/tree/main/packages/host#readme",
+  "bugs": {
+    "url": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/issues"
+  },
   "type": "module",
   "exports": {
     ".": {

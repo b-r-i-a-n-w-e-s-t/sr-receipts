@@ -3,6 +3,15 @@
   "version": "0.2.1",
   "description": "A reader fixture for Playwright Test: drive a real screen reader beside page from a consuming repo's own tests.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts.git",
+    "directory": "packages/playwright"
+  },
+  "homepage": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/tree/main/packages/playwright#readme",
+  "bugs": {
+    "url": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/issues"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -12,6 +21,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "CHANGELOG.md"
   ],
   "engines": {

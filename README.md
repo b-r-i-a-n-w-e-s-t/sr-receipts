@@ -54,10 +54,12 @@ from the fixture, and never says which reader it has:
 
 ```ts
 test('selecting a row is announced', async ({ page, reader }) => {
-  await page.goto('/demo/columnlist')
+  await page.goto('/orders')
   await reader.enter(page)
-  const { spoken } = await reader.capture(() => page.getByLabel('select row').first().click())
+  const checkbox = page.getByRole('checkbox', { name: 'Select row' }).first()
+  const { spoken } = await reader.capture(() => checkbox.check())
   expect(spoken).toMatch(/1 row selected/)
+  await reader.capture(() => checkbox.focus())
   expect(await reader.next()).toMatch(/column 2/)
 })
 ```
@@ -72,12 +74,8 @@ Four packages:
 | [`@sr-receipts/daemon`](packages/daemon/README.md) | The daemon that serves NVDA and launches the browser server, the guards, the Smoke, the Bootstrap and the Provisioner for the Windows Guest Rig | The guest |
 
 The daemon and VoiceOver depend on the host for the protocol, never the other
-way round. All four are released publicly under the MIT license, at one
-version, together, by `scripts/release.ts`; none has been published yet.
-Until then a consumer installs them from tarballs, as
-[`packages/playwright/README.md`](packages/playwright/README.md#installing-it-in-a-consumer)
-describes. Why it is shaped this
-way is in
+way round. All four are published on npm under the MIT license, at one
+version, together, by `scripts/release.ts`. Why it is shaped this way is in
 [ADR 0002](docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md)
 and, for the packaging,
 [ADR 0003](docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
@@ -112,12 +110,17 @@ and, for the packaging,
   application holding the macOS grants in
   [`packages/voiceover/README.md`](packages/voiceover/README.md),
   and it takes over the Mac while it runs.
+- **From a coding agent.** `@sr-receipts/playwright` ships an agent skill,
+  `sr-receipts`, with the method for settling a screen reader question with
+  receipts. See
+  [The agent skill](packages/playwright/README.md#the-agent-skill).
 
 ## Where to read next
 
 | To | Read |
 |---|---|
 | Drive a reader from a consuming repo's Playwright tests | [`packages/playwright/README.md`](packages/playwright/README.md) |
+| Give a coding agent the method | [`packages/playwright/README.md#the-agent-skill`](packages/playwright/README.md#the-agent-skill) |
 | See and read a receipt | [`packages/playwright/README.md#reading-a-receipt`](packages/playwright/README.md#reading-a-receipt) |
 | Set up and run the Windows Guest Rig | [`docs/operating-the-rig.md`](docs/operating-the-rig.md) |
 | Run VoiceOver on a Mac, and what is known about capturing it | [`packages/voiceover/README.md`](packages/voiceover/README.md) |

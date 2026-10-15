@@ -3,6 +3,15 @@
   "version": "0.2.1",
   "description": "VoiceOver as a reader session, in process on a Mac, for the sr-receipts Playwright fixture; and a read-only doctor for its prerequisites.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts.git",
+    "directory": "packages/voiceover"
+  },
+  "homepage": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/tree/main/packages/voiceover#readme",
+  "bugs": {
+    "url": "https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/issues"
+  },
   "type": "module",
   "exports": {
     ".": {

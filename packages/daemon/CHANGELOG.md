@@ -24,7 +24,7 @@ Pre-1.0: a minor version may break the contract.
 
 ## 0.2.0
 
-Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
+Packaged for npm with the other three packages, [ADR 0003](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0003-four-published-packages-and-the-daemon-installs-from-npm.md).
 
 - **Ships built JavaScript and declarations** in `dist/`, because Node will
   not strip types under `node_modules`. MIT.
@@ -52,7 +52,7 @@ Packaged for npm with the other three packages, [ADR 0003](../../docs/adr/0003-f
 - **The guest's Node is 22.23.3**, up from 22.18.0. `undici`, which
   `@guidepup/setup` pulls in, requires 22.19 or later.
 
-The pivot to `page`, [ADR 0002](../../docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
+The pivot to `page`, [ADR 0002](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
 Nearly everything here is breaking.
 
 - **The daemon serves the reader, not runs.** `createRigServer({ token,

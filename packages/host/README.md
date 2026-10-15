@@ -29,7 +29,7 @@ installed at different times.
 ## Use
 
 Most consumers reach this through the `reader` fixture in
-[`@sr-receipts/playwright`](../playwright/README.md). Directly:
+[`@sr-receipts/playwright`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/packages/playwright/README.md). Directly:
 
 ```js
 import { createNvdaSession } from "@sr-receipts/host";

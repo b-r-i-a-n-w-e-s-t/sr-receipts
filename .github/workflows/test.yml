@@ -1,5 +1,7 @@
-# The unit tests and the typecheck. Neither needs a screen reader, so a stock
-# Linux runner covers them; the readers themselves are proved on the rig.
+# The unit tests and the typecheck. Neither needs a screen reader; the readers
+# themselves are proved on the rig. macOS rather than Linux: Guidepup builds a
+# screen reader when it is imported and throws on any platform with neither
+# VoiceOver nor NVDA, which fails every test file that imports it.
 name: test
 
 on:
@@ -12,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     strategy:
       matrix:
         # The packages' oldest supported Node, and the current LTS.

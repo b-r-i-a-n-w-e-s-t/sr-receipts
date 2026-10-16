@@ -59,17 +59,22 @@ file is the working list and changes as items land.
   reader never starts: on 2026-10-05 two VoiceOver tests failed with
   "VoiceOver cannot be started" and their reports showed only the error, not
   the five attempts behind it. The `sr-receipts` agent skill ships in
-  `@sr-receipts/playwright`, installed with `npx skills`.
+  `@sr-receipts/playwright`, installed with `npx skills`. VoiceOver types at
+  the asked pace too: 150 ms asked, 151 to 164 ms between keys, 4 of 4.
+- **The repository is `sr-receipts`, with CI** (2026-10-16). `npm test` runs
+  on every push to `main` and every pull request, on Node 22 and 24, on a
+  macOS runner: Guidepup throws on import on any platform with neither
+  VoiceOver nor NVDA, so Linux fails every test file that imports it.
 
 ## Next, in order
 
-1. **Ready the repository to go public**, before 0.3.0 is released:
-   - **Rename the GitHub repository to `sr-receipts`.** The packages'
-     `repository` fields, their READMEs' links outside the package, and the
-     skill already point there, and 404 until the rename.
-   - **CI.** `npm test` needs no reader, so it runs on a stock Linux runner.
+1. **Go public, then release 0.3.0**:
+   - **Make the repository public.** The packages' `repository` fields, their
+     READMEs' links outside the package, and the skill point there, and
+     404 for anyone else until it is.
    - **0.3.0**, then the guest Bootstrapped to it: wire protocol 2 means a
-     0.3.0 host refuses a 0.2.x daemon, and the reverse.
+     0.3.0 host refuses a 0.2.x daemon, and the reverse. Proved when
+     carbon-svelte passes on both readers from the published packages.
 2. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
    Every developer will do this once; it is the product. The existing guest
    went through the Bootstrap on 2026-10-05 (see ADR 0003's consequences):

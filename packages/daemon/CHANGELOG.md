@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
-## Unreleased
+## 0.3.0
 
 - **`POST /reader/type`**, `{ text, delay? }`: types the text at a set pace
   inside one speech window and answers with everything said. The keys are

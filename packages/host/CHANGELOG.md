@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
-## Unreleased
+## 0.3.0
 
 - **`ReaderSession.type(text, { delay })`**, with `TypeOptions`: the
   characters of a text as keys, `delay` milliseconds apart, inside one speech

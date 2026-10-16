@@ -1,6 +1,6 @@
 {
   "name": "@sr-receipts/host",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "The Mac-facing half of sr-receipts: the reader interface a test uses, the wire to a guest daemon, and NVDA as a session over it.",
   "license": "MIT",
   "repository": {

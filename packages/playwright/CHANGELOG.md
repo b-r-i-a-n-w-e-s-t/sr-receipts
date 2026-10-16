@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.3.0
 
 - **`reader.type(text, { delay })`**, through `@sr-receipts/host`: what the
   reader says while a text is typed at a set pace. See the README's session

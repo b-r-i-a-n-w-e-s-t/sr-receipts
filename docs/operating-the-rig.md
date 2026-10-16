@@ -48,7 +48,7 @@ signed-out one is not.
    with a real NVDA run through its own routes:
 
    ```powershell
-   $v = '0.2.1'
+   $v = '0.3.0'
    Invoke-WebRequest "https://cdn.jsdelivr.net/npm/@sr-receipts/daemon@$v/provisioning/bootstrap.ps1" -OutFile bootstrap.ps1 -UseBasicParsing
    powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Version $v
    ```
@@ -175,7 +175,7 @@ npm run build && (cd packages/daemon && npm pack)   # on the Mac
 ```
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Tarball sr-receipts-daemon-0.2.1.tgz
+powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Tarball sr-receipts-daemon-0.3.0.tgz
 ```
 
 **A guest still running from a git checkout** of this repository moves over

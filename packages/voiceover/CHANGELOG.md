@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.3.0
 
 - **`type(text, { delay })`**, as `ReaderSession` now requires: the
   characters as System Events keystrokes, `delay` milliseconds apart, from

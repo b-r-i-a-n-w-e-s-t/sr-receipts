@@ -54,7 +54,8 @@ file is the working list and changes as items land.
   package before publishing the next.
 
 - **Unreleased, for 0.3.0.** `reader.type`, typing at a set pace inside one
-  speech window, at wire protocol 2. The fixture attaches the receipt when a
+  speech window, at wire protocol 2, run on both readers. On VoiceOver it
+  answers with the last phrase only. The fixture attaches the receipt when a
   reader never starts: on 2026-10-05 two VoiceOver tests failed with
   "VoiceOver cannot be started" and their reports showed only the error, not
   the five attempts behind it. The `sr-receipts` agent skill ships in
@@ -63,9 +64,6 @@ file is the working list and changes as items land.
 ## Next, in order
 
 1. **Ready the repository to go public**, before 0.3.0 is released:
-   - **`reader.type` on a real VoiceOver.** It has run on NVDA only. The
-     VoiceOver adapter hands Guidepup the text, which VoiceOver types in one
-     keystroke command; nothing has heard it yet.
    - **Rename the GitHub repository to `sr-receipts`.** The packages'
      `repository` fields, their READMEs' links outside the package, and the
      skill already point there, and 404 until the rename.

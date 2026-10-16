@@ -130,6 +130,30 @@ export const SENTINEL = "receipts mark";
 const LEADING_SENTINEL = new RegExp(`^${SENTINEL}(?:\\. |$)`);
 
 /** Have VoiceOver speak the sentinel. */
+/**
+ * Typing a text at a set pace, from one AppleScript, so the gap between keys
+ * is the delay and not a wait for speech. Guidepup's own `type` sends one
+ * character at a time and waits out VoiceOver's speech after each, about five
+ * seconds a key, measured on 2026-10-16.
+ *
+ * The script carries character ids and no text, so nothing typed can be read
+ * as AppleScript, and no quoting survives or fails to survive it.
+ */
+export function typingScript(text: string, delayMs: number): string {
+  const keys = Array.from(text, (character) => {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) {
+      throw new Error(`type takes characters, and U+${code.toString(16).toUpperCase().padStart(4, "0")} is not one; use press for a key such as Enter or Tab`);
+    }
+    return `keystroke (character id ${code})`;
+  });
+  return ['tell application "System Events"', keys.join(delayMs ? `\ndelay ${delayMs / 1000}\n` : "\n"), "end tell"].join("\n");
+}
+
+async function runAppleScript(script: string): Promise<void> {
+  await execFileAsync("osascript", ["-e", script]);
+}
+
 async function speakSentinel(): Promise<void> {
   await execFileAsync("osascript", ["-e", `tell application "VoiceOver" to output ${JSON.stringify(SENTINEL)}`]);
 }
@@ -187,6 +211,7 @@ export interface VoiceOverSeams {
   /** Why this process cannot drive the desktop; empty when it can. */
   automationProblems?: () => Promise<string[]>;
   speakSentinel?: () => Promise<void>;
+  runAppleScript?: (script: string) => Promise<void>;
   activate?: (applicationName: string) => Promise<void>;
   delay?: (milliseconds: number) => Promise<void>;
   environment?: () => string[];
@@ -220,6 +245,7 @@ function createVoiceOverAdapter(
     checks = inspect,
     automationProblems = askAutomationProblems,
     speakSentinel: sayMark = speakSentinel,
+    runAppleScript: runScript = runAppleScript,
     activate = macOSActivate,
     delay = wait,
     environment = stamp,
@@ -321,11 +347,15 @@ function createVoiceOverAdapter(
       return said(() => reader.perform(keyCommand));
     },
     press: (key) => said(() => reader.press(key)),
-    type(text, { delay }) {
-      // Guidepup hands VoiceOver the whole text as one keystroke command, so
-      // there is no gap here to lengthen.
-      if (delay) throw new Error("VoiceOver types a text in one keystroke command, so a delay between keys cannot be honoured; leave it out");
-      return said(() => reader.type(text));
+    async type(text, { delay = 0 }) {
+      if (!Number.isInteger(delay) || delay < 0) throw new Error("`delay` must be a whole number of milliseconds, 0 or more");
+      const script = typingScript(text, delay);
+      // A capture rather than `said`: Guidepup waits for speech to settle once,
+      // after the last key. VoiceOver keeps only its last phrase, so what was
+      // said for the keys before it is gone by then.
+      await sayMark();
+      const { spokenPhrase } = await reader.capture(() => runScript(script), { capture: true });
+      return clean(spokenPhrase);
     },
     next: () => said(() => reader.next()),
     previous: () => said(() => reader.previous()),

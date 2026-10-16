@@ -190,8 +190,9 @@ What it offers:
   `delay` is the milliseconds between keys, 0 when left out, as in
   Playwright's `keyboard.type`. On NVDA the gap is the delay plus what Windows
   takes to send a key, so read the real spacing from the page's own
-  `keydown` times when it matters. VoiceOver types a text in one keystroke
-  command and refuses a `delay`.
+  `keydown` times when it matters. VoiceOver answers with its last phrase
+  only, because it keeps no other: the speech for the keys before it is
+  gone.
 - **`capture(action)`** runs a `page` action inside the reader's speech window
   and returns `{ result, spoken }`. The action must not call the reader; such
   a call is refused rather than left waiting for the capture it is inside.

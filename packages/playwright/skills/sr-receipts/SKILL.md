@@ -32,7 +32,7 @@ The consuming repo's receipts setup is its Playwright config whose projects set 
 | To learn | Use | Know |
 | --- | --- | --- |
 | What one key or command makes the reader say | `reader.press(key)`, `reader.perform(command)` | Each waits about a second of silence, so a string of presses is slow typing. |
-| What the reader says while someone types | `reader.type(text, { delay })` | A `delay` is NVDA only. The real gap is the delay plus 20 to 40 ms; read it from the page log. |
+| What the reader says while someone types | `reader.type(text, { delay })` | The real gap is a little over the delay, by 20 to 40 ms on NVDA; read it from the page log. VoiceOver answers with its last phrase only. |
 | What a page action makes the reader say | `reader.capture(() => page...)` | Move the reader with `locator.focus()` inside it; neither reader follows a click. |
 | Where the reader's focus is | `reader.perform('reportCurrentFocus')` | NVDA+Tab. The direct probe for focus-object questions; DOM focus and reader focus can differ. |
 | What the page did | `page.evaluate` after each step, and a page log | See "Fixtures". |

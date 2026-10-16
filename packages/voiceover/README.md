@@ -107,6 +107,12 @@ before starting the reader.
   `src/session.ts`.
 - **`capture(action)` is Guidepup's own**, with the sentinel spoken first.
   It caught a focus move that a 100 ms poll of `last phrase` had missed.
+- **`type` is not Guidepup's.** Guidepup's `type` sends one character at a
+  time and waits out the speech after each, about five seconds a key. The
+  session sends every key from one AppleScript, `delay` apart, inside a
+  capture, so the keys arrive at the asked pace. It answers with the last
+  phrase only: VoiceOver keeps no other, so the speech for earlier keys is
+  gone by the time the capture reads it.
 
 ## What real runs have established
 

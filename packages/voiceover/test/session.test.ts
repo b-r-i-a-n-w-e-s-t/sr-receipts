@@ -15,7 +15,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { EntryPage } from "@sr-receipts/host";
 
-import { START_ATTEMPTS, START_SETTLE_MS, createVoiceOverSession, isLaunchRace, type GuidepupVoiceOver, type VoiceOverSeams } from "../src/session.ts";
+import { START_ATTEMPTS, START_SETTLE_MS, createVoiceOverSession, isLaunchRace, typingScript, type GuidepupVoiceOver, type VoiceOverSeams } from "../src/session.ts";
 
 const OK_CHECK = { name: "macOS", actual: "26.6.2", expected: "26.6.x", ok: true };
 
@@ -205,13 +205,38 @@ test("every command is preceded by the sentinel, and a command that leaves it in
   assert.deepEqual(vo.transcript, ["findNextTable: said t", "press Tab: pressed Tab", "press F13: (silence)"]);
 });
 
-test("typing is preceded by the sentinel like any command, and a delay between keys is refused before either", async () => {
+test("typing sends every key from one AppleScript inside a capture, after the sentinel, and answers with the last phrase", async () => {
   const fake = fakeGuidepup();
-  const vo = session(fake);
-  assert.equal(await vo.type("ban"), "web content");
-  await assert.rejects(vo.type("ban", { delay: 100 }), /a delay between keys cannot be honoured/);
-  assert.deepEqual(fake.calls, ["sentinel", "type ban"]);
-  assert.match(vo.transcript.at(-1) ?? "", /^type "ban", 100 ms between keys: failed: /);
+  const scripts: string[] = [];
+  const vo = session(fake, {
+    async runAppleScript(script) {
+      fake.calls.push("keys");
+      scripts.push(script);
+    },
+  });
+  assert.equal(await vo.type("ban", { delay: 150 }), "1 row selected");
+  assert.equal(await vo.type("ban"), "1 row selected");
+  assert.deepEqual(fake.calls, ["sentinel", "capture", "keys", "sentinel", "capture", "keys"]);
+  assert.deepEqual(scripts, [typingScript("ban", 150), typingScript("ban", 0)]);
+  assert.deepEqual(vo.transcript, ['type "ban", 150 ms between keys: 1 row selected', 'type "ban": 1 row selected']);
+});
+
+test("the typing script carries character ids, never the text, and waits only between keys", () => {
+  const script = typingScript('a"\\', 150);
+  assert.match(script, /keystroke \(character id 97\)\ndelay 0\.15\nkeystroke \(character id 34\)\ndelay 0\.15\nkeystroke \(character id 92\)\nend tell/);
+  assert.doesNotMatch(script.replace(/^tell application "System Events"\n/, ""), /["\\]/);
+  assert.doesNotMatch(typingScript("ab", 0), /delay/);
+  // An astral character is one key.
+  assert.match(typingScript("\u{1F600}", 0), /^tell application "System Events"\nkeystroke \(character id 128512\)\nend tell$/);
+});
+
+test("a control character, or a delay that is not a whole number of milliseconds, is refused before the sentinel or a key", async () => {
+  const fake = fakeGuidepup();
+  const vo = session(fake, { runAppleScript: async () => void fake.calls.push("keys") });
+  await assert.rejects(vo.type("a\n"), /U\+000A is not one; use press for a key such as Enter or Tab/);
+  await assert.rejects(vo.type("a", { delay: -1 }), /`delay` must be a whole number of milliseconds/);
+  await assert.rejects(vo.type("a", { delay: 1.5 }), /`delay` must be a whole number of milliseconds/);
+  assert.deepEqual(fake.calls, []);
 });
 
 test("a command VoiceOver lacks is refused before the sentinel or a keystroke, and recorded as failed", async () => {

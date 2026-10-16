@@ -5,10 +5,15 @@ break the contract.
 
 ## Unreleased
 
-- **`type(text)`**, as `ReaderSession` now requires: Guidepup's own `type`,
-  preceded by the sentinel like any command. A `delay` is refused, because
-  Guidepup hands VoiceOver the text as one keystroke command. Not yet run
-  against a real VoiceOver.
+- **`type(text, { delay })`**, as `ReaderSession` now requires: the
+  characters as System Events keystrokes, `delay` milliseconds apart, from
+  one AppleScript inside Guidepup's capture, after the sentinel. Not
+  Guidepup's own `type`, which waits out the speech after every key, about
+  five seconds a key. Answers with VoiceOver's last phrase only: VoiceOver
+  keeps no other, so the speech for earlier keys is gone by the time the
+  capture reads it. Measured on 2026-10-16 (macOS 26.6.2, Playwright's
+  WebKit): "ban" typed 150 ms apart arrived 151 to 164 ms apart, 4 of 4,
+  and with no delay 2 to 7 ms apart, 3 of 3, each answering `n. ban`.
 
 ## 0.2.1
 

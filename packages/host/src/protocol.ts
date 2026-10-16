@@ -104,8 +104,9 @@ export interface ReaderSession {
    * user's hands would: the reader is not asked between keys, so the keys
    * arrive at the pace `delay` sets rather than the pace of `press`, which
    * waits out the speech after each one. Returns everything said from the
-   * first key until the speech after the last one ended. For a named key,
-   * such as "Enter", use `press`.
+   * first key until the speech after the last one ended; on VoiceOver, which
+   * keeps only its last phrase, that phrase alone. For a named key, such as
+   * "Enter", use `press`.
    */
   type(text: string, options?: TypeOptions): Promise<string>;
   next(): Promise<string>;

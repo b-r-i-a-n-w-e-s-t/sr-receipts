@@ -1,0 +1,27 @@
+# The unit tests and the typecheck. Neither needs a screen reader, so a stock
+# Linux runner covers them; the readers themselves are proved on the rig.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The packages' oldest supported Node, and the current LTS.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test

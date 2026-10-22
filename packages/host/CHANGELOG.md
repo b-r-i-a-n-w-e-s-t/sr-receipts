@@ -5,6 +5,17 @@ the contract.
 
 ## Unreleased
 
+- **`session.steps`**: each call the test made, structured (`call`, then
+  `spoken` or `error`, then the page state after it). The Transcript without
+  start, Entry and stop. An addition to `ReaderSession`, so any other
+  implementation of it needs the field.
+- **`capture(action, { label })`**: names a page action in its Step and its
+  Transcript line, instead of "page action".
+- **`stateAfterStep`**, an option of `createReaderSession` and
+  `createNvdaSession`, and through `@sr-receipts/voiceover` of
+  `createVoiceOverSession`: reads page state after each Step, inside the call's
+  turn, so a queued call cannot change the page first. A read that fails is
+  named on the Step as `stateError` and never fails the call.
 - **`daemonHealth({ url, token })`**: the daemon's `/health`, with an
   unreachable daemon named. The NVDA session's start uses it, and so does the
   Playwright package's preflight.

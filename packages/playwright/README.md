@@ -195,9 +195,11 @@ What it offers:
   `keydown` times when it matters. VoiceOver answers with its last phrase
   only, because it keeps no other: the speech for the keys before it is
   gone.
-- **`capture(action)`** runs a `page` action inside the reader's speech window
-  and returns `{ result, spoken }`. The action must not call the reader; such
-  a call is refused rather than left waiting for the capture it is inside.
+- **`capture(action, { label? })`** runs a `page` action inside the reader's
+  speech window and returns `{ result, spoken }`. The label names the action
+  in the transcript and the Receipt File, "page action" when left out. The
+  action must not call the reader; such a call is refused rather than left
+  waiting for the capture it is inside.
 - **Calls run one at a time**, in the order they were made, on either reader,
   so a `Promise.all` over two reader calls never interleaves keystrokes.
   Every call rejects rather than throws, and a failed one leaves a line in
@@ -206,6 +208,30 @@ What it offers:
   the test as `reader-transcript`, with the environment stamp as
   `environment`, whatever the outcome, so a passing test in the HTML report
   carries them too, and so does a test whose reader never started.
+- **`steps`** is each call the test made, structured: `call`, then `spoken`
+  or `error`, then the page state read after it. The transcript without
+  start, entry and stop. The Receipt File's rows.
+
+To keep page state beside each Step, declare what to read in the spec:
+
+```ts
+test.use({
+  receipt: {
+    state: () => ({
+      'Focused after': document.activeElement?.textContent?.trim() ?? '(none)',
+      'Expanded after': document.querySelector('[aria-haspopup]')?.getAttribute('aria-expanded') ?? '(absent)',
+    }),
+  },
+})
+```
+
+`state` runs in the page after every Step, before the next call, and each
+key becomes a column. It goes inside `receipt` because Playwright takes a
+function given to `test.use` directly as that option's fixture, and runs it
+in Node; the types do not catch it. It is sent to the page as source, so it
+cannot use the spec's variables. Values other than strings are written as
+JSON. A read that throws, such as on a page that has navigated away, is
+named in that Step's row and fails nothing.
 
 Keys a reader must hear go through the reader. `page.keyboard` injects into
 the browser below the operating system's input queue, so NVDA neither echoes
@@ -227,10 +253,32 @@ The matchers take a `capture`'s result or a spoken string:
 
 ## Reading a receipt
 
-A receipt is two attachments on each test, passed or failed:
-`reader-transcript`, every call to the reader and its answer, with the entry's
-proof at the top; and `environment`, what produced the speech.
+Each test that ran a reader writes a **Receipt File** beside its spec, the
+way Playwright keeps snapshots:
 
+```
+receipts/row-selection.spec.ts-receipts/selecting-a-row-through-the-page-is-announced--nvda.md
+```
+
+One per test per project, named from its `describe` titles and its own,
+and replaced by the test's next run. It holds the test's title, reader,
+outcome (with the retry, if it was one) and spec line; the environment
+stamp; a table of the Steps, what the reader said at each, and any
+`receipt.state` columns; and the whole transcript, with the entry's proof at
+its top. A skipped test leaves the last file alone.
+
+Nothing in it changes unless the run did: there is no timestamp or
+duration. Committed, a change in what the reader said shows in `git diff`;
+a project that does not want them committed ignores `*.spec.ts-receipts/`.
+A renamed or deleted test leaves its old file behind, to delete by hand.
+Titles become file names the way Playwright's snapshot names do: every run
+of characters other than ASCII letters and digits becomes one `-`. Two tests
+whose titles differ only there, such as `describe('a b') > test('c')` and
+`test('a b c')`, share a file, and the later one silently replaces the
+other.
+
+The same receipt is two attachments on each test in the HTML report, passed
+or failed: `reader-transcript` and `environment`, what produced the speech.
 Open the report from the consumer repo:
 
 ```bash
@@ -240,12 +288,9 @@ npx playwright show-report receipts-report
 Click a test, then scroll to its **Attachments**, where both are expandable
 text.
 
-- **The report is the only copy.** The fixture attaches the text to the
-  report rather than writing files, so `test-results/` holds traces and error
-  context but no transcripts.
 - **Each run replaces the report.** It holds the latest run only, and a
-  `--project nvda` run leaves only NVDA's tests in it. Copy a transcript out
-  before the next run if a ticket will cite it.
+  `--project nvda` run leaves only NVDA's tests in it. The Receipt Files
+  are the copy to cite.
 - **The report server keeps running** until it is stopped. A second
   `show-report` then fails with `EADDRINUSE` on port 9323. The running server
   reads the folder on each request, so reloading its page shows the latest
@@ -272,8 +317,8 @@ Reading what was said:
 
 This package owns `withReader` and `readerFixtures`, the `reader` fixture and
 its `readerOptions`, the speech matchers, the agent skill, and what happens
-around a test: starting and stopping the session, and attaching the
-transcript and the environment stamp.
+around a test: starting and stopping the session, attaching the transcript
+and the environment stamp, and writing the Receipt File.
 
 It depends on `@sr-receipts/host` for the interface and the NVDA session, and
 imports only types from `@playwright/test`, which is a peer dependency.
@@ -322,7 +367,6 @@ always at the same version.
 npm test
 ```
 
-What the fixture decides before a reader starts is tested here without
-Playwright or a reader. The fixture against a real reader is run from a
-consumer. The skill's spec template is typechecked by the repository's
-`npm test`.
+What the fixture decides before a reader starts, and the Receipt File it
+writes after, are tested here without Playwright or a reader. The fixture
+against a real reader is run from a consumer.

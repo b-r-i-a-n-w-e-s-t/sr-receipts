@@ -7,6 +7,9 @@
  * Run: npm test
  */
 import test from "node:test";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 
 import type { DaemonHealth, ReaderSession } from "@sr-receipts/host";
@@ -32,7 +35,7 @@ test("VoiceOver activates the application Playwright launched, by browser or cha
 });
 
 test("an NVDA project gets a session over the wire and never loads VoiceOver", async () => {
-  const session = await createSession({ reader: "nvda", url: "http://127.0.0.1:1", token: "t" }, { browserName: "chromium", channel: "msedge" }, async () => {
+  const session = await createSession({ reader: "nvda", url: "http://127.0.0.1:1", token: "t" }, { browserName: "chromium", channel: "msedge" }, {}, async () => {
     throw new Error("must not be loaded");
   });
   assert.equal(session.reader, "nvda");
@@ -40,7 +43,7 @@ test("an NVDA project gets a session over the wire and never loads VoiceOver", a
 
 test("a VoiceOver project loads VoiceOver and passes the application name through", async () => {
   const names: string[] = [];
-  const session = await createSession({ reader: "voiceover" }, { browserName: "webkit", channel: undefined }, async () => ({
+  const session = await createSession({ reader: "voiceover" }, { browserName: "webkit", channel: undefined }, {}, async () => ({
     createVoiceOverSession: ({ applicationName }) => {
       names.push(applicationName);
       return { reader: "voiceover" } as never;
@@ -48,7 +51,7 @@ test("a VoiceOver project loads VoiceOver and passes the application name throug
   }));
   assert.equal(session.reader, "voiceover");
   assert.deepEqual(names, ["Playwright"]);
-  await createSession({ reader: "voiceover", applicationName: "Safari" }, { browserName: "webkit", channel: undefined }, async () => ({
+  await createSession({ reader: "voiceover", applicationName: "Safari" }, { browserName: "webkit", channel: undefined }, {}, async () => ({
     createVoiceOverSession: ({ applicationName }) => {
       names.push(applicationName);
       return { reader: "voiceover" } as never;
@@ -124,6 +127,7 @@ function fakeSession(calls: string[], overrides: Partial<ReaderSession> = {}): R
   return {
     reader: "voiceover",
     transcript: ["start VoiceOver: ok", "next: row 2"],
+    steps: [{ call: "next", spoken: "row 2" }],
     start: async () => void calls.push("start"),
     stop: async () => void calls.push("stop"),
     environment: async () => ["macos: 26.6.2"],
@@ -131,23 +135,164 @@ function fakeSession(calls: string[], overrides: Partial<ReaderSession> = {}): R
   } as ReaderSession;
 }
 
-function run(session: ReaderSession, calls: string[], body: (session: ReaderSession) => Promise<void> = async () => undefined) {
+/** Where a fake spec lives: a fresh directory, so a Receipt File the fixture writes can be read back. */
+function specDirectory(): string {
+  return mkdtempSync(join(tmpdir(), "receipt-file-"));
+}
+
+interface RunOptions {
+  body?: (session: ReaderSession) => Promise<void>;
+  root?: string;
+  status?: string;
+  retry?: number;
+  receipt?: { state?: () => Record<string, unknown> };
+  page?: { evaluate<R>(fn: () => R): Promise<R> };
+  created?: { stateAfterStep?: (() => Promise<Record<string, string>>) | undefined }[];
+}
+
+function run(session: ReaderSession, calls: string[], options: RunOptions = {}) {
+  const { body = async () => undefined, root = specDirectory(), status = "passed", retry = 0 } = options;
   const attached: Record<string, string> = {};
-  const fixture = readerFixture(async () => {
+  const fixture = readerFixture(async (_options, _browser, sessionOptions) => {
     calls.push("create");
+    options.created?.push(sessionOptions ?? {});
     return session;
   });
   const done = fixture(
-    { readerOptions: { reader: "voiceover" }, browser: { version: () => "26.4" }, browserName: "webkit", channel: undefined },
+    {
+      readerOptions: { reader: "voiceover" },
+      browser: { version: () => "26.4" },
+      browserName: "webkit",
+      channel: undefined,
+      page: options.page ?? { evaluate: async () => assert.fail("no receipt state, so the page is never read") },
+      receipt: options.receipt,
+    },
     async (given) => {
       calls.push("use");
       assert.equal(given, session);
       await body(given);
     },
-    { attach: async (name, { body }) => void (attached[name] = body) },
+    {
+      attach: async (name, { body }) => void (attached[name] = body),
+      file: join(root, "receipts", "action-set.spec.ts"),
+      line: 12,
+      titlePath: ["receipts/action-set.spec.ts", "ActionSet", "basic walk"],
+      project: { name: "voiceover" },
+      status,
+      retry,
+      config: { rootDir: root },
+    },
   );
-  return { done, attached };
+  return { done, attached, receiptFile: join(root, "receipts", "action-set.spec.ts-receipts", "ActionSet-basic-walk--voiceover.md") };
 }
+
+test("the fixture writes the Receipt File beside the spec: a header that only a different run changes, the Steps, the Transcript", async () => {
+  const calls: string[] = [];
+  const session = fakeSession(calls, {
+    transcript: ["start VoiceOver: ok", "### entry: web content", "press ArrowLeft: Delete, unavailable, 3 of 4", "next: (silence)", "nope: failed: unknown command <- because"],
+    steps: [
+      { call: "press ArrowLeft", spoken: "Delete, unavailable, 3 of 4" },
+      { call: "next", spoken: "" },
+      { call: "nope", error: "unknown command <- because" },
+      { call: "page action", spoken: "a | b\nc" },
+    ],
+  });
+  const { done, receiptFile } = run(session, calls);
+  await done;
+  assert.equal(
+    readFileSync(receiptFile, "utf8"),
+    `# ActionSet › basic walk
+
+Reader: VoiceOver, project \`voiceover\`
+Outcome: passed
+Spec: \`receipts/action-set.spec.ts:12\`
+
+## Environment
+
+\`\`\`
+macos: 26.6.2
+browser: webkit 26.4
+\`\`\`
+
+## Steps
+
+| # | Call | Reader said |
+| --- | --- | --- |
+| 1 | press ArrowLeft | Delete, unavailable, 3 of 4 |
+| 2 | next | (silence) |
+| 3 | nope | failed: unknown command <- because |
+| 4 | page action | a \\| b c |
+
+## Transcript
+
+\`\`\`
+start VoiceOver: ok
+### entry: web content
+press ArrowLeft: Delete, unavailable, 3 of 4
+next: (silence)
+nope: failed: unknown command <- because
+\`\`\`
+`,
+  );
+});
+
+test("the Receipt File names the outcome and the retry, a failed start included, and a skipped test leaves the last one", async () => {
+  const root = specDirectory();
+  const outcome = (file: string) => readFileSync(file, "utf8").split("\n")[3];
+
+  const retried = run(fakeSession([]), [], { root, status: "timedOut", retry: 1 });
+  await retried.done;
+  assert.equal(outcome(retried.receiptFile), "Outcome: timedOut, on retry 1");
+
+  const neverStarted = run(fakeSession([], { start: async () => assert.fail("VoiceOver cannot be started") }), [], { root });
+  await assert.rejects(neverStarted.done, /cannot be started/);
+  assert.equal(outcome(neverStarted.receiptFile), "Outcome: failed");
+
+  const skipped = run(fakeSession([], { steps: [] }), [], { root, status: "skipped" });
+  await skipped.done;
+  assert.equal(outcome(skipped.receiptFile), "Outcome: failed");
+});
+
+test("a receipt's state is read in the page after each Step, as text, and only when a spec asks for it", async () => {
+  const created: RunOptions["created"] = [];
+  await run(fakeSession([]), [], { created }).done;
+  await run(fakeSession([]), [], { created, receipt: {} }).done;
+  assert.equal(created[0]?.stateAfterStep, undefined);
+  assert.equal(created[1]?.stateAfterStep, undefined);
+
+  const evaluated: unknown[] = [];
+  const page = {
+    evaluate: async <R>(fn: () => R): Promise<R> => {
+      evaluated.push(fn);
+      return fn();
+    },
+  };
+  const state = () => ({ "Focused after": "Edit", Expanded: false, Count: 3, Label: null });
+  await run(fakeSession([]), [], { created, page, receipt: { state } }).done;
+  assert.deepEqual(await created[2]?.stateAfterStep?.(), { "Focused after": "Edit", Expanded: "false", Count: "3", Label: "null" });
+  assert.deepEqual(evaluated, [state]);
+});
+
+test("the page state is a column each, in the order first seen; a failed read is named in every cell of its row", async () => {
+  const session = fakeSession([], {
+    steps: [
+      { call: "press ArrowLeft", spoken: "Delete", state: { "Focused after": "Delete 2/3", Expanded: "true" } },
+      { call: "press Escape", spoken: "Edit", stateError: "page closed" },
+      { call: "next", spoken: "row 2", state: { "Focused after": "", Value: "b" } },
+    ],
+  });
+  const { done, receiptFile } = run(session, []);
+  await done;
+  const table = readFileSync(receiptFile, "utf8").split("## Steps\n\n")[1]?.split("\n\n")[0];
+  assert.equal(
+    table,
+    `| # | Call | Reader said | Focused after | Expanded | Value |
+| --- | --- | --- | --- | --- | --- |
+| 1 | press ArrowLeft | Delete | Delete 2/3 | true |  |
+| 2 | press Escape | Edit | (state failed: page closed) | (state failed: page closed) | (state failed: page closed) |
+| 3 | next | row 2 | (empty) |  | b |`,
+  );
+});
 
 test("the fixture starts the reader, hands it to the test, stops it, and attaches the receipt", async () => {
   const calls: string[] = [];
@@ -162,8 +307,10 @@ test("the fixture starts the reader, hands it to the test, stops it, and attache
 
 test("a failing test still stops the reader and gets its receipt, and the failure is the test's", async () => {
   const calls: string[] = [];
-  const { done, attached } = run(fakeSession(calls), calls, async () => {
-    throw new Error("expected the reader to announce");
+  const { done, attached } = run(fakeSession(calls), calls, {
+    body: async () => {
+      throw new Error("expected the reader to announce");
+    },
   });
   await assert.rejects(done, /expected the reader to announce/);
   assert.deepEqual(calls, ["create", "start", "use", "stop"]);
@@ -207,9 +354,11 @@ test("a project with no readerOptions fails before any reader is built", async (
     return fakeSession(calls);
   });
   await assert.rejects(
-    fixture({ readerOptions: undefined, browser: { version: () => "" }, browserName: "webkit", channel: undefined }, async () => undefined, {
-      attach: async () => undefined,
-    }),
+    fixture(
+      { readerOptions: undefined, browser: { version: () => "" }, browserName: "webkit", channel: undefined, page: { evaluate: async () => undefined as never }, receipt: undefined },
+      async () => undefined,
+      { attach: async () => undefined, file: "/x.spec.ts", line: 1, titlePath: [], project: { name: "" }, status: "passed", retry: 0, config: { rootDir: "/" } },
+    ),
     /this project has no readerOptions/,
   );
   assert.deepEqual(calls, []);

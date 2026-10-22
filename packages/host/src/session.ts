@@ -17,7 +17,7 @@
  *   must not mask the error that caused it.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Captured, EntryOptions, EntryPage, Reader, ReaderSession, TypeOptions } from "./protocol.ts";
+import type { CaptureOptions, Captured, EntryOptions, EntryPage, Reader, ReaderSession, SessionOptions, Step, TypeOptions } from "./protocol.ts";
 
 /**
  * What a transcript records for a call that made the reader say nothing.
@@ -75,9 +75,10 @@ export function errorChain(error: unknown): string[] {
   return messages;
 }
 
-export function createReaderSession(adapter: ReaderAdapter): ReaderSession {
+export function createReaderSession(adapter: ReaderAdapter, options: SessionOptions = {}): ReaderSession {
   const name = NAMES[adapter.reader];
   const transcript: string[] = [];
+  const steps: Step[] = [];
   const record: Recorder = (...lines) => void transcript.push(...lines);
   const failed = (label: string, error: unknown): void => record(`${label}: failed: ${errorChain(error).join(" <- ")}`);
   let started = false;
@@ -98,17 +99,37 @@ export function createReaderSession(adapter: ReaderAdapter): ReaderSession {
     return next;
   }
 
-  const said = (label: string, call: () => Promise<string>): Promise<string> =>
+  // Inside the call's turn, so a queued call cannot change the page first.
+  async function readState(step: Step): Promise<void> {
+    if (!options.stateAfterStep) return;
+    try {
+      step.state = await options.stateAfterStep();
+    } catch (error) {
+      // The Step keeps what the reader said: a broken read is not the call's failure.
+      step.stateError = errorChain(error).join(" <- ");
+    }
+  }
+
+  // A call the test made: a Step and its Transcript line, whatever the outcome.
+  const step = <T>(label: string, call: () => Promise<T>, spokenOf: (answer: T) => string): Promise<T> =>
     serialized(async () => {
       try {
-        const spoken = await call();
+        const answer = await call();
+        const spoken = spokenOf(answer);
         record(`${label}: ${spoken || SILENCE}`);
-        return spoken;
+        const done: Step = { call: label, spoken };
+        steps.push(done);
+        await readState(done);
+        return answer;
       } catch (error) {
         failed(label, error);
+        const done: Step = { call: label, error: errorChain(error).join(" <- ") };
+        steps.push(done);
+        await readState(done);
         throw error;
       }
     });
+  const said = (label: string, call: () => Promise<string>): Promise<string> => step(label, call, (spoken) => spoken);
 
   async function stop(): Promise<void> {
     // Not queued: a teardown after a timed-out test must not wait behind the
@@ -124,6 +145,7 @@ export function createReaderSession(adapter: ReaderAdapter): ReaderSession {
   return {
     reader: adapter.reader,
     transcript,
+    steps,
 
     start: () =>
       serialized(async () => {
@@ -157,17 +179,8 @@ export function createReaderSession(adapter: ReaderAdapter): ReaderSession {
     next: () => said("next", () => adapter.next()),
     previous: () => said("previous", () => adapter.previous()),
 
-    capture: <T>(action: () => Promise<T>): Promise<Captured<T>> =>
-      serialized(async () => {
-        try {
-          const captured = await adapter.capture(action);
-          record(`page action: ${captured.spoken || SILENCE}`);
-          return captured;
-        } catch (error) {
-          failed("page action", error);
-          throw error;
-        }
-      }),
+    capture: <T>(action: () => Promise<T>, options: CaptureOptions = {}): Promise<Captured<T>> =>
+      step(options.label ?? "page action", () => adapter.capture(action), (captured) => captured.spoken),
 
     spokenPhraseLog: () => serialized(async () => adapter.spokenPhraseLog()),
     clearSpokenPhraseLog: () => serialized(async () => adapter.clearSpokenPhraseLog()),

@@ -99,6 +99,18 @@ Environment Stamp, and Playwright's own report and trace. A simulated reader
 never produces one.
 _Avoid_: result (for a simulated reader's output)
 
+**Receipt File**:
+The part of a Receipt a person reads and a repository can keep: one file per
+test per reader, beside the test's spec, replaced by each run so a change in
+what the reader said shows as a change to the file. Its Steps are its body.
+_Avoid_: record, recording
+
+**Step**:
+One call a test made to a Reader Session, with what the reader said and the
+page state the spec asked to see after it. The Transcript holds every Step
+and also what the test never asked for: start, Entry and stop.
+_Avoid_: line (for a Step), action
+
 **Smoke**:
 The Guest's own proof that the rig works right now, as a client of its
 Daemon: NVDA, Edge, the Focus Guard and quick navigation on a Fixture,

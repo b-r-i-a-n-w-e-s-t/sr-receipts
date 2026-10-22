@@ -68,6 +68,35 @@ export interface Captured<T> {
   spoken: string;
 }
 
+export interface CaptureOptions {
+  /** What the action did, for its Step and its Transcript line. Defaults to "page action". */
+  label?: string | undefined;
+}
+
+/**
+ * One call a test made to a Reader Session: its Transcript line's label, and
+ * either what the reader said (`""` for silence) or why the call failed.
+ * `state` is the page state read after it, when the session was given a way
+ * to read it, or `stateError` why that read failed.
+ */
+export interface Step {
+  call: string;
+  spoken?: string;
+  error?: string;
+  state?: Record<string, string>;
+  stateError?: string;
+}
+
+/** What every reader's session factory accepts beside its own options. */
+export interface SessionOptions {
+  /**
+   * Read the page state to keep beside each Step, after its call and before
+   * the next one runs. A read that fails is named on the Step as
+   * `stateError`; it never fails the call.
+   */
+  stateAfterStep?: (() => Promise<Record<string, string>>) | undefined;
+}
+
 /**
  * One reader, started for one test. The same interface for VoiceOver in
  * process on the Mac and for NVDA through the guest daemon, with Guidepup's
@@ -84,6 +113,11 @@ export interface ReaderSession {
    * named. The fixture attaches it to the test: this is the durable record.
    */
   readonly transcript: string[];
+  /**
+   * The calls the test made, in order: the Transcript without start, Entry
+   * and stop, each as a structured Step. The Receipt File's rows.
+   */
+  readonly steps: Step[];
   /** A started reader is restarted. */
   start(): Promise<void>;
   /** Never throws: a failed teardown must not mask the error that caused it. */
@@ -116,7 +150,7 @@ export interface ReaderSession {
    * made the reader say. The action must not call the reader: that call would
    * wait for the capture it is inside, so it is refused.
    */
-  capture<T>(action: () => Promise<T>): Promise<Captured<T>>;
+  capture<T>(action: () => Promise<T>, options?: CaptureOptions): Promise<Captured<T>>;
   spokenPhraseLog(): Promise<string[]>;
   clearSpokenPhraseLog(): Promise<void>;
   /** The Environment Stamp: what produced the speech. */

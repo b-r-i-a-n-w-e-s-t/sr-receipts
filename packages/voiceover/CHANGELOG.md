@@ -5,7 +5,8 @@ break the contract.
 
 ## Unreleased
 
-- No changes; released with the other three packages.
+- **`createVoiceOverSession({ stateAfterStep })`** passes the host's new
+  option through, and the session has the host's `steps` and capture labels.
 
 ## 0.3.0
 

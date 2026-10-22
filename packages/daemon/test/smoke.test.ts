@@ -25,6 +25,7 @@ function fakeSession({ answers = ["title", "", "table", "table"], environmentFai
     calls,
     reader: "nvda",
     transcript: [],
+    steps: [],
     async environment() {
       health += 1;
       if (health <= environmentFails) throw new Error("fetch failed");

@@ -14,7 +14,9 @@
  * lives, which is not the consumer's `node_modules`.
  */
 import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from "@playwright/test";
-import { createNvdaSession, daemonHealth, type Reader, type ReaderSession } from "@sr-receipts/host";
+import { createNvdaSession, daemonHealth, type Reader, type ReaderSession, type SessionOptions } from "@sr-receipts/host";
+
+import { writeReceiptFile, type ReceiptTestInfo } from "./receipt-file.ts";
 
 /**
  * A project's `use: { readerOptions }`. NVDA is reached through the guest
@@ -62,7 +64,7 @@ export function applicationNameFor(browserName: string, channel: string | undefi
  * default `load` below holds it to the real package when this one builds.
  */
 export interface VoiceOverPackage {
-  createVoiceOverSession(options: { applicationName: string }): ReaderSession;
+  createVoiceOverSession(options: { applicationName: string } & SessionOptions): ReaderSession;
 }
 
 export async function loadVoiceOver(load: () => Promise<VoiceOverPackage> = () => import("@sr-receipts/voiceover")): Promise<VoiceOverPackage> {
@@ -83,11 +85,12 @@ export async function loadVoiceOver(load: () => Promise<VoiceOverPackage> = () =
 export async function createSession(
   options: ReaderOptions,
   browser: { browserName: string; channel: string | undefined },
+  sessionOptions: SessionOptions = {},
   load?: () => Promise<VoiceOverPackage>,
 ): Promise<ReaderSession> {
-  if (options.reader === "nvda") return createNvdaSession({ url: options.url, token: options.token });
+  if (options.reader === "nvda") return createNvdaSession({ url: options.url, token: options.token, ...sessionOptions });
   const { createVoiceOverSession } = await loadVoiceOver(load);
-  return createVoiceOverSession({ applicationName: options.applicationName ?? applicationNameFor(browser.browserName, browser.channel) });
+  return createVoiceOverSession({ applicationName: options.applicationName ?? applicationNameFor(browser.browserName, browser.channel), ...sessionOptions });
 }
 
 /**
@@ -136,7 +139,20 @@ export function readerPreflight(health: typeof daemonHealth = daemonHealth) {
   };
 }
 
-type ReaderTestFixtures = { reader: ReaderSession };
+/**
+ * A spec's `test.use({ receipt })`: what its Receipt File keeps beside the
+ * reader's words. An object rather than a bare function, because Playwright
+ * takes a function in `test.use` as the fixture itself and runs it in Node.
+ */
+export interface ReceiptOptions {
+  /**
+   * What to read from the page after each Step, a column per key. Run in the
+   * page, so it cannot close over anything in the spec.
+   */
+  state?: () => Record<string, unknown>;
+}
+
+type ReaderTestFixtures = { reader: ReaderSession; receipt: ReceiptOptions | undefined };
 type ReaderWorkerFixtures = { readerOptions: ReaderOptions | undefined; readerPreflight: void };
 type BaseTestArgs = PlaywrightTestArgs & PlaywrightTestOptions;
 type BaseWorkerArgs = PlaywrightWorkerArgs & PlaywrightWorkerOptions;
@@ -149,27 +165,42 @@ interface ReaderFixtureArgs {
   browser: { version(): string };
   browserName: string;
   channel: string | undefined;
+  page: { evaluate<R>(fn: () => R): Promise<R> };
+  receipt: ReceiptOptions | undefined;
 }
-interface Attachments {
+interface ReaderTestInfo extends ReceiptTestInfo {
   attach(name: string, options: { body: string; contentType: string }): Promise<void>;
+  status?: string | undefined;
+}
+
+/** Page state as table cells: strings as they are, anything else as JSON. */
+function asText(state: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(Object.entries(state).map(([key, value]) => [key, typeof value === "string" ? value : (JSON.stringify(value) ?? String(value))]));
 }
 
 /** The `reader` fixture's body, given how to build a session. Taken as an argument so its tests need no reader. */
 export function readerFixture(create: typeof createSession = createSession) {
   return async (
-    { readerOptions, browser, browserName, channel }: ReaderFixtureArgs,
+    { readerOptions, browser, browserName, channel, page, receipt }: ReaderFixtureArgs,
     use: (session: ReaderSession) => Promise<void>,
-    testInfo: Attachments,
+    testInfo: ReaderTestInfo,
   ): Promise<void> => {
     if (!readerOptions) {
       throw new Error("this project has no readerOptions: set use.readerOptions in its Playwright config");
     }
-    const session = await create(readerOptions, { browserName, channel });
+    const state = receipt?.state;
+    const session = await create(readerOptions, { browserName, channel }, state ? { stateAfterStep: async () => asText(await page.evaluate(state)) } : {});
+    // Playwright sets the test's status after the fixtures it ran; a start
+    // that failed has not reached the test yet, so it is named here.
+    let failure: unknown;
     try {
       // Inside the `try`: a start that fails has recorded every attempt and
       // its cause, and that record is the receipt a failed start leaves.
       await session.start();
       await use(session);
+    } catch (error) {
+      failure = error;
+      throw error;
     } finally {
       // Never throws, so it cannot mask the error that brought us here.
       await session.stop();
@@ -179,6 +210,11 @@ export function readerFixture(create: typeof createSession = createSession) {
       const environment = await session.environment().catch((error: Error) => [`environment unavailable: ${error.message}`]);
       const stamp = environmentStamp(readerOptions.reader, environment, { name: channel ?? browserName, version: browser.version() });
       await testInfo.attach("environment", { body: stamp.join("\n"), contentType: "text/plain" });
+      // A skipped test keeps the last run's file: it asked nothing this time.
+      const outcome = failure === undefined ? testInfo.status : "failed";
+      if (outcome !== "skipped") {
+        writeReceiptFile(testInfo, { reader: session.reader, outcome: outcome ?? "passed", environment: stamp, steps: session.steps, transcript: session.transcript });
+      }
     }
   };
 }
@@ -187,6 +223,7 @@ export function readerFixture(create: typeof createSession = createSession) {
 export const readerFixtures: ReaderFixtures = {
   readerOptions: [undefined, { option: true, scope: "worker" }],
   readerPreflight: [readerPreflight(), { scope: "worker", auto: true }],
+  receipt: [undefined, { option: true }],
   reader: readerFixture(),
 };
 

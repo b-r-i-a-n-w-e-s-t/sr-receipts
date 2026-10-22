@@ -26,7 +26,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { MacOSKeyCodes, macOSActivate, voiceOver } from "@guidepup/guidepup";
-import { createReaderSession, errorChain, type ReaderAdapter, type ReaderSession } from "@sr-receipts/host";
+import { createReaderSession, errorChain, type ReaderAdapter, type ReaderSession, type SessionOptions } from "@sr-receipts/host";
 import { delay as wait, packageVersion } from "./system.ts";
 import { inspect, type DoctorCheck } from "./doctor.ts";
 import { enterWebContent, type ItemChooser, type VoiceOverKey } from "./entry.ts";
@@ -195,7 +195,7 @@ const clean = (phrase: string): string => stripHint(stripSentinel(phrase));
 
 /* ----------------------------------------------------------------- session */
 
-export interface VoiceOverSessionOptions {
+export interface VoiceOverSessionOptions extends SessionOptions {
   /** The browser's application name, as macOS knows it: "Playwright" for Playwright's WebKit. */
   applicationName: string;
 }
@@ -374,5 +374,5 @@ function createVoiceOverAdapter(
 
 /** VoiceOver as the `ReaderSession` a test sees. `seams` is for the tests; a Mac needs only the options. */
 export function createVoiceOverSession(options: VoiceOverSessionOptions, seams: VoiceOverSeams = {}): ReaderSession {
-  return createReaderSession(createVoiceOverAdapter(options, seams));
+  return createReaderSession(createVoiceOverAdapter(options, seams), options);
 }

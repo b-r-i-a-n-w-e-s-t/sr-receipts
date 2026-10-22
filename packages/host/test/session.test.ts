@@ -96,6 +96,52 @@ test("the transcript records each call with its answer, names silence, and keeps
   assert.deepEqual(await session.environment(), ["windows: test"]);
 });
 
+test("each call the test made is a Step; start, entry and stop are not", async () => {
+  const session = createReaderSession(fakeAdapter());
+  await session.start();
+  await session.enter(page);
+  await session.perform("moveToNextTable");
+  await session.type("ban", { delay: 50 });
+  await assert.rejects(session.perform("nope"));
+  await session.capture(async () => undefined, { label: "page focuses Edit" });
+  await session.capture(async () => undefined);
+  await session.stop();
+  assert.deepEqual(session.steps, [
+    { call: "moveToNextTable", spoken: "" },
+    { call: 'type "ban", 50 ms between keys', spoken: "b. a. n" },
+    { call: "nope", error: "unknown NVDA keyboard command: nope" },
+    { call: "page focuses Edit", spoken: "1 row selected" },
+    { call: "page action", spoken: "1 row selected" },
+  ]);
+  assert.deepEqual(session.transcript.slice(-2), ["page focuses Edit: 1 row selected", "page action: 1 row selected"]);
+});
+
+test("the page state after each Step is read before the next call runs, and a failed read fails nothing but says why", async () => {
+  let focused = "Edit";
+  let reads = 0;
+  const session = createReaderSession(
+    fakeAdapter({
+      async press(key) {
+        focused = key === "ArrowLeft" ? "Delete" : "Edit";
+        return "pressed";
+      },
+    }),
+    {
+      stateAfterStep: async () => {
+        if (++reads === 3) throw new Error("page closed");
+        return { "Focused after": focused };
+      },
+    },
+  );
+  await Promise.all([session.press("ArrowLeft"), session.press("ArrowRight")]);
+  assert.equal(await session.next(), "row 2");
+  assert.deepEqual(session.steps, [
+    { call: "press ArrowLeft", spoken: "pressed", state: { "Focused after": "Delete" } },
+    { call: "press ArrowRight", spoken: "pressed", state: { "Focused after": "Edit" } },
+    { call: "next", spoken: "row 2", stateError: "page closed" },
+  ]);
+});
+
 test("typing is one call with one answer, and the transcript names the text and the pace", async () => {
   const adapter = fakeAdapter();
   const session = createReaderSession(adapter);

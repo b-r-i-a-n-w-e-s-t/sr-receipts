@@ -6,7 +6,7 @@
  * this adapter, and the guest's daemon. The contract test that runs the two
  * together is in `@sr-receipts/daemon`, which can depend on this package.
  */
-import { PROTOCOL_VERSION, type DaemonHealth, type EnterBody, type EntryResult, type PhraseLog, type ReaderSession, type Spoken, type TypeBody } from "./protocol.ts";
+import { PROTOCOL_VERSION, type DaemonHealth, type EnterBody, type EntryResult, type PhraseLog, type ReaderSession, type SessionOptions, type Spoken, type TypeBody } from "./protocol.ts";
 import { createReaderSession } from "./session.ts";
 
 export interface ClientOptions {
@@ -36,7 +36,7 @@ export class RigError extends Error {
  * window activated from inside the interactive session, which nothing on the
  * Mac can do. What crosses the wire for them is the page's title.
  */
-export function createNvdaSession(options: ClientOptions): ReaderSession {
+export function createNvdaSession(options: ClientOptions & SessionOptions): ReaderSession {
   const call = caller(options);
   const spoken = async (path: string, body?: unknown): Promise<string> => (await call<Spoken>("POST", path, body)).spoken;
 
@@ -90,7 +90,7 @@ export function createNvdaSession(options: ClientOptions): ReaderSession {
     spokenPhraseLog: async () => (await call<PhraseLog>("GET", "/reader/log")).phrases,
     clearSpokenPhraseLog: async () => void (await call("POST", "/reader/clear")),
     environment: async () => (await daemonHealth(options)).rig,
-  });
+  }, options);
 }
 
 /** Requests to one daemon, with its token; anything refused is a `RigError`. */

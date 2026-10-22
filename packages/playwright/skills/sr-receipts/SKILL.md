@@ -21,10 +21,10 @@ The consuming repo's receipts setup is its Playwright config whose projects set 
 
    A mismatch is the user's to resolve: installing on the guest is a remote write and needs their go-ahead each time.
 2. **Frame the question as variants and a control.** Write down the one thing that differs between variants, and a control variant whose answer is already known. A reader question usually comes down to one attribute or one timing, so build a static fixture where that is the only variable (see "Fixtures"). Done when every hypothesis in play predicts different speech for at least one variant.
-3. **Write the spec** in the receipts directory, from [`references/record-spec.ts`](references/record-spec.ts). Put everything you will filter on in the test title. Record, and assert only what the question is about: a recording spec that passes still carries the receipt.
-4. **Smoke one test** with `--grep` (check the filter with `--list` first) and read its record end to end. Done when the entry lines show the reader on the page, the control behaves as known, and the page log shows the keys arrived.
-5. **Run the matrix** in the background: about 25 seconds a test, one worker. Done when every test has a record file.
-6. **Read every record**, pairing speech with the DOM column and the page log. Repeat any cell the conclusion leans on, and any surprise, at least three more times before reporting it.
+3. **Write the spec** in the receipts directory. Put everything you will filter on in the test title, label each `reader.capture` with what its action does, and declare the page state the question turns on with `test.use({ receipt: { state } })` (see "Choosing the call"). Assert only what the question is about: a spec that passes still writes its Receipt File.
+4. **Smoke one test** with `--grep` (check the filter with `--list` first) and read its Receipt File end to end. Done when the Transcript's entry lines show the reader on the page, the control behaves as known, and, where the page logs itself, its column shows the keys arrived.
+5. **Run the matrix** in the background: about 25 seconds a test, one worker. Done when every test's Receipt File carries this run: its Steps match the spec as it is now.
+6. **Read every Receipt File**, pairing speech with the state columns. Repeat any cell the conclusion leans on, and any surprise, at least three more times before reporting it: each run replaces the file, so copy it aside or commit it first, and diff. A file that changes between identical runs is not yet a finding.
 7. **Report** each finding with how it was established (heard on the rig, read from the DOM, or inferred), the pace it was measured at, the run count, and what the rig cannot show.
 
 ## Choosing the call
@@ -33,9 +33,9 @@ The consuming repo's receipts setup is its Playwright config whose projects set 
 | --- | --- | --- |
 | What one key or command makes the reader say | `reader.press(key)`, `reader.perform(command)` | Each waits about a second of silence, so a string of presses is slow typing. |
 | What the reader says while someone types | `reader.type(text, { delay })` | The real gap is a little over the delay, by 20 to 40 ms on NVDA; read it from the page log. VoiceOver answers with its last phrase only. |
-| What a page action makes the reader say | `reader.capture(() => page...)` | Move the reader with `locator.focus()` inside it; neither reader follows a click. |
+| What a page action makes the reader say | `reader.capture(() => page..., { label })` | Move the reader with `locator.focus()` inside it; neither reader follows a click. The label is the Step's name in the Receipt File. |
 | Where the reader's focus is | `reader.perform('reportCurrentFocus')` | NVDA+Tab. The direct probe for focus-object questions; DOM focus and reader focus can differ. |
-| What the page did | `page.evaluate` after each step, and a page log | See "Fixtures". |
+| What the page did | `test.use({ receipt: { state: () => ({ 'Focused after': ... }) } })` | Runs in the page after every Step; each key is a column of the Receipt File. It cannot close over the spec's variables. Keep it inside `receipt`: a bare function in `test.use` is run by Playwright in Node as a fixture. A read that throws is named in its row and fails nothing. |
 
 Keys a reader must hear go through the reader. `page.keyboard` injects into the browser, below Windows' input queue, so NVDA neither echoes nor intercepts those keys.
 
@@ -44,7 +44,7 @@ Keys a reader must hear go through the reader. `page.keyboard` injects into the 
 - **Serve a static page from the spec** with `page.route('**/__name/page.html*', route => route.fulfill(...))` and `goto` it under the project's `baseURL`. It loads as a top-level document on the dev server's origin, with no file to add to the app.
 - **One page, variant by query string**, so every variant shares its markup.
 - **Give the page a title, an `h1` and a `main`**: the entry guard proves browse mode with them.
-- **Have the page log itself**: push `performance.now()` with each `keydown`, `input` and observed attribute change onto `window.__log`, and write it into the record. It is the only measure of real key spacing and of what the DOM held when the reader spoke.
+- **Have the page log itself**: push `performance.now()` with each `keydown`, `input` and observed attribute change onto `window.__log`, and drain it into a column: `receipt: { state: () => ({ 'Page log': (window.__log ?? []).splice(0).join('; ') }) }`. It is the only measure of real key spacing and of what the DOM held when the reader spoke. Leave it out of a spec whose Receipt File is committed: its timestamps change every run.
 - **Model the real component's node lifetime.** A reader re-announces a rebuilt node and stays silent on a kept one, so a fixture that rebuilds its list answers a different question from a component that keeps it.
 
 ## Reading speech
@@ -54,7 +54,7 @@ Keys a reader must hear go through the reader. `page.keyboard` injects into the 
 - **Guidepup presses Control before each NVDA call** to stop speech. It appears in the page log as `keydown Control`.
 - **`Enter` after focusing an input puts NVDA in focus mode. `Escape` takes it back out**, after which letters are browse-mode commands. Speech such as "no next annotation" means a letter was taken as a command and the page never received it: check the input's value.
 - **NVDA settings may persist across tests.** A toggle such as `speakTypedCharacters` (NVDA+2) cycles three states and says the new one; cycle it all the way round so the test ends where it started.
-- **The HTML report is replaced by the next run**, and passing `--reporter` on the command line means it is never written. Leave the config's reporters alone, and write each record to a file from the spec, as the template does.
+- **Cite the Receipt File**: it is beside the spec, `<spec>-receipts/<describe and test titles>--<project>.md`, replaced by the test's next run. The HTML report is replaced by the next run too, and passing `--reporter` on the command line means it is never written: leave the config's reporters alone.
 
 ## VoiceOver
 

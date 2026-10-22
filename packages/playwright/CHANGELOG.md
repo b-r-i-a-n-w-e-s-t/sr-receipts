@@ -5,6 +5,20 @@ break the contract.
 
 ## Unreleased
 
+- **The fixture writes a Receipt File** for every test that ran a reader:
+  `<spec>-receipts/<describe and test titles>--<project>.md` beside the spec,
+  replaced by the next run. The header, the environment stamp, a table of
+  the Steps and the whole transcript; no timestamp, so the file changes only
+  when the run did. A skipped test leaves the last one. See the README's
+  "Reading a receipt".
+- **`test.use({ receipt: { state } })`**: page state read after each Step,
+  a column each in the Receipt File.
+- **The `reader` fixture now depends on `page`**, to read `receipt.state`.
+- **`capture(action, { label })`** and **`reader.steps`**, through
+  `@sr-receipts/host`.
+- **The skill's recording template is gone**: `references/record-spec.ts`
+  did by hand what the fixture now does. The skill's method reads Receipt
+  Files, and its page log becomes a `receipt.state` column.
 - **Fixed: a guest on another Playwright minor failed as a WebSocket error.**
   Playwright refuses a client of another major.minor at connect, with an
   error that names neither fix and prints the rig token. A worker-scoped

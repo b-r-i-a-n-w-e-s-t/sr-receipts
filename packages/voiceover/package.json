@@ -1,6 +1,6 @@
 {
   "name": "@sr-receipts/voiceover",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "VoiceOver as a reader session, in process on a Mac, for the sr-receipts Playwright fixture; and a read-only doctor for its prerequisites.",
   "license": "MIT",
   "repository": {
@@ -38,6 +38,6 @@
   },
   "dependencies": {
     "@guidepup/guidepup": "0.34.0",
-    "@sr-receipts/host": "0.3.0"
+    "@sr-receipts/host": "0.4.0"
   }
 }

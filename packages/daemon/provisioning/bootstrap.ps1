@@ -13,7 +13,7 @@
   Run it in the signed-in, unlocked desktop, as the Provisioner requires.
   Fetch it for the version it installs, from the published package:
 
-    $v = '0.3.0'
+    $v = '0.4.0'
     Invoke-WebRequest "https://cdn.jsdelivr.net/npm/@sr-receipts/daemon@$v/provisioning/bootstrap.ps1" -OutFile bootstrap.ps1 -UseBasicParsing
     powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Version $v
 
@@ -21,7 +21,7 @@
   `npm pack` on the Mac instead of a version. Its dependencies are resolved
   when it installs, since only a release carries a shrinkwrap:
 
-    powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Tarball sr-receipts-daemon-0.3.0.tgz
+    powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Tarball sr-receipts-daemon-0.4.0.tgz
 
 .PARAMETER Version
   The exact @sr-receipts/daemon version to install.

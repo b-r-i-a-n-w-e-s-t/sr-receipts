@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
-## Unreleased
+## 0.4.0
 
 - **`session.steps`**: each call the test made, structured (`call`, then
   `spoken` or `error`, then the page state after it). The Transcript without

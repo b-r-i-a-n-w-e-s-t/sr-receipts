@@ -37,7 +37,7 @@ packed on the Mac, it:
 6. runs the Provisioner from the unpacked package.
 
 ```powershell
-$v = '0.3.0'
+$v = '0.4.0'
 Invoke-WebRequest "https://cdn.jsdelivr.net/npm/@sr-receipts/daemon@$v/provisioning/bootstrap.ps1" -OutFile bootstrap.ps1 -UseBasicParsing
 powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Version $v
 ```

@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.4.0
 
 - **`createVoiceOverSession({ stateAfterStep })`** passes the host's new
   option through, and the session has the host's `steps` and capture labels.

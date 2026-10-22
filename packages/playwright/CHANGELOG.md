@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.4.0
 
 - **The fixture writes a Receipt File** for every test that ran a reader:
   `<spec>-receipts/<describe and test titles>--<project>.md` beside the spec,

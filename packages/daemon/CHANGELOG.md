@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
-## Unreleased
+## 0.4.0
 
 - No changes; released with the other three packages.
 

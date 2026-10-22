@@ -3,6 +3,10 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
+## Unreleased
+
+- No changes; released with the other three packages.
+
 ## 0.3.0
 
 - **`POST /reader/type`**, `{ text, delay? }`: types the text at a set pace

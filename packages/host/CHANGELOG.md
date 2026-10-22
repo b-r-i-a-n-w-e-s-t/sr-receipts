@@ -3,6 +3,12 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
+## Unreleased
+
+- **`daemonHealth({ url, token })`**: the daemon's `/health`, with an
+  unreachable daemon named. The NVDA session's start uses it, and so does the
+  Playwright package's preflight.
+
 ## 0.3.0
 
 - **`ReaderSession.type(text, { delay })`**, with `TypeOptions`: the

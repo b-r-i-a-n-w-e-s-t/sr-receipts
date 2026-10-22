@@ -14,7 +14,7 @@
  * lives, which is not the consumer's `node_modules`.
  */
 import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from "@playwright/test";
-import { createNvdaSession, type Reader, type ReaderSession } from "@sr-receipts/host";
+import { createNvdaSession, daemonHealth, type Reader, type ReaderSession } from "@sr-receipts/host";
 
 /**
  * A project's `use: { readerOptions }`. NVDA is reached through the guest
@@ -100,8 +100,44 @@ export function environmentStamp(reader: Reader, readerStamp: string[], browser:
   return reader === "nvda" ? readerStamp : [...readerStamp, `browser: ${browser.name} ${browser.version}`];
 }
 
+/**
+ * Why Playwright would refuse the guest's browser server, or `undefined`.
+ * Playwright refuses a client of another major.minor at connect, as a
+ * WebSocket error that names neither fix, so this is checked first. The
+ * guest's version is read from its stamp; a stamp without it is let through.
+ */
+export function playwrightMismatch(rig: string[], client: string): string | undefined {
+  const guest = rig.join("\n").match(/driven by playwright-core (\d+\.\d+)\./)?.[1];
+  const ours = client.match(/^\d+\.\d+/)?.[0];
+  if (guest === undefined || ours === undefined || guest === ours) return undefined;
+  return (
+    `the guest's Edge is served by Playwright ${guest} and this run is Playwright ${ours}, and Playwright refuses a client of another minor version: ` +
+    `install @playwright/test@${guest} here, or bring the guest to a daemon built on Playwright ${ours}`
+  );
+}
+
+/**
+ * The preflight's body, given how to read the daemon's health. Automatic and
+ * worker-scoped, so it runs before Playwright's `browser` connects to the
+ * guest; an unreachable daemon fails here too, named, rather than as that
+ * connect's WebSocket error.
+ */
+export function readerPreflight(health: typeof daemonHealth = daemonHealth) {
+  return async (
+    { readerOptions }: { readerOptions: ReaderOptions | undefined },
+    use: () => Promise<void>,
+    workerInfo: { config: { version: string } },
+  ): Promise<void> => {
+    if (readerOptions?.reader === "nvda") {
+      const mismatch = playwrightMismatch((await health(readerOptions)).rig, workerInfo.config.version);
+      if (mismatch) throw new Error(mismatch);
+    }
+    await use();
+  };
+}
+
 type ReaderTestFixtures = { reader: ReaderSession };
-type ReaderWorkerFixtures = { readerOptions: ReaderOptions | undefined };
+type ReaderWorkerFixtures = { readerOptions: ReaderOptions | undefined; readerPreflight: void };
 type BaseTestArgs = PlaywrightTestArgs & PlaywrightTestOptions;
 type BaseWorkerArgs = PlaywrightWorkerArgs & PlaywrightWorkerOptions;
 
@@ -150,6 +186,7 @@ export function readerFixture(create: typeof createSession = createSession) {
 /** The `reader` fixture and its option. `withReader` applies them with their types named. */
 export const readerFixtures: ReaderFixtures = {
   readerOptions: [undefined, { option: true, scope: "worker" }],
+  readerPreflight: [readerPreflight(), { scope: "worker", auto: true }],
   reader: readerFixture(),
 };
 

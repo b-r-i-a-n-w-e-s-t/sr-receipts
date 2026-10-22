@@ -7,4 +7,4 @@
 export type * from "./protocol.ts";
 export { PROTOCOL_VERSION } from "./protocol.ts";
 export { SILENCE, createReaderSession, errorChain, type ReaderAdapter, type Recorder } from "./session.ts";
-export { RigError, createNvdaSession, type ClientOptions } from "./client.ts";
+export { RigError, createNvdaSession, daemonHealth, type ClientOptions } from "./client.ts";

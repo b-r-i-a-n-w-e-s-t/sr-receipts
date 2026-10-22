@@ -3,6 +3,10 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
+## Unreleased
+
+- No changes; released with the other three packages.
+
 ## 0.3.0
 
 - **`type(text, { delay })`**, as `ReaderSession` now requires: the

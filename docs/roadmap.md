@@ -53,7 +53,11 @@ file is the working list and changes as items land.
   `0.0.0-stage` placeholder version, so the release now waits for each
   package before publishing the next.
 
-- **Unreleased, for 0.3.0.** `reader.type`, typing at a set pace inside one
+- **0.3.0 on npm and on the guest** (2026-10-16). The repository went
+  public first, so the packages' `repository` fields, their READMEs' links and
+  the skill resolve for anyone. The guest is Bootstrapped to 0.3.0, which wire
+  protocol 2 requires: a 0.3.0 host refuses a 0.2.x daemon, and the reverse.
+  `reader.type`, typing at a set pace inside one
   speech window, at wire protocol 2, run on both readers. On VoiceOver it
   answers with the last phrase only. The fixture attaches the receipt when a
   reader never starts: on 2026-10-05 two VoiceOver tests failed with
@@ -68,13 +72,8 @@ file is the working list and changes as items land.
 
 ## Next, in order
 
-1. **Go public, then release 0.3.0**:
-   - **Make the repository public.** The packages' `repository` fields, their
-     READMEs' links outside the package, and the skill point there, and
-     404 for anyone else until it is.
-   - **0.3.0**, then the guest Bootstrapped to it: wire protocol 2 means a
-     0.3.0 host refuses a 0.2.x daemon, and the reverse. Proved when
-     carbon-svelte passes on both readers from the published packages.
+1. **Prove 0.3.0**: carbon-svelte passing on both readers from the
+   published packages, against the guest on 0.3.0.
 2. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
    Every developer will do this once; it is the product. The existing guest
    went through the Bootstrap on 2026-10-05 (see ADR 0003's consequences):
@@ -118,6 +117,18 @@ file is the working list and changes as items land.
   25 s, a VoiceOver command of about 5 s with the sentinel. A session per
   worker and a faster VoiceOver capture are the candidates, once a suite
   shows where the time goes.
+- **The guest's Playwright pins the consumer's.** The NVDA project connects
+  to the daemon's `launchServer`, and Playwright refuses a client of another
+  major.minor, so a consumer's `npm up` that moves Playwright's minor stops
+  NVDA until a daemon release on that minor. Found on 2026-10-21, when
+  carbon-svelte's lockfile reached 1.64 and the guest held 1.63. The fixture
+  now names the mismatch before connecting (0.3.1). Removing the daemon's pin
+  would not help: the daemon is the server and holds one version either way.
+  The candidate decoupling is `connectOverCDP` to the guest's Edge, which has
+  no Playwright version check, behind a proxy that checks the token, since
+  CDP has no authentication of its own; it would amend ADR 0002. The same
+  change would take the token out of the endpoint's path, which Playwright
+  prints in every connect error.
 - **Edge only on the guest.** Playwright ships no Windows ARM64 browsers.
   NVDA plus Firefox evidence would need Playwright to change, or the guest to
   be x64.

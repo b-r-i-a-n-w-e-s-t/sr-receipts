@@ -3,6 +3,15 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
+## Unreleased
+
+- **Fixed: a guest on another Playwright minor failed as a WebSocket error.**
+  Playwright refuses a client of another major.minor at connect, with an
+  error that names neither fix and prints the rig token. A worker-scoped
+  preflight now reads the guest's stamp before the browser connects, and
+  fails with both versions and both fixes. An unreachable daemon fails there
+  too, named.
+
 ## 0.3.0
 
 - **`reader.type(text, { delay })`**, through `@sr-receipts/host`: what the

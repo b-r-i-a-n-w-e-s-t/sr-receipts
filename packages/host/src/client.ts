@@ -36,43 +36,18 @@ export class RigError extends Error {
  * window activated from inside the interactive session, which nothing on the
  * Mac can do. What crosses the wire for them is the page's title.
  */
-export function createNvdaSession({ url, token }: ClientOptions): ReaderSession {
-  const base = url.replace(/\/+$/, "");
-  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
-
-  async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-    const response = await fetch(`${base}${path}`, {
-      method,
-      headers,
-      ...(body !== undefined && { body: JSON.stringify(body) }),
-    });
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const error = (payload as { error?: string | string[] } | null)?.error;
-      const message = error === undefined ? response.statusText : [error].flat().join(" <- ");
-      throw new RigError(response.status, `${method} ${path}: ${message}`, payload);
-    }
-    return payload as T;
-  }
+export function createNvdaSession(options: ClientOptions): ReaderSession {
+  const call = caller(options);
   const spoken = async (path: string, body?: unknown): Promise<string> => (await call<Spoken>("POST", path, body)).spoken;
-  const health = () => call<DaemonHealth>("GET", "/health");
 
   return createReaderSession({
     reader: "nvda",
 
     async start() {
-      let daemon: DaemonHealth;
-      try {
-        daemon = await health();
-      } catch (error) {
-        if (error instanceof RigError) throw error;
-        throw new Error(`the guest daemon at ${url} is not reachable; is the VM booted, signed in, and nvda-daemon running?`, {
-          cause: error,
-        });
-      }
+      const daemon = await daemonHealth(options);
       if (daemon.protocol !== PROTOCOL_VERSION) {
         throw new Error(
-          `the guest daemon at ${url} speaks wire protocol ${daemon.protocol ?? "none"}, and this host speaks ${PROTOCOL_VERSION}; ` +
+          `the guest daemon at ${options.url} speaks wire protocol ${daemon.protocol ?? "none"}, and this host speaks ${PROTOCOL_VERSION}; ` +
             "bring the older side up to date: bootstrap.ps1 on the guest, or npm on the Mac",
         );
       }
@@ -114,6 +89,43 @@ export function createNvdaSession({ url, token }: ClientOptions): ReaderSession 
 
     spokenPhraseLog: async () => (await call<PhraseLog>("GET", "/reader/log")).phrases,
     clearSpokenPhraseLog: async () => void (await call("POST", "/reader/clear")),
-    environment: async () => (await health()).rig,
+    environment: async () => (await daemonHealth(options)).rig,
   });
+}
+
+/** Requests to one daemon, with its token; anything refused is a `RigError`. */
+function caller({ url, token }: ClientOptions) {
+  const base = url.replace(/\/+$/, "");
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+
+  return async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      headers,
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = (payload as { error?: string | string[] } | null)?.error;
+      const message = error === undefined ? response.statusText : [error].flat().join(" <- ");
+      throw new RigError(response.status, `${method} ${path}: ${message}`, payload);
+    }
+    return payload as T;
+  };
+}
+
+/**
+ * The daemon's `/health`: its wire protocol, the browser server's path, and
+ * the guest's Environment Stamp. A daemon that does not answer is named with
+ * what usually causes that.
+ */
+export async function daemonHealth(options: ClientOptions): Promise<DaemonHealth> {
+  try {
+    return await caller(options)<DaemonHealth>("GET", "/health");
+  } catch (error) {
+    if (error instanceof RigError) throw error;
+    throw new Error(`the guest daemon at ${options.url} is not reachable; is the VM booted, signed in, and nvda-daemon running?`, {
+      cause: error,
+    });
+  }
 }

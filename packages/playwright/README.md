@@ -19,7 +19,9 @@ npm install --save-dev @sr-receipts/voiceover    # only for a voiceover project
 ```
 
 The consumer's `@playwright/test` must share the guest's major.minor, which is
-the Runtime Manifest's Playwright version. An NVDA project also needs a
+the Runtime Manifest's Playwright version. An NVDA project checks this before
+its browser connects, and names both versions when they differ: an `npm up`
+that moves Playwright's minor is the usual cause. An NVDA project also needs a
 Windows Guest Rig on the same release of sr-receipts; see
 [`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md). A VoiceOver
 project needs the macOS grants in

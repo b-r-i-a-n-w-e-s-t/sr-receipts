@@ -9,9 +9,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import type { ReaderSession } from "@sr-receipts/host";
+import type { DaemonHealth, ReaderSession } from "@sr-receipts/host";
 
-import { applicationNameFor, createSession, environmentStamp, loadVoiceOver, readerFixture, readerFixtures, withReader } from "../src/fixture.ts";
+import {
+  applicationNameFor,
+  createSession,
+  environmentStamp,
+  loadVoiceOver,
+  playwrightMismatch,
+  readerFixture,
+  readerFixtures,
+  readerPreflight,
+  withReader,
+} from "../src/fixture.ts";
 
 test("VoiceOver activates the application Playwright launched, by browser or channel", () => {
   assert.equal(applicationNameFor("webkit", undefined), "Playwright");
@@ -67,6 +77,46 @@ test("the environment stamp names the browser once: the guest's for NVDA, Playwr
   assert.deepEqual(environmentStamp("nvda", guest, { name: "chromium", version: "153.0.4234.48" }), guest);
   const mac = ["macos: 26.6.2", "voiceover: bundled with macOS"];
   assert.deepEqual(environmentStamp("voiceover", mac, { name: "webkit", version: "26.4" }), [...mac, "browser: webkit 26.4"]);
+});
+
+test("a guest on another Playwright minor is named with both fixes; a patch or an unreadable stamp is not a mismatch", () => {
+  const guest = ["windows: 24H2", "edge: 155.0.4283.45 at msedge.exe, driven by playwright-core 1.63.0"];
+  const mismatch = playwrightMismatch(guest, "1.64.0") ?? "";
+  assert.match(mismatch, /Playwright 1\.63 .* Playwright 1\.64/);
+  assert.match(mismatch, /install @playwright\/test@1\.63/);
+  assert.equal(playwrightMismatch(guest, "1.63.2"), undefined);
+  assert.equal(playwrightMismatch(["windows: 24H2"], "1.64.0"), undefined);
+});
+
+/** The preflight's body, given a daemon health that records being asked. */
+function preflight(rig: string[], asked: string[]) {
+  return readerPreflight(async ({ url }) => {
+    asked.push(url);
+    return { ok: true, started: false, browser: { port: 8766, path: "/x" }, rig } satisfies DaemonHealth;
+  });
+}
+
+const NVDA = { reader: "nvda", url: "http://guest:8765", token: "t" } as const;
+const ON_163 = ["edge: 155 at msedge.exe, driven by playwright-core 1.63.0"];
+
+test("the preflight refuses an NVDA worker whose Playwright the guest would refuse, before any browser connects", async () => {
+  const used: string[] = [];
+  await assert.rejects(
+    preflight(ON_163, [])({ readerOptions: NVDA }, async () => void used.push("use"), { config: { version: "1.64.0" } }),
+    /guest's Edge is served by Playwright 1\.63/,
+  );
+  assert.deepEqual(used, []);
+});
+
+test("the preflight lets a matching NVDA worker through, and never asks a daemon for VoiceOver or a project without a reader", async () => {
+  const asked: string[] = [];
+  const used: string[] = [];
+  const use = async () => void used.push("use");
+  await preflight(ON_163, asked)({ readerOptions: NVDA }, use, { config: { version: "1.63.0" } });
+  await preflight(ON_163, asked)({ readerOptions: { reader: "voiceover" } }, use, { config: { version: "1.64.0" } });
+  await preflight(ON_163, asked)({ readerOptions: undefined }, use, { config: { version: "1.64.0" } });
+  assert.deepEqual(asked, ["http://guest:8765"]);
+  assert.deepEqual(used, ["use", "use", "use"]);
 });
 
 /** A session that records what the fixture did with it. */

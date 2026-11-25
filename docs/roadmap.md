@@ -69,17 +69,56 @@ file is the working list and changes as items land.
   on every push to `main` and every pull request, on Node 22 and 24, on a
   macOS runner: Guidepup throws on import on any platform with neither
   VoiceOver nor NVDA, so Linux fails every test file that imports it.
+- **0.4.0 on npm: a Receipt File per test** (2026-10-22). The fixture
+  writes `<spec>-receipts/<describe and test titles>--<project>.md` beside
+  the spec for every test that ran a reader, replaced by each run and with no
+  timestamp, so a change in what the reader said shows as a change to the
+  file. `test.use({ receipt: { state } })` adds page state columns, and
+  `capture(action, { label })` names a page action's Step. This was the
+  committed markdown receipt ADR 0002 deferred; it was built without waiting
+  for a ticket, because it replaced the skill's hand-copied recording
+  template. Verified from the repository on both readers before the
+  release, with two NVDA runs giving byte-identical files. The same release
+  carries the Playwright minor preflight (see "The guest's Playwright pins
+  the consumer's" below). The wire stays at protocol 2 and the daemon is
+  unchanged, so the guest on 0.3.0 serves a 0.4.0 host without a Bootstrap.
+
+- **In the tree, unreleased: wire protocol 3** (2026-11-25). The NVDA
+  desktop owns whether NVDA is up and the open Capture Window: a capture
+  that Guidepup refuses no longer wedges the daemon, and a window a dead
+  test left open is closed by the next start, with a Transcript line. The
+  host's Reader Session refuses calls before start or after stop, on both
+  readers. `/health` carries `playwright`, and the host's
+  `checkGuestCompatibility` replaces the fixture's read of the stamp.
+  Proved on the guest on 2026-11-25 from a tarball trial, with the packed
+  host unpacked over the one npm resolved: a capture begun with NVDA
+  stopped answered "NVDA is not running" at once, twice; a window left open
+  was closed by the next start and the next stop, each with its line; the
+  Smoke passed; and a Mac consumer on Playwright 1.63 passed an NVDA spec
+  and wrote its Receipt File, while 1.64 stopped at the preflight with both
+  fixes named. The guest stays on that trial until a release: a 0.4.0 Mac
+  is refused by it.
 
 ## Next, in order
 
-1. **Prove 0.3.0**: carbon-svelte passing on both readers from the
-   published packages, against the guest on 0.3.0.
-2. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
+1. **Release wire protocol 3 as 0.5.0**, and Bootstrap the guest to it
+   from npm, off the trial. Proved on the guest (see above). A daemon
+   tarball resolves `@sr-receipts/host` from the registry, so any trial
+   that changes the host has to replace the guest's host by hand, as this
+   one did; a trial path that carries the host would remove that step.
+2. **Prove 0.5.0**: carbon-svelte passing on both readers from the
+   published packages, against the guest. This replaces proving 0.4.0: a
+   0.5.0 guest refuses a 0.4.0 Mac, and no run from the published 0.3.0 or
+   0.4.0 packages is recorded. carbon-svelte's lockfile reached Playwright
+   1.64 on 2026-10-21 while the guest holds 1.63, so its NVDA project stops
+   at the preflight, now with both fixes named, until one of the two moves.
+3. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
    Every developer will do this once; it is the product. The existing guest
    went through the Bootstrap on 2026-10-05 (see ADR 0003's consequences):
    0.2.0 fails at the Provisioner's Guidepup stage, 0.2.1 fixes it, and the
-   guest is on 0.2.1 from npm with a healthy report. What is left is a guest
-   that has never held a rig, and the timing. jsDelivr did not serve
+   guest was on 0.2.1 from npm with a healthy report, then on 0.3.0 by
+   2026-10-20. What is left is a guest that has never held a rig, and the
+   timing. jsDelivr did not serve
    `provisioning/bootstrap.ps1` in the first minutes after 0.2.0's publish;
    the script was taken from the registry's tarball instead.
    On 2026-09-30 the existing guest turned out never to have been
@@ -91,10 +130,14 @@ file is the working list and changes as items land.
    and `-Firewall`, as `docs/operating-the-rig.md` now describes. The
    Provisioner covers the first two but does not remove Block rules, which a
    fresh guest's first dismissed "Allow access?" dialog creates.
-3. **A committed markdown receipt per failing test**, written by the fixture
-   into the consuming repo, when a ticket needs a file rather than a report
-   attachment. Deferred in ADR 0002 until a ticket asks.
-4. **A second consuming app**: a TXST app other than carbon-svelte. This is
+4. **An architecture review for a non-developer working through an agent.**
+   The goal beyond the architecture is that an accessibility expert, not
+   only a developer, runs sr-receipts with an agent such as Claude Code. A
+   pass over what such a person meets: errors an agent can explain and
+   recover from unaided, state that heals rather than needing a daemon
+   restart (the NVDA quit hang is the known case), and what the skill tells
+   the agent to do about each.
+5. **A second consuming app**: a TXST app other than carbon-svelte. This is
    what shows the setup cost to someone who did not build it.
 
 ## Research, after that
@@ -107,6 +150,17 @@ file is the working list and changes as items land.
   never a Receipt.
 
 ## Known, not yet decided
+
+- **Architecture candidates not taken yet** (from the 2026-11-25 review).
+  `type`'s rules live in each adapter and disagree: VoiceOver takes any
+  whole delay, NVDA caps it at 10 000 ms and refuses after a round trip,
+  and the control-character check is copied in both; the Reader Session
+  could hold them once. `workers: 1` is a README rule, not a check: calls
+  are serialized but sessions are not, so a second worker or a Smoke can
+  restart NVDA under a running test. The fixture tests fake the whole Reader
+  Session, so a Receipt File's Steps and Transcript are never checked
+  against each other. VoiceOver's Entry is split across a seam with one real
+  adapter.
 
 - **No mid-test focus watch.** The rig used to check `reportTitle` every few
   steps and stop when something stole the foreground. A test's `expect` now
@@ -122,7 +176,7 @@ file is the working list and changes as items land.
   major.minor, so a consumer's `npm up` that moves Playwright's minor stops
   NVDA until a daemon release on that minor. Found on 2026-10-21, when
   carbon-svelte's lockfile reached 1.64 and the guest held 1.63. The fixture
-  now names the mismatch before connecting (0.3.1). Removing the daemon's pin
+  now names the mismatch before connecting (0.4.0). Removing the daemon's pin
   would not help: the daemon is the server and holds one version either way.
   The candidate decoupling is `connectOverCDP` to the guest's Edge, which has
   no Playwright version check, behind a proxy that checks the token, since
@@ -132,9 +186,12 @@ file is the working list and changes as items land.
 - **Edge only on the guest.** Playwright ships no Windows ARM64 browsers.
   NVDA plus Firefox evidence would need Playwright to change, or the guest to
   be x64.
-- **Baselines.** Playwright's `toMatchSnapshot` on a transcript line is the
-  intended mechanism; nothing uses it yet, and the environment stamp is an
-  attachment rather than part of the snapshot.
+- **Baselines.** A committed Receipt File is a baseline in practice: a
+  change in what the reader said, or in the environment stamp in its header,
+  shows in `git diff`. Nothing fails a run when a Receipt File changes;
+  Playwright's `toMatchSnapshot` on a transcript line, or a check against the
+  committed Receipt File, are the candidates once a consumer wants a run to
+  fail on it.
 - **The fixtures are static pages now.** The guest's `fixtures/` served the
   runner by `file:` URL; a spec has to serve them over `http` for the guest's
   browser to reach them. The Smoke still opens `control.html` by file URL on

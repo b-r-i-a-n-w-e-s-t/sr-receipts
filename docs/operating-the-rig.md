@@ -116,12 +116,13 @@ once served different code to the Mac and to the guest.
 
 **Playwright versions must match.** A Playwright client connects only to a
 browser server of the same major.minor. The guest's `playwright-core` is
-pinned in the Runtime Manifest; the consumer's `@playwright/test` has to
-match it.
+pinned in the Runtime Manifest and reported as `playwright` in `/health`;
+the consumer's `@playwright/test` has to match it. An NVDA project checks
+this before its browser connects, and names both versions and both fixes.
 
 **The wire's protocol versions must match.** The daemon reports the protocol
-version it was built against in `/health`, and the Mac's NVDA session refuses
-any other at start, naming both. Any two releases with the same protocol work
+version it was built against in `/health`, and the Mac refuses any other,
+naming both, in the Playwright preflight and again at start. Any two releases with the same protocol work
 together; when they differ, upgrade whichever side is older.
 
 ## The scheduled tasks
@@ -233,5 +234,7 @@ problem with the page if you do not know it:
 | `artifacts\daemon.out` ends with `ERR_MODULE_NOT_FOUND` | The daemon's dependencies are missing or partial. Run the Bootstrap again for the same version; see "Upgrading the guest". |
 | `the guest daemon ... speaks wire protocol N, and this host speaks M` | The Mac's packages and the guest's daemon are from releases with different wire protocols. Upgrade the older side: the Bootstrap on the guest, npm on the Mac. A daemon from before protocol versions reports `none`. |
 | `Test timeout ... while setting up "reader"`, then `fetch failed` with `HeadersTimeoutError` about five minutes in, and `/health` never answers although the ports accept connections | NVDA did not quit. Guidepup runs `nvda.exe --quit` synchronously with no timeout, in both start and stop, so one stuck quit freezes every route. Confirm over SSH: the daemon's node process has a `cmd.exe` child running `nvda.exe --quit`. End NVDA and that `cmd.exe`, then restart the daemon task. On 2026-09-30 the whole VM froze with it and had to be restarted. |
-| `connect` fails with a version message | The consumer's `@playwright/test` and the guest's `playwright-core` differ in major.minor. |
+| `the guest's Edge is served by Playwright X and this run is Playwright Y` | The consumer's `@playwright/test` and the guest's `playwright-core` differ in major.minor. Install the guest's minor in the consumer, or Bootstrap the guest to a daemon on the consumer's. |
+| `NVDA is not started; the test's reader never started` | A reader call came after a start that failed. The start line above it in the Transcript says why. |
+| `abandoned capture window: closed, and what it heard discarded` at the top of a Transcript | An earlier test died between a capture's begin and end, so its window was still open on the guest. The start closed it; this test is unaffected. |
 | The transcript has plausible silences | Read the entry lines at its top first: they are the only uncontaminated measurement of where the reader was. |

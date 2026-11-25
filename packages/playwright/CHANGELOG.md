@@ -3,6 +3,16 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
+## Unreleased
+
+- **The Playwright preflight asks the host**, through
+  `checkGuestCompatibility`, which reads `/health`'s `playwright` field. It
+  no longer reads the guest's Environment Stamp, whose wording could have
+  turned the check off. It also refuses a guest on another wire protocol
+  before the browser connects.
+- **A reader call before `start` or after `stop` is refused**, through
+  `@sr-receipts/host`, and recorded in the Receipt File as a failed Step.
+
 ## 0.4.0
 
 - **The fixture writes a Receipt File** for every test that ran a reader:

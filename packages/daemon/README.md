@@ -99,16 +99,16 @@ interleave two callers' keystrokes.
 
 | | |
 |---|---|
-| `GET /health` | `{ ok, protocol, started, browser: { port, path }, rig }`, where `protocol` is the host's `PROTOCOL_VERSION` this daemon was built against, and `rig` is the environment stamp, taken once when the daemon starts. Not serialized, so it answers while a reader call is running. |
-| `POST /reader/start` | Start NVDA. A reader that is already up is restarted, so a test that never stopped its reader cannot hold it for the next. |
-| `POST /reader/stop` | |
+| `GET /health` | `{ ok, protocol, playwright, started, browser: { port, path }, rig }`, where `protocol` is the host's `PROTOCOL_VERSION` this daemon was built against, `playwright` is the exact `playwright-core` its browser server runs, and `rig` is the environment stamp, taken once when the daemon starts. Not serialized, so it answers while a reader call is running. |
+| `POST /reader/start` | Start NVDA. A reader that is already up is restarted, so a test that never stopped its reader cannot hold it for the next, and a capture window an earlier test left open is closed. Answers `{ ok, lines }`, a line for each of those it had to do. |
+| `POST /reader/stop` | Stop NVDA, closing a capture window left open. Answers `{ ok, lines }`. |
 | `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok: true, arrivedOn, lines }`, or `{ ok: false, lines, error }` where `lines` is what the guards recorded, ending with the windows on screen, and `error` is the cause chain. |
 | `POST /reader/perform` | `{ command }`, one of NVDA's commands by Guidepup's name. `{ spoken }`, `""` for silence. |
 | `POST /reader/press` | `{ key }`, e.g. `"Control+Home"`. `{ spoken }` |
 | `POST /reader/type` | `{ text, delay? }`: the characters of `text` as keys, `delay` milliseconds apart (0 when absent), inside one speech window. `{ spoken }`: everything said from the first key until the speech after the last one ended. The keys are sent by one PowerShell through Windows' input queue, not through Guidepup, whose `press` waits out the speech after every key. A control character is refused; a named key is `press`'s. |
 | `POST /reader/next`, `/reader/previous` | `{ spoken }` |
 | `GET /reader/log`, `POST /reader/clear` | Guidepup's own log, which has one entry per action. |
-| `POST /reader/capture/begin` | Open the speech window. Answers once Guidepup's listener is attached, so a page action sent next is inside it. |
+| `POST /reader/capture/begin` | Open the speech window. Answers once Guidepup's listener is attached, so a page action sent next is inside it, or fails with Guidepup's error if it refuses first, as it does when NVDA is not running. |
 | `POST /reader/capture/end` | Close it. `{ spoken }`: what was said inside it. |
 
 The browser is not on these routes. The daemon launches a Playwright browser

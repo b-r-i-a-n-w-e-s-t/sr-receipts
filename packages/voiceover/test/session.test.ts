@@ -110,6 +110,15 @@ function session(fake: Fake, seams: VoiceOverSeams = {}) {
   );
 }
 
+/** A session over `fake`, started, with what the start did cleared from its calls and transcript. */
+async function started(fake: Fake, seams: VoiceOverSeams = {}) {
+  const vo = session(fake, seams);
+  await vo.start();
+  fake.calls.length = 0;
+  vo.transcript.length = 0;
+  return vo;
+}
+
 const page = (): EntryPage & { evaluated: number } => {
   const fake = {
     evaluated: 0,
@@ -195,7 +204,7 @@ test("a launch that never wins the race gives up, and any other failure is not r
 
 test("every command is preceded by the sentinel, and a command that leaves it in place is silence", async () => {
   const fake = fakeGuidepup();
-  const vo = session(fake);
+  const vo = await started(fake);
   assert.equal(await vo.perform("findNextTable"), "said t");
   assert.equal(await vo.press("Tab"), "pressed Tab");
   // A key bound to nothing: VoiceOver says nothing, so the sentinel is the last phrase.
@@ -208,7 +217,7 @@ test("every command is preceded by the sentinel, and a command that leaves it in
 test("typing sends every key from one AppleScript inside a capture, after the sentinel, and answers with the last phrase", async () => {
   const fake = fakeGuidepup();
   const scripts: string[] = [];
-  const vo = session(fake, {
+  const vo = await started(fake, {
     async runAppleScript(script) {
       fake.calls.push("keys");
       scripts.push(script);
@@ -232,7 +241,7 @@ test("the typing script carries character ids, never the text, and waits only be
 
 test("a control character, or a delay that is not a whole number of milliseconds, is refused before the sentinel or a key", async () => {
   const fake = fakeGuidepup();
-  const vo = session(fake, { runAppleScript: async () => void fake.calls.push("keys") });
+  const vo = await started(fake, { runAppleScript: async () => void fake.calls.push("keys") });
   await assert.rejects(vo.type("a\n"), /U\+000A is not one; use press for a key such as Enter or Tab/);
   await assert.rejects(vo.type("a", { delay: -1 }), /`delay` must be a whole number of milliseconds/);
   await assert.rejects(vo.type("a", { delay: 1.5 }), /`delay` must be a whole number of milliseconds/);
@@ -241,7 +250,7 @@ test("a control character, or a delay that is not a whole number of milliseconds
 
 test("a command VoiceOver lacks is refused before the sentinel or a keystroke, and recorded as failed", async () => {
   const fake = fakeGuidepup();
-  const vo = session(fake);
+  const vo = await started(fake);
   await assert.rejects(vo.perform("findNextTabel"), /unknown VoiceOver keyboard command: findNextTabel/);
   assert.deepEqual(fake.calls, []);
   assert.deepEqual(vo.transcript, ["findNextTabel: failed: unknown VoiceOver keyboard command: findNextTabel"]);
@@ -249,7 +258,7 @@ test("a command VoiceOver lacks is refused before the sentinel or a keystroke, a
 
 test("a captured page action is preceded by the sentinel and cleaned like any answer", async () => {
   const fake = fakeGuidepup();
-  const vo = session(fake);
+  const vo = await started(fake);
   assert.deepEqual(await vo.capture(async () => 7), { result: 7, spoken: "1 row selected" });
   assert.deepEqual(fake.calls, ["sentinel", "capture"]);
   assert.deepEqual(vo.transcript, ["page action: 1 row selected"]);
@@ -261,7 +270,7 @@ test("hints are stripped from what is heard, and a hint alone is silence", async
     "row 3 of 16 select row unchecked checkbox. You are currently on a checkbox, inside of a cell. To select or deselect this checkbox, press Control-Option-Space.",
     "You are currently on a heading level 1, inside of web content. To exit this web area, press Control-Option-Shift-Up Arrow.",
   );
-  const vo = session(fake);
+  const vo = await started(fake);
   assert.equal(await vo.next(), "row 3 of 16 select row unchecked checkbox");
   assert.equal(await vo.next(), "");
 });
@@ -275,7 +284,7 @@ test("the sentinel comes off the front of a phrase, and only the front", async (
   for (const [heard, expected] of cases) {
     const fake = fakeGuidepup();
     fake.answers.push(heard);
-    assert.equal(await session(fake).next(), expected, heard);
+    assert.equal(await (await started(fake)).next(), expected, heard);
   }
 });
 
@@ -295,13 +304,13 @@ test("a hint is recognised in every form the real reader has produced", async ()
   for (const [heard, expected] of cases) {
     const fake = fakeGuidepup();
     fake.answers.push(heard);
-    assert.equal(await session(fake).next(), expected, heard);
+    assert.equal(await (await started(fake)).next(), expected, heard);
   }
 });
 
 test("the Entry activates the browser and sends the stock Item Chooser sequence, without the sentinel, and its proof is in the transcript", async () => {
   const fake = fakeGuidepup();
-  const vo = session(fake);
+  const vo = await started(fake);
   const target = page();
   assert.equal(await vo.enter(target), "Skip to main content link");
   assert.deepEqual(fake.calls, [
@@ -324,15 +333,14 @@ test("the Entry activates the browser and sends the stock Item Chooser sequence,
 test("an entry that fails is reported with the transcript, and the reader's wrong words in it", async () => {
   const fake = fakeGuidepup();
   fake.answers.push("toolbar");
-  const vo = session(fake);
-  await vo.start();
+  const vo = await started(fake);
   await assert.rejects(vo.enter(page()), /VoiceOver did not reach the page:[\s\S]*open item chooser \(attempt 10\): toolbar[\s\S]*### VOICEOVER DID NOT REACH THE PAGE\nItem Chooser did not open in 10 attempts/);
 });
 
 test("the log is cleaned like every answer, and the stamp is the Mac's", async () => {
   const fake = fakeGuidepup();
   fake.log.push("receipts mark. row 1", "receipts mark");
-  const vo = session(fake);
+  const vo = await started(fake);
   assert.deepEqual(await vo.spokenPhraseLog(), ["row 1", ""]);
   assert.deepEqual(await vo.environment(), ["macos: fake"]);
 });

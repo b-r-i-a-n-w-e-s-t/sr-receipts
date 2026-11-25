@@ -3,6 +3,29 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
+## Unreleased
+
+- **Wire protocol 3.** A 0.4.0 or older daemon is refused at start, and in
+  the Playwright preflight, until the guest is Bootstrapped to a release on
+  protocol 3.
+- **`DaemonHealth.playwright`**, required: the exact `playwright-core` the
+  guest's browser server runs.
+- **`checkGuestCompatibility({ url, token }, playwright)`**: whether a guest
+  will serve this run, its wire protocol and its Playwright major.minor
+  against the consumer's. Throws with the cause and the fix named, and names
+  an unreachable daemon. The protocol message is shared with the NVDA
+  session's start.
+- **A reader call needs a started reader.** A call made before `start`, after
+  a failed one, or after `stop` is refused by the session, for both readers,
+  and recorded as failed: "NVDA is not started; the test's reader never
+  started, see the start line in the Transcript", or "NVDA was stopped; a
+  call after stop is refused". `stop` and `environment` are never refused.
+- **`/reader/start` and `/reader/stop` answer `Recorded`**, `{ ok, lines }`,
+  and the NVDA session puts the lines in the Transcript, such as a capture
+  window an earlier test left open being closed.
+- **`ReaderAdapter.stop(record)`** now takes the recorder, so any other
+  adapter's `stop` gets it; one that ignores it still fits.
+
 ## 0.4.0
 
 - **`session.steps`**: each call the test made, structured (`call`, then

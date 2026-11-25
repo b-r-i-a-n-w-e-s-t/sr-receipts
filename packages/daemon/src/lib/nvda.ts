@@ -50,10 +50,21 @@ export interface GuidepupNvda {
   capture<T>(action: () => Promise<T>, options?: unknown): Promise<{ spokenPhrase: string; result: T }>;
 }
 
-/** Everything the daemon and the guard ask of the desktop. Its methods are called unbound. */
+/**
+ * Everything the daemon and the guard ask of the desktop. Its methods are
+ * called unbound. It owns the reader's state, whether NVDA is up and the open
+ * capture window, so nothing outside it can disagree with it.
+ */
 export interface NvdaDesktop {
-  start(): Promise<void>;
-  stop(): Promise<void>;
+  /**
+   * Start NVDA, stopping it first if it is up, and closing a capture window
+   * left open. Returns a line for each of those it had to do.
+   */
+  start(): Promise<string[]>;
+  /** Stop NVDA if it is up, closing a capture window left open. Returns a line for that, if it had to. */
+  stop(): Promise<string[]>;
+  /** Whether NVDA is up. */
+  started(): boolean;
   /** One of NVDA's commands by Guidepup's name for it; what it made NVDA say, "" for silence. */
   perform(command: string): Promise<string>;
   press(key: string): Promise<string>;
@@ -63,7 +74,7 @@ export interface NvdaDesktop {
   previous(): Promise<string>;
   spokenPhraseLog(): Promise<string[]>;
   clearSpokenPhraseLog(): Promise<void>;
-  /** Open the speech window; resolves once the listener is attached. */
+  /** Open the speech window; resolves once the listener is attached, rejects with Guidepup's error if it never is. */
   captureBegin(): Promise<void>;
   /** Close it and return what was said inside it. */
   captureEnd(): Promise<string>;
@@ -128,6 +139,9 @@ for ($i = 0; $i -lt $keys.Count; $i++) {
 `;
 }
 
+/** The line a start or a stop reports for a capture window whose end never came. */
+export const ABANDONED = "abandoned capture window: closed, and what it heard discarded";
+
 export interface NvdaDesktopOptions {
   reader?: GuidepupNvda;
   powershell?: (script: string) => Promise<string>;
@@ -150,11 +164,45 @@ export function createNvdaDesktop({
   };
 
   let stamped: Promise<string[]> | undefined;
+  let started = false;
   let pending: { finish: () => void; result: Promise<{ spokenPhrase: string }> } | null = null;
 
+  // A window whose end never came, because the test that opened it died,
+  // would refuse every capture and every type after it until the daemon
+  // restarted. A start or a stop ends it; what it heard belongs to nobody.
+  async function closeAbandoned(): Promise<string[]> {
+    if (!pending) return [];
+    const { finish, result } = pending;
+    pending = null;
+    finish();
+    await result.catch(() => undefined);
+    return [ABANDONED];
+  }
+
   return {
-    start: () => reader.start(NVDA_OPTIONS),
-    stop: () => reader.stop(),
+    // A test that never reached `stop` would otherwise hold the reader for
+    // every test after it. Starting fresh costs a few seconds and gives each
+    // test the reader state the stock fixtures give it.
+    async start() {
+      const lines = await closeAbandoned();
+      if (started) {
+        await reader.stop().catch(() => undefined);
+        lines.push("NVDA was still up: stopped it first");
+      }
+      started = false;
+      await reader.start(NVDA_OPTIONS);
+      started = true;
+      return lines;
+    },
+    async stop() {
+      const lines = await closeAbandoned();
+      if (started) {
+        started = false;
+        await reader.stop();
+      }
+      return lines;
+    },
+    started: () => started,
 
     perform(command) {
       const keyCommand = reader.keyboardCommands[command];
@@ -194,7 +242,14 @@ export function createNvdaDesktop({
       // unhandled rejection; the caller sees it from captureEnd.
       result.catch(() => undefined);
       pending = { finish, result };
-      await readyPromise;
+      // Guidepup can refuse before it runs the action, as it does when NVDA
+      // is not running; waiting for the action alone would wait forever.
+      try {
+        await Promise.race([readyPromise, result]);
+      } catch (error) {
+        pending = null;
+        throw error;
+      }
     },
     async captureEnd() {
       if (!pending) throw new Error("no capture is open");

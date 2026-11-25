@@ -42,8 +42,9 @@ function fakeDesktop({ titles = ["Component Library : Component Library - Micros
   const spoken = async (phrase: string) => phrase;
   return {
     calls,
-    start: async () => undefined,
-    stop: async () => undefined,
+    start: async () => [],
+    stop: async () => [],
+    started: () => true,
     async perform(command) {
       calls.push(command);
       if (command === "reportTitle") return answer(titles, titleAsked++);

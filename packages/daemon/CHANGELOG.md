@@ -3,6 +3,23 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
+## Unreleased
+
+- **Built against wire protocol 3.** A Mac on 0.4.0 or older refuses this
+  daemon, and the reverse; upgrade both.
+- **`/health` reports `playwright`**, the exact `playwright-core` its
+  browser server runs, which the host checks before a browser connects.
+- **Fixed: a capture could wedge the daemon.** `POST /reader/capture/begin`
+  waited only for Guidepup to run its action, and Guidepup refuses before
+  running it when NVDA is not running, so begin never answered and every
+  reader route queued behind it. Begin now fails with Guidepup's error.
+- **Fixed: a capture window left open outlived its test.** When a test died
+  between `capture/begin` and `capture/end`, every later capture and `type`
+  was refused until the daemon restarted. `POST /reader/start` and
+  `POST /reader/stop` now close it and say so in their `lines`.
+- **The NVDA desktop owns whether NVDA is up**, and restarting a reader that
+  is up; `/health`'s `started` asks it.
+
 ## 0.4.0
 
 - No changes; released with the other three packages.

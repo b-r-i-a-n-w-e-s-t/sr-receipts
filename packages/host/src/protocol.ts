@@ -10,9 +10,14 @@
  *
  * Routes, all JSON, all needing `Authorization: Bearer <token>`:
  *
- *   GET  /health                 DaemonHealth
- *   POST /reader/start           start NVDA; a started reader is restarted
- *   POST /reader/stop
+ *   GET  /health                 DaemonHealth: the wire's version, the
+ *                                browser server's Playwright and endpoint,
+ *                                and the Environment Stamp
+ *   POST /reader/start           Recorded: start NVDA; a started reader is
+ *                                restarted, and a capture window left open
+ *                                is closed
+ *   POST /reader/stop            Recorded: stop NVDA, closing a capture
+ *                                window left open
  *   POST /reader/enter           EnterBody -> EntryResult: the guards, with
  *                                what they recorded either way
  *   POST /reader/perform         { command } -> Spoken
@@ -104,7 +109,8 @@ export interface SessionOptions {
  *
  * Both are built by `createReaderSession`, so on either reader: calls run one
  * at a time in the order they were made, every call rejects rather than
- * throws, and a failed call leaves a line in the transcript.
+ * throws, a failed call leaves a line in the transcript, and a reader call
+ * before `start` succeeds is refused.
  */
 export interface ReaderSession {
   readonly reader: Reader;
@@ -163,10 +169,11 @@ export interface ReaderSession {
  * The wire's version, bumped by hand when a route or a body changes shape,
  * and only then. The Mac and the guest are installed at different times, so
  * the daemon reports the version it was built against in `/health`, and the
- * NVDA session refuses a daemon reporting another: a mismatch fails at start
- * with both named, rather than later on whichever route changed. See ADR 0003.
+ * host refuses a daemon reporting another: a mismatch fails at the worker's
+ * preflight or at start with both named, rather than later on whichever route
+ * changed. See ADR 0003.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export interface DaemonHealth {
   ok: true;
@@ -176,12 +183,29 @@ export interface DaemonHealth {
    * to say so rather than assume it.
    */
   protocol?: number;
+  /**
+   * The exact version of the `playwright-core` the daemon's browser server
+   * runs, e.g. "1.63.0". Playwright connects a client only to a server of its
+   * own major.minor, so the host compares it with the consumer's before any
+   * browser connects. See ADR 0002.
+   */
+  playwright: string;
   /** Whether NVDA is up. */
   started: boolean;
   /** Where Playwright's `connectOptions.wsEndpoint` points on the guest. */
   browser: { port: number; path: string };
   /** The Environment Stamp of the reader this daemon serves. */
   rig: string[];
+}
+
+/**
+ * What a start or a stop had to do beyond starting or stopping, such as
+ * closing a capture window whose end never came. `lines` goes into the
+ * Transcript; it is empty when there was nothing else to do.
+ */
+export interface Recorded {
+  ok: true;
+  lines: string[];
 }
 
 export interface EnterBody {

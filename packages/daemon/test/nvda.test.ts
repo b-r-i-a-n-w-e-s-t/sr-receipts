@@ -5,14 +5,15 @@
  * command's speech and nothing else, that an unknown command is refused before
  * a keystroke goes anywhere, that the capture window is really open when
  * `captureBegin` returns, which is the whole point of the two-route design,
- * and that typing is one speech window around one script that carries no text.
+ * that a window nobody closed does not outlive a start or a stop, and that
+ * typing is one speech window around one script that carries no text.
  *
  * Run: npm test
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createNvdaDesktop, typingScript, type GuidepupNvda } from "../src/lib/nvda.ts";
+import { ABANDONED, createNvdaDesktop, typingScript, type GuidepupNvda } from "../src/lib/nvda.ts";
 
 interface Fake extends GuidepupNvda {
   calls: string[];
@@ -96,6 +97,54 @@ test("captureBegin returns only once Guidepup's listener is attached, and captur
   assert.deepEqual(guidepup.calls, ["capture: listener attached"]);
   assert.equal(await desktop.captureEnd(), "1 row selected");
   assert.deepEqual(guidepup.calls, ["capture: listener attached", "capture: action done, settling"]);
+});
+
+test("start restarts a reader that is already up, stop is idempotent, and started says which", async () => {
+  const guidepup = fakeGuidepup();
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [] });
+  assert.equal(desktop.started(), false);
+  assert.deepEqual(await desktop.start(), []);
+  assert.equal(desktop.started(), true);
+  assert.deepEqual(await desktop.start(), ["NVDA was still up: stopped it first"]);
+  assert.deepEqual(await desktop.stop(), []);
+  assert.equal(desktop.started(), false);
+  assert.deepEqual(await desktop.stop(), []);
+  assert.deepEqual(
+    guidepup.calls.map((call) => call.split(" ")[0]),
+    ["start", "stop", "start", "stop"],
+  );
+});
+
+test("a capture Guidepup refuses before running the action fails begin with its error, and leaves no window open", { timeout: 2000 }, async () => {
+  const guidepup = fakeGuidepup();
+  // What Guidepup does when NVDA is not started: it throws before the action runs.
+  guidepup.capture = async () => {
+    throw new Error("NVDA is not running");
+  };
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [], powershell: async () => "" });
+  await assert.rejects(desktop.captureBegin(), /NVDA is not running/);
+  await assert.rejects(desktop.captureEnd(), /no capture is open/);
+  await assert.rejects(desktop.type("a", 0), /NVDA is not running/);
+});
+
+test("a window left open is closed by the next start, which says so, and a new one opens", { timeout: 2000 }, async () => {
+  const guidepup = fakeGuidepup();
+  const desktop = createNvdaDesktop({ reader: guidepup, environment: async () => [] });
+  await desktop.start();
+  await desktop.captureBegin();
+  assert.deepEqual(await desktop.start(), [ABANDONED, "NVDA was still up: stopped it first"]);
+  assert.deepEqual(guidepup.calls.slice(1), ["capture: listener attached", "capture: action done, settling", "stop", guidepup.calls[0]]);
+  await desktop.captureBegin();
+  assert.equal(await desktop.captureEnd(), "1 row selected");
+});
+
+test("a window left open is closed by stop, which says so", { timeout: 2000 }, async () => {
+  const desktop = createNvdaDesktop({ reader: fakeGuidepup(), environment: async () => [], powershell: async () => "" });
+  await desktop.start();
+  await desktop.captureBegin();
+  assert.deepEqual(await desktop.stop(), [ABANDONED]);
+  await assert.rejects(desktop.captureEnd(), /no capture is open/);
+  assert.equal(await desktop.type("a", 0), "1 row selected");
 });
 
 test("a second begin while one is open, or an end with none open, is refused", async () => {

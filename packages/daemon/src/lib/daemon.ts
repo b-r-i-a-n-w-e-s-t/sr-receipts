@@ -11,9 +11,10 @@
  *   interleaving keystrokes on one NVDA would produce two transcripts of
  *   nothing. Every reader route waits its turn.
  *
- * - **`start` restarts.** A test that never reached `stop` would otherwise hold
- *   the reader for every test after it. Starting fresh costs a few seconds and
- *   gives each test the reader state the stock fixtures give it.
+ * - **The desktop owns the reader's state.** Whether NVDA is up, and the
+ *   capture window open on it, are the desktop's; a route only translates
+ *   HTTP. `start` restarts a reader that is up and closes a window left open,
+ *   and says so in the lines it answers with.
  *
  * - **A capture window is a pair of routes.** Speech reaches Guidepup's log only
  *   inside one of its actions, and a page action runs on the Mac, so `begin`
@@ -25,9 +26,10 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { PROTOCOL_VERSION, errorChain, type DaemonHealth, type EnterBody, type EntryResult } from "@sr-receipts/host";
+import { PROTOCOL_VERSION, errorChain, type DaemonHealth, type EnterBody, type EntryResult, type Recorded } from "@sr-receipts/host";
 import { enterDocument } from "./guard.ts";
 import type { NvdaDesktop } from "./nvda.ts";
+import { packageVersion } from "./system.ts";
 
 export const DEFAULT_PORT = 8765;
 /** Where the Playwright browser server listens; the daemon's port plus one. */
@@ -121,7 +123,10 @@ const requireString = (body: Record<string, unknown>, field: string): string => 
 export function createRigServer({ token, desktop, browser }: RigServerOptions): Server {
   if (!token) throw new Error("a daemon with no token would expose the guest; set RIG_TOKEN");
 
-  let started = false;
+  // The `playwright-core` the browser server beside this daemon runs: the one
+  // `daemon.ts` imports, resolved from this package. The host compares its
+  // major.minor with the consumer's before any browser connects.
+  const playwright = packageVersion("playwright-core");
   // The mutex: every reader route runs after the one before it.
   let turn: Promise<unknown> = Promise.resolve();
   const serialized = <T>(work: () => Promise<T>): Promise<T> => {
@@ -133,17 +138,9 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
   async function handle(method: string, path: string, body: Record<string, unknown>): Promise<unknown> {
     switch (`${method} ${path}`) {
       case "POST /reader/start":
-        if (started) await desktop.stop().catch(() => undefined);
-        started = false;
-        await desktop.start();
-        started = true;
-        return { ok: true };
+        return { ok: true, lines: await desktop.start() } satisfies Recorded;
       case "POST /reader/stop":
-        if (started) {
-          started = false;
-          await desktop.stop();
-        }
-        return { ok: true };
+        return { ok: true, lines: await desktop.stop() } satisfies Recorded;
       case "POST /reader/enter": {
         const { modeProbes } = body as Partial<EnterBody>;
         if (modeProbes !== undefined && !(Array.isArray(modeProbes) && modeProbes.every((probe) => typeof probe === "string"))) {
@@ -207,7 +204,7 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
       // Not serialized: health must answer while a reader call is running.
       if (method === "GET" && path === "/health") {
         try {
-          const health: DaemonHealth = { ok: true, protocol: PROTOCOL_VERSION, started, browser, rig: await desktop.environment() };
+          const health: DaemonHealth = { ok: true, protocol: PROTOCOL_VERSION, playwright, started: desktop.started(), browser, rig: await desktop.environment() };
           return json(res, 200, health);
         } catch (error) {
           return json(res, 500, { error: errorChain(error) });

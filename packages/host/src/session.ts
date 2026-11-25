@@ -15,6 +15,10 @@
  * - **`start` restarts, and `stop` never throws.** A reader left running by a
  *   test that never stopped it cannot hold it for the next; a failed teardown
  *   must not mask the error that caused it.
+ * - **A reader call needs a started reader.** One made before a start, after
+ *   a failed one, or after a stop is refused here, with a line saying so,
+ *   rather than reaching a reader that is not there and failing as something
+ *   else.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { CaptureOptions, Captured, EntryOptions, EntryPage, Reader, ReaderSession, SessionOptions, Step, TypeOptions } from "./protocol.ts";
@@ -39,7 +43,8 @@ export interface ReaderAdapter {
   readonly reader: Reader;
   /** Start the reader, recording anything the start had to do, such as a retried launch. */
   start(record: Recorder): Promise<void>;
-  stop(): Promise<void>;
+  /** Stop the reader, recording anything the stop had to do, such as closing a capture window left open. */
+  stop(record: Recorder): Promise<void>;
   /**
    * Put the reader on the page's content and prove it, recording each step
    * of the proof. Returns what it landed on; throws when the proof fails.
@@ -81,7 +86,18 @@ export function createReaderSession(adapter: ReaderAdapter, options: SessionOpti
   const steps: Step[] = [];
   const record: Recorder = (...lines) => void transcript.push(...lines);
   const failed = (label: string, error: unknown): void => record(`${label}: failed: ${errorChain(error).join(" <- ")}`);
-  let started = false;
+  let state: "not started" | "started" | "stopped" = "not started";
+
+  // Thrown inside the call's own recording, so a refused call is a failed
+  // line like any other.
+  function requireStarted(): void {
+    if (state === "started") return;
+    throw new Error(
+      state === "stopped"
+        ? `${name} was stopped; a call after stop is refused`
+        : `${name} is not started; the test's reader never started, see the start line in the Transcript`,
+    );
+  }
 
   // The mutex. A call made from inside a queued call, such as a reader call
   // in capture's page action, would wait for itself forever, so it is refused.
@@ -114,6 +130,7 @@ export function createReaderSession(adapter: ReaderAdapter, options: SessionOpti
   const step = <T>(label: string, call: () => Promise<T>, spokenOf: (answer: T) => string): Promise<T> =>
     serialized(async () => {
       try {
+        requireStarted();
         const answer = await call();
         const spoken = spokenOf(answer);
         record(`${label}: ${spoken || SILENCE}`);
@@ -131,12 +148,24 @@ export function createReaderSession(adapter: ReaderAdapter, options: SessionOpti
     });
   const said = (label: string, call: () => Promise<string>): Promise<string> => step(label, call, (spoken) => spoken);
 
+  // A call that is not a Step, whose answer is not speech: only a refusal is recorded.
+  const asked = <T>(label: string, call: () => Promise<T>): Promise<T> =>
+    serialized(async () => {
+      try {
+        requireStarted();
+      } catch (error) {
+        failed(label, error);
+        throw error;
+      }
+      return await call();
+    });
+
   async function stop(): Promise<void> {
     // Not queued: a teardown after a timed-out test must not wait behind the
     // call that hung, or the reader is left running.
-    started = false;
+    state = "stopped";
     try {
-      await adapter.stop();
+      await adapter.stop(record);
     } catch (error) {
       record(`stop ${name}: ${errorChain(error).join(" <- ")}`);
     }
@@ -149,14 +178,15 @@ export function createReaderSession(adapter: ReaderAdapter, options: SessionOpti
 
     start: () =>
       serialized(async () => {
-        if (started) await stop();
+        if (state === "started") await stop();
         try {
           await adapter.start(record);
         } catch (error) {
+          state = "not started";
           failed(`start ${name}`, error);
           throw error;
         }
-        started = true;
+        state = "started";
         record(`start ${name}: ok`);
       }),
 
@@ -165,6 +195,7 @@ export function createReaderSession(adapter: ReaderAdapter, options: SessionOpti
     enter: (page, options = {}) =>
       serialized(async () => {
         try {
+          requireStarted();
           return await adapter.enter(page, options, record);
         } catch (error) {
           record(`### ${name.toUpperCase()} DID NOT REACH THE PAGE`, errorChain(error).join(" <- "));
@@ -182,8 +213,8 @@ export function createReaderSession(adapter: ReaderAdapter, options: SessionOpti
     capture: <T>(action: () => Promise<T>, options: CaptureOptions = {}): Promise<Captured<T>> =>
       step(options.label ?? "page action", () => adapter.capture(action), (captured) => captured.spoken),
 
-    spokenPhraseLog: () => serialized(async () => adapter.spokenPhraseLog()),
-    clearSpokenPhraseLog: () => serialized(async () => adapter.clearSpokenPhraseLog()),
+    spokenPhraseLog: () => asked("spokenPhraseLog", () => adapter.spokenPhraseLog()),
+    clearSpokenPhraseLog: () => asked("clearSpokenPhraseLog", () => adapter.clearSpokenPhraseLog()),
     environment: async () => adapter.environment(),
   };
 }

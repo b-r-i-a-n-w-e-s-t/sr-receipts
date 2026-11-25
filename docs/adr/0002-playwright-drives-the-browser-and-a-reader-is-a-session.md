@@ -83,6 +83,10 @@ in the consuming repository's scratch space.
    only to a browser server of the same major.minor. The Runtime Manifest
    pins the guest's `playwright-core`, and a consumer's `@playwright/test`
    must match it.
+   _Amended 2026-11-25:_ the host checks it before the browser connects,
+   from `/health`'s `playwright` field (wire protocol 3), with the protocol
+   check beside it. Reading it from the Environment Stamp's prose, as 0.4.0
+   did, let a reworded stamp turn the check off.
 9. **What retires.** The scenario language and its compiler, the step
    runner, expectations and checks, the runner's snapshots, the run, queue,
    probe and smoke-by-scenario entry points, the daemon's run routes and

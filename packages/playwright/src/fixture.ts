@@ -14,7 +14,7 @@
  * lives, which is not the consumer's `node_modules`.
  */
 import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from "@playwright/test";
-import { createNvdaSession, daemonHealth, type Reader, type ReaderSession, type SessionOptions } from "@sr-receipts/host";
+import { checkGuestCompatibility, createNvdaSession, type Reader, type ReaderSession, type SessionOptions } from "@sr-receipts/host";
 
 import { writeReceiptFile, type ReceiptTestInfo } from "./receipt-file.ts";
 
@@ -104,37 +104,19 @@ export function environmentStamp(reader: Reader, readerStamp: string[], browser:
 }
 
 /**
- * Why Playwright would refuse the guest's browser server, or `undefined`.
- * Playwright refuses a client of another major.minor at connect, as a
- * WebSocket error that names neither fix, so this is checked first. The
- * guest's version is read from its stamp; a stamp without it is let through.
+ * The preflight's body, given the host's check of a guest against this run's
+ * Playwright. Automatic and worker-scoped, so it runs before Playwright's
+ * `browser` connects to the guest: a guest Playwright would refuse, or an
+ * unreachable daemon, fails here, named, rather than as that connect's
+ * WebSocket error.
  */
-export function playwrightMismatch(rig: string[], client: string): string | undefined {
-  const guest = rig.join("\n").match(/driven by playwright-core (\d+\.\d+)\./)?.[1];
-  const ours = client.match(/^\d+\.\d+/)?.[0];
-  if (guest === undefined || ours === undefined || guest === ours) return undefined;
-  return (
-    `the guest's Edge is served by Playwright ${guest} and this run is Playwright ${ours}, and Playwright refuses a client of another minor version: ` +
-    `install @playwright/test@${guest} here, or bring the guest to a daemon built on Playwright ${ours}`
-  );
-}
-
-/**
- * The preflight's body, given how to read the daemon's health. Automatic and
- * worker-scoped, so it runs before Playwright's `browser` connects to the
- * guest; an unreachable daemon fails here too, named, rather than as that
- * connect's WebSocket error.
- */
-export function readerPreflight(health: typeof daemonHealth = daemonHealth) {
+export function readerPreflight(check: typeof checkGuestCompatibility = checkGuestCompatibility) {
   return async (
     { readerOptions }: { readerOptions: ReaderOptions | undefined },
     use: () => Promise<void>,
     workerInfo: { config: { version: string } },
   ): Promise<void> => {
-    if (readerOptions?.reader === "nvda") {
-      const mismatch = playwrightMismatch((await health(readerOptions)).rig, workerInfo.config.version);
-      if (mismatch) throw new Error(mismatch);
-    }
+    if (readerOptions?.reader === "nvda") await check(readerOptions, workerInfo.config.version);
     await use();
   };
 }

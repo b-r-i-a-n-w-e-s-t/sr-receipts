@@ -4,8 +4,10 @@
  * `createRigServer` takes its desktop, so everything here except NVDA itself
  * runs on any machine. What is worth testing without a desktop is the part
  * that faces the network: who gets in, that a route's answer is the reader's,
- * that calls on one reader are serialized, that start restarts, and that a
- * reader failure comes back as its cause chain rather than a bare 500.
+ * that calls on one reader are serialized, that start and stop carry the
+ * desktop's lines, and that a reader failure comes back as its cause chain
+ * rather than a bare 500. Restarting and abandoned capture windows are the
+ * desktop's, and are tested with it.
  *
  * Run: npm test
  */
@@ -17,6 +19,7 @@ import type { Server } from "node:http";
 import { PROTOCOL_VERSION, type DaemonHealth } from "@sr-receipts/host";
 import { createRigServer, resolveToken } from "../src/lib/daemon.ts";
 import type { NvdaDesktop } from "../src/lib/nvda.ts";
+import { packageVersion } from "../src/lib/system.ts";
 
 const TOKEN = "test-token";
 
@@ -31,13 +34,20 @@ interface Harness {
 async function harness(t: test.TestContext): Promise<Harness> {
   const calls: string[] = [];
   const state: Harness = { url: "", calls, release: null, server: undefined as unknown as Server };
+  let up = false;
   const desktop: NvdaDesktop = {
     async start() {
       calls.push("start");
+      const lines = up ? ["NVDA was still up: stopped it first"] : [];
+      up = true;
+      return lines;
     },
     async stop() {
       calls.push("stop");
+      up = false;
+      return ["abandoned capture window: closed, and what it heard discarded"];
     },
+    started: () => up,
     async perform(command) {
       calls.push(`perform ${command}`);
       if (command === "nope") throw new Error("unknown NVDA keyboard command: nope", { cause: new Error("from guidepup") });
@@ -101,12 +111,22 @@ test("a request with no token is refused, and a wrong one is told apart from a m
   assert.equal((await fetch(`${url}/health`, { headers: { authorization: "Bearer x" } })).status, 403);
 });
 
-test("health reports the wire's version, the stamp, the browser endpoint and whether the reader is up", async (t) => {
+test("health reports the wire's version, the browser server's Playwright and endpoint, the stamp and whether the reader is up", async (t) => {
   const { url } = await harness(t);
   const before = (await (await get(url, "/health")).json()) as DaemonHealth;
-  assert.deepEqual(before, { ok: true, protocol: PROTOCOL_VERSION, started: false, browser: { port: 8766, path: "/tok" }, rig: ["windows: test", "nvda: test"] });
+  assert.match(before.playwright, /^\d+\.\d+\.\d+$/);
+  assert.deepEqual(before, {
+    ok: true,
+    protocol: PROTOCOL_VERSION,
+    playwright: packageVersion("playwright-core"),
+    started: false,
+    browser: { port: 8766, path: "/tok" },
+    rig: ["windows: test", "nvda: test"],
+  });
   await post(url, "/reader/start");
   assert.equal(((await (await get(url, "/health")).json()) as { started: boolean }).started, true);
+  await post(url, "/reader/stop");
+  assert.equal(((await (await get(url, "/health")).json()) as { started: boolean }).started, false);
 });
 
 test("a route's answer is the reader's own speech, and the bodies are checked", async (t) => {
@@ -149,13 +169,12 @@ test("a reader failure is a 500 carrying the cause chain", async (t) => {
   assert.deepEqual(await response.json(), { error: ["unknown NVDA keyboard command: nope", "from guidepup"] });
 });
 
-test("start restarts a reader that is already up, and stop is idempotent", async (t) => {
+test("start and stop answer with the desktop's lines", async (t) => {
   const { url, calls } = await harness(t);
-  await post(url, "/reader/start");
-  await post(url, "/reader/start");
-  await post(url, "/reader/stop");
-  await post(url, "/reader/stop");
-  assert.deepEqual(calls, ["start", "stop", "start", "stop"]);
+  assert.deepEqual(await (await post(url, "/reader/start")).json(), { ok: true, lines: [] });
+  assert.deepEqual(await (await post(url, "/reader/start")).json(), { ok: true, lines: ["NVDA was still up: stopped it first"] });
+  assert.deepEqual(await (await post(url, "/reader/stop")).json(), { ok: true, lines: ["abandoned capture window: closed, and what it heard discarded"] });
+  assert.deepEqual(calls, ["start", "start", "stop"]);
 });
 
 test("calls on the one reader run one after another, in the order they arrived", async (t) => {

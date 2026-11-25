@@ -4,9 +4,10 @@
  *
  * Each side used to be tested against its own stand-in for the other, so
  * nothing proved they agreed. What is proved here is what crosses: the
- * token, a refusal's status, a reader failure's cause chain, the page's title
- * and probes for the guards, the capture window's two routes around a page
- * action, and the stamp.
+ * token, a refusal's status, a reader failure's cause chain, what a start
+ * and a stop had to do, the page's title and probes for the guards, the
+ * capture window's two routes around a page action, the stamp, and the
+ * browser server's Playwright for the host's compatibility check.
  *
  * Run: npm test
  */
@@ -14,10 +15,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { PROTOCOL_VERSION, RigError, SILENCE, createNvdaSession, type EntryPage } from "@sr-receipts/host";
+import { PROTOCOL_VERSION, RigError, SILENCE, checkGuestCompatibility, createNvdaSession, daemonHealth, type EntryPage } from "@sr-receipts/host";
 
 import { createRigServer } from "../src/lib/daemon.ts";
 import type { NvdaDesktop } from "../src/lib/nvda.ts";
+import { packageVersion } from "../src/lib/system.ts";
 
 const TOKEN = "test-token";
 const TITLE = "Component Library";
@@ -26,6 +28,9 @@ interface Fake extends NvdaDesktop {
   calls: string[];
   /** What activation leaves in front; the guards fail unless it is the page. */
   foreground: string;
+  /** What the next start and stop answer with beside starting and stopping. */
+  startLines: string[];
+  stopLines: string[];
 }
 
 function fakeDesktop(): Fake {
@@ -33,8 +38,17 @@ function fakeDesktop(): Fake {
   const fake: Fake = {
     calls,
     foreground: `${TITLE} - Microsoft Edge`,
-    start: async () => void calls.push("start"),
-    stop: async () => void calls.push("stop"),
+    startLines: [],
+    stopLines: [],
+    async start() {
+      calls.push("start");
+      return fake.startLines;
+    },
+    async stop() {
+      calls.push("stop");
+      return fake.stopLines;
+    },
+    started: () => calls.includes("start"),
     async perform(command) {
       calls.push(command);
       switch (command) {
@@ -123,6 +137,34 @@ test("a daemon on another protocol version, or none, is refused at start with bo
   }
 });
 
+/** The daemon's own `playwright-core`, at another minor: what a consumer the guest would refuse is on. */
+function anotherMinor(version: string): string {
+  const [major, minor] = version.split(".").map(Number);
+  return `${major}.${(minor ?? 0) + 1}.0`;
+}
+
+test("health carries the browser server's Playwright, and a consumer on its minor passes the host's check", async (t) => {
+  const { url, desktop } = await daemon(t);
+  const playwright = packageVersion("playwright-core");
+  assert.match(playwright, /^\d+\.\d+\.\d+$/);
+  assert.equal((await daemonHealth({ url, token: TOKEN })).playwright, playwright);
+  await checkGuestCompatibility({ url, token: TOKEN }, playwright);
+  await checkGuestCompatibility({ url, token: TOKEN }, playwright.replace(/\d+$/, "99"));
+  assert.deepEqual(desktop.calls, []);
+});
+
+test("a consumer on another Playwright minor is refused by the host's check with both fixes, before the reader starts", async (t) => {
+  const { url, desktop } = await daemon(t);
+  const guest = packageVersion("playwright-core").split(".").slice(0, 2).join(".");
+  const ours = anotherMinor(guest).split(".").slice(0, 2).join(".");
+  await assert.rejects(checkGuestCompatibility({ url, token: TOKEN }, anotherMinor(guest)), (error: Error) => {
+    assert.ok(error.message.includes(`served by Playwright ${guest} and this run is Playwright ${ours}`), error.message);
+    assert.ok(error.message.endsWith(`install @playwright/test@${guest} here, or bring the guest to a daemon built on Playwright ${ours}`), error.message);
+    return true;
+  });
+  assert.deepEqual(desktop.calls, []);
+});
+
 test("the guards run on the guest with the page's title and probes, and their lines reach the transcript", async (t) => {
   const { url, desktop } = await daemon(t);
   const session = createNvdaSession({ url, token: TOKEN });
@@ -159,18 +201,43 @@ test("each answer crosses as it was said, and the transcript names silence", asy
   assert.deepEqual(session.transcript.slice(1), [`moveToNextTable: ${SILENCE}`, "press Control+Home: link, Skip to main content", "next: row 2"]);
 });
 
+test("what a start and a stop had to do on the guest reaches the transcript", async (t) => {
+  const { url, desktop } = await daemon(t);
+  desktop.startLines = ["abandoned capture window: closed, and what it heard discarded", "NVDA was still up: stopped it first"];
+  desktop.stopLines = ["abandoned capture window: closed, and what it heard discarded"];
+  const session = createNvdaSession({ url, token: TOKEN });
+  await session.start();
+  await session.stop();
+  assert.deepEqual(session.transcript, [
+    "abandoned capture window: closed, and what it heard discarded",
+    "NVDA was still up: stopped it first",
+    "start NVDA: ok",
+    "abandoned capture window: closed, and what it heard discarded",
+  ]);
+});
+
+test("a reader call before start is refused on the host, recorded, and never reaches the guest", async (t) => {
+  const { url, desktop } = await daemon(t);
+  const session = createNvdaSession({ url, token: TOKEN });
+  await assert.rejects(session.next(), /^Error: NVDA is not started; the test's reader never started, see the start line in the Transcript$/);
+  assert.deepEqual(desktop.calls, []);
+  assert.deepEqual(session.transcript, ["next: failed: NVDA is not started; the test's reader never started, see the start line in the Transcript"]);
+});
+
 test("typing crosses with its text and its pace, and a pace left out is none", async (t) => {
   const { url, desktop } = await daemon(t);
   const session = createNvdaSession({ url, token: TOKEN });
+  await session.start();
   assert.equal(await session.type("ban", { delay: 120 }), "b. a. n");
   assert.equal(await session.type("a b"), "b. a. n");
-  assert.deepEqual(desktop.calls, ['type "ban" 120', 'type "a b" 0']);
-  assert.deepEqual(session.transcript, ['type "ban", 120 ms between keys: b. a. n', 'type "a b": b. a. n']);
+  assert.deepEqual(desktop.calls, ["start", 'type "ban" 120', 'type "a b" 0']);
+  assert.deepEqual(session.transcript.slice(1), ['type "ban", 120 ms between keys: b. a. n', 'type "a b": b. a. n']);
 });
 
 test("a reader failure on the guest arrives with its whole cause chain, and is recorded", async (t) => {
   const { url } = await daemon(t);
   const session = createNvdaSession({ url, token: TOKEN });
+  await session.start();
   await assert.rejects(session.perform("nope"), (error: unknown) => {
     assert.ok(error instanceof RigError);
     assert.equal(error.status, 500);
@@ -183,6 +250,8 @@ test("a reader failure on the guest arrives with its whole cause chain, and is r
 test("capture opens the window before the page action and closes it after, even when the action throws", async (t) => {
   const { url, desktop } = await daemon(t);
   const session = createNvdaSession({ url, token: TOKEN });
+  await session.start();
+  desktop.calls.length = 0;
   const captured = await session.capture(async () => {
     desktop.calls.push("page click");
     return 42;
@@ -198,7 +267,7 @@ test("capture opens the window before the page action and closes it after, even 
     /click failed/,
   );
   assert.deepEqual(desktop.calls, ["capture begin", "capture end"]);
-  assert.deepEqual(session.transcript, ["page action: 1 row selected", "page action: failed: click failed"]);
+  assert.deepEqual(session.transcript.slice(1), ["page action: 1 row selected", "page action: failed: click failed"]);
 });
 
 test("the stamp crosses from the guest's desktop", async (t) => {

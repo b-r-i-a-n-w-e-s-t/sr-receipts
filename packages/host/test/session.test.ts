@@ -4,8 +4,9 @@
  * What every reader gets from `createReaderSession`, proved once: the
  * transcript names silence and records failures, calls are serialized, every
  * call rejects rather than throws, a reader call from inside a capture is
- * refused rather than deadlocking, `start` restarts, and `stop` neither
- * throws nor waits behind a hung call. NVDA's adapter over the real daemon is
+ * refused rather than deadlocking, a call before a start is refused and
+ * recorded, `start` restarts, and `stop` neither throws nor waits behind a
+ * hung call. NVDA's adapter over the real daemon is
  * tested in `@sr-receipts/daemon`, which can depend on this package.
  *
  * Run: npm test
@@ -72,6 +73,17 @@ function fakeAdapter(overrides: Partial<ReaderAdapter> = {}): Fake {
   };
 }
 
+/** A session over `adapter`, started, with the start's lines already in its transcript. */
+async function started(adapter: Fake = fakeAdapter(), options: Parameters<typeof createReaderSession>[1] = {}) {
+  const session = createReaderSession(adapter, options);
+  await session.start();
+  adapter.calls.length = 0;
+  session.transcript.length = 0;
+  return session;
+}
+
+const NOT_STARTED = "NVDA is not started; the test's reader never started, see the start line in the Transcript";
+
 const page: EntryPage = {
   title: async () => "Component Library",
   bringToFront: async () => undefined,
@@ -119,7 +131,7 @@ test("each call the test made is a Step; start, entry and stop are not", async (
 test("the page state after each Step is read before the next call runs, and a failed read fails nothing but says why", async () => {
   let focused = "Edit";
   let reads = 0;
-  const session = createReaderSession(
+  const session = await started(
     fakeAdapter({
       async press(key) {
         focused = key === "ArrowLeft" ? "Delete" : "Edit";
@@ -144,7 +156,7 @@ test("the page state after each Step is read before the next call runs, and a fa
 
 test("typing is one call with one answer, and the transcript names the text and the pace", async () => {
   const adapter = fakeAdapter();
-  const session = createReaderSession(adapter);
+  const session = await started(adapter);
   assert.equal(await session.type("ban"), "b. a. n");
   assert.equal(await session.type("a b", { delay: 150 }), "b. a. n");
   assert.deepEqual(adapter.calls, ["type ban no delay", "type a b 150"]);
@@ -152,7 +164,7 @@ test("typing is one call with one answer, and the transcript names the text and 
 });
 
 test("a call that throws synchronously rejects, and leaves a line saying why", async () => {
-  const session = createReaderSession(fakeAdapter());
+  const session = await started();
   const pending = session.perform("nope");
   assert.ok(pending instanceof Promise);
   await assert.rejects(pending, /unknown NVDA keyboard command: nope/);
@@ -160,7 +172,7 @@ test("a call that throws synchronously rejects, and leaves a line saying why", a
 });
 
 test("a failed page action is recorded, not skipped", async () => {
-  const session = createReaderSession(fakeAdapter());
+  const session = await started();
   await assert.rejects(
     session.capture(async () => {
       throw new Error("click failed", { cause: new Error("element detached") });
@@ -180,7 +192,7 @@ test("calls run one after another, in the order they were made", async () => {
       return "row 2";
     },
   });
-  const session = createReaderSession(adapter);
+  const session = await started(adapter);
   const both = Promise.all([session.next(), session.press("Tab")]);
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(adapter.calls, ["next started"]);
@@ -190,20 +202,84 @@ test("calls run one after another, in the order they were made", async () => {
 });
 
 test("a failed call does not stop the calls queued behind it", async () => {
-  const session = createReaderSession(fakeAdapter());
+  const session = await started();
   const [first, second] = await Promise.allSettled([session.perform("nope"), session.next()]);
   assert.equal(first.status, "rejected");
   assert.deepEqual(second, { status: "fulfilled", value: "row 2" });
 });
 
 test("a reader call from inside a capture's action is refused rather than waiting for itself", async () => {
-  const session = createReaderSession(fakeAdapter());
+  const session = await started();
   await assert.rejects(
     session.capture(() => session.next()),
     /a capture's action must not call the reader/,
   );
   // The session is still usable afterwards.
   assert.equal(await session.next(), "row 2");
+});
+
+test("every reader call before a start is refused, recorded as failed, and never reaches the reader", async () => {
+  const adapter = fakeAdapter();
+  const session = createReaderSession(adapter);
+  await assert.rejects(session.perform("moveToNextTable"), new RegExp(`^Error: ${NOT_STARTED}$`));
+  await assert.rejects(session.press("Tab"), /NVDA is not started/);
+  await assert.rejects(session.type("ban"), /NVDA is not started/);
+  await assert.rejects(session.next(), /NVDA is not started/);
+  await assert.rejects(session.previous(), /NVDA is not started/);
+  await assert.rejects(session.capture(async () => undefined), /NVDA is not started/);
+  await assert.rejects(session.spokenPhraseLog(), /NVDA is not started/);
+  await assert.rejects(session.clearSpokenPhraseLog(), /NVDA is not started/);
+  await assert.rejects(session.enter(page), (error: Error) => {
+    assert.match(error.message, /^NVDA did not reach the page:\n/);
+    assert.equal(errorChain(error).at(-1), NOT_STARTED);
+    return true;
+  });
+  assert.deepEqual(adapter.calls, []);
+  assert.deepEqual(session.transcript, [
+    `moveToNextTable: failed: ${NOT_STARTED}`,
+    `press Tab: failed: ${NOT_STARTED}`,
+    `type "ban": failed: ${NOT_STARTED}`,
+    `next: failed: ${NOT_STARTED}`,
+    `previous: failed: ${NOT_STARTED}`,
+    `page action: failed: ${NOT_STARTED}`,
+    `spokenPhraseLog: failed: ${NOT_STARTED}`,
+    `clearSpokenPhraseLog: failed: ${NOT_STARTED}`,
+    "### NVDA DID NOT REACH THE PAGE",
+    NOT_STARTED,
+  ]);
+  assert.deepEqual(session.steps[0], { call: "moveToNextTable", error: NOT_STARTED });
+  // Neither asks the reader anything a test depends on.
+  assert.deepEqual(await session.environment(), ["windows: test"]);
+  await session.stop();
+});
+
+test("a call queued behind a start runs once the start is done", async () => {
+  const session = createReaderSession(fakeAdapter());
+  const [, spoken] = await Promise.all([session.start(), session.next()]);
+  assert.equal(spoken, "row 2");
+});
+
+test("after a failed start, a reader call is refused and points at the start's line", async () => {
+  const session = createReaderSession(
+    fakeAdapter({
+      reader: "voiceover",
+      async start() {
+        throw new Error("VoiceOver cannot be started");
+      },
+    }),
+  );
+  await assert.rejects(session.start(), /cannot be started/);
+  await assert.rejects(session.next(), /^Error: VoiceOver is not started; the test's reader never started, see the start line in the Transcript$/);
+  assert.deepEqual(session.transcript, [
+    "start VoiceOver: failed: VoiceOver cannot be started",
+    "next: failed: VoiceOver is not started; the test's reader never started, see the start line in the Transcript",
+  ]);
+});
+
+test("a call after stop is refused as a call after stop", async () => {
+  const session = await started();
+  await session.stop();
+  await assert.rejects(session.next(), /^Error: NVDA was stopped; a call after stop is refused$/);
 });
 
 test("start restarts a reader that is already up", async () => {
@@ -263,7 +339,7 @@ test("stop does not wait behind a call that hung", async () => {
   const adapter = fakeAdapter({
     next: () => new Promise<string>(() => undefined),
   });
-  const session = createReaderSession(adapter);
+  const session = await started(adapter);
   void session.next();
   await session.stop();
   assert.ok(adapter.calls.includes("stop"));

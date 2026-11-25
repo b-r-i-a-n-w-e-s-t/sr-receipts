@@ -3,6 +3,11 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
+## Unreleased
+
+- **A reader call before `start`, after a failed start, or after `stop` is
+  refused**, through `@sr-receipts/host`, rather than reaching VoiceOver.
+
 ## 0.4.0
 
 - **`createVoiceOverSession({ stateAfterStep })`** passes the host's new

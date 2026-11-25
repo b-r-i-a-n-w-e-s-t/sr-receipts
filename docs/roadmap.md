@@ -186,7 +186,13 @@ file is the working list and changes as items land.
   no Playwright version check, behind a proxy that checks the token, since
   CDP has no authentication of its own; it would amend ADR 0002. The same
   change would take the token out of the endpoint's path, which Playwright
-  prints in every connect error.
+  prints in every connect error. Prototyped on 2026-11-25 on the branch
+  `prototype/cdp-connect` (`prototypes/cdp-connect/PROTOTYPE-README.md`):
+  a Playwright 1.65 consumer drove the 0.5.0 guest's Edge over CDP, through
+  an SSH forward standing in for the proxy, and its Receipt File matched a
+  1.63 browser-server run byte for byte, four runs of four. Chosen as the
+  way forward the same day; the proxy, the daemon owning Edge, and the ADR
+  amendment are what is left.
 - **Edge only on the guest.** Playwright ships no Windows ARM64 browsers.
   NVDA plus Firefox evidence would need Playwright to change, or the guest to
   be x64.

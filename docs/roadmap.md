@@ -83,36 +83,31 @@ file is the working list and changes as items land.
   the consumer's" below). The wire stays at protocol 2 and the daemon is
   unchanged, so the guest on 0.3.0 serves a 0.4.0 host without a Bootstrap.
 
-- **In the tree, unreleased: wire protocol 3** (2026-11-25). The NVDA
+- **0.5.0 on npm and on the guest: wire protocol 3** (2026-11-25). The NVDA
   desktop owns whether NVDA is up and the open Capture Window: a capture
   that Guidepup refuses no longer wedges the daemon, and a window a dead
   test left open is closed by the next start, with a Transcript line. The
   host's Reader Session refuses calls before start or after stop, on both
   readers. `/health` carries `playwright`, and the host's
-  `checkGuestCompatibility` replaces the fixture's read of the stamp.
-  Proved on the guest on 2026-11-25 from a tarball trial, with the packed
-  host unpacked over the one npm resolved: a capture begun with NVDA
-  stopped answered "NVDA is not running" at once, twice; a window left open
-  was closed by the next start and the next stop, each with its line; the
-  Smoke passed; and a Mac consumer on Playwright 1.63 passed an NVDA spec
-  and wrote its Receipt File, while 1.64 stopped at the preflight with both
-  fixes named. The guest stays on that trial until a release: a 0.4.0 Mac
-  is refused by it.
+  `checkGuestCompatibility` replaces the fixture's read of the stamp. Proved
+  first from a tarball trial with the packed host unpacked over the one npm
+  resolved: a capture begun with NVDA stopped answered "NVDA is not
+  running" at once, twice; a window left open was closed by the next start
+  and the next stop, each with its line; the Smoke passed; a Mac consumer on
+  Playwright 1.63 passed an NVDA spec, and 1.64 stopped at the preflight
+  with both fixes named. Then released, and the guest Bootstrapped to 0.5.0
+  from npm, over SSH, with a healthy report and the shrinkwrap; the same
+  spec passed on the published packages. A 0.4.0 Mac is refused by it.
 
 ## Next, in order
 
-1. **Release wire protocol 3 as 0.5.0**, and Bootstrap the guest to it
-   from npm, off the trial. Proved on the guest (see above). A daemon
-   tarball resolves `@sr-receipts/host` from the registry, so any trial
-   that changes the host has to replace the guest's host by hand, as this
-   one did; a trial path that carries the host would remove that step.
-2. **Prove 0.5.0**: carbon-svelte passing on both readers from the
+1. **Prove 0.5.0**: carbon-svelte passing on both readers from the
    published packages, against the guest. This replaces proving 0.4.0: a
    0.5.0 guest refuses a 0.4.0 Mac, and no run from the published 0.3.0 or
    0.4.0 packages is recorded. carbon-svelte's lockfile reached Playwright
    1.64 on 2026-10-21 while the guest holds 1.63, so its NVDA project stops
    at the preflight, now with both fixes named, until one of the two moves.
-3. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
+2. **Re-provision the rig** with the Bootstrap, on a fresh guest, and time it.
    Every developer will do this once; it is the product. The existing guest
    went through the Bootstrap on 2026-10-05 (see ADR 0003's consequences):
    0.2.0 fails at the Provisioner's Guidepup stage, 0.2.1 fixes it, and the
@@ -130,14 +125,14 @@ file is the working list and changes as items land.
    and `-Firewall`, as `docs/operating-the-rig.md` now describes. The
    Provisioner covers the first two but does not remove Block rules, which a
    fresh guest's first dismissed "Allow access?" dialog creates.
-4. **An architecture review for a non-developer working through an agent.**
+3. **An architecture review for a non-developer working through an agent.**
    The goal beyond the architecture is that an accessibility expert, not
    only a developer, runs sr-receipts with an agent such as Claude Code. A
    pass over what such a person meets: errors an agent can explain and
    recover from unaided, state that heals rather than needing a daemon
    restart (the NVDA quit hang is the known case), and what the skill tells
    the agent to do about each.
-5. **A second consuming app**: a TXST app other than carbon-svelte. This is
+4. **A second consuming app**: a TXST app other than carbon-svelte. This is
    what shows the setup cost to someone who did not build it.
 
 ## Research, after that
@@ -151,6 +146,15 @@ file is the working list and changes as items land.
 
 ## Known, not yet decided
 
+- **A trial that changes the host needs a hand step on the guest.** A
+  daemon tarball resolves `@sr-receipts/host` from the registry, so the
+  0.5.0 trial reported protocol 2 until the packed host was unpacked over
+  `daemon\node_modules\@sr-receipts\host` and the daemon restarted. A
+  trial path that carries the host would remove that step.
+- **The Bootstrap works over SSH** while the user is signed in on the
+  guest's console: 0.5.0 was installed that way on 2026-11-25 with a
+  healthy report, though the Provisioner prints "Nothing here works from
+  SSH". `docs/operating-the-rig.md` still says to run it from the desktop.
 - **Architecture candidates not taken yet** (from the 2026-11-25 review).
   `type`'s rules live in each adapter and disagree: VoiceOver takes any
   whole delay, NVDA caps it at 10 000 ms and refuses after a round trip,

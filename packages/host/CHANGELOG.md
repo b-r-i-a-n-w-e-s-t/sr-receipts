@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
-## Unreleased
+## 0.5.0
 
 - **Wire protocol 3.** A 0.4.0 or older daemon is refused at start, and in
   the Playwright preflight, until the guest is Bootstrapped to a release on

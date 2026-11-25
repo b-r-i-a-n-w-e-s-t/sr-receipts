@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.5.0
 
 - **The Playwright preflight asks the host**, through
   `checkGuestCompatibility`, which reads `/health`'s `playwright` field. It

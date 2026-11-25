@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.5.0
 
 - **A reader call before `start`, after a failed start, or after `stop` is
   refused**, through `@sr-receipts/host`, rather than reaching VoiceOver.

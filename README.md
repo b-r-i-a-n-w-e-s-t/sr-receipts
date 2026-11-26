@@ -41,7 +41,7 @@ the consuming repo.
  ─────────────────────                        ──────────────────────────────────
 
  npx playwright test --project nvda            guest daemon (at logon)
-   page  ── connectOptions (ws) ─────────▶       Playwright browser server: Edge
+   page  ── CDP over ws + token ─────────▶       /browser: Edge, owned by the daemon
    reader ── HTTP + token ───────────────▶       NVDA, the guards, capture
 
  npx playwright test --project voiceover
@@ -71,7 +71,7 @@ Four packages:
 | [`@sr-receipts/host`](packages/host/README.md) | The `ReaderSession` interface a test uses, the wire to a guest daemon, and NVDA as a session over it. Knows no reader's commands. | The Mac you develop on |
 | [`@sr-receipts/playwright`](packages/playwright/README.md) | The `reader` fixture, so a consuming repo drives a real reader from its own `playwright test`. Depends on the host. | The Mac you develop on |
 | [`@sr-receipts/voiceover`](packages/voiceover/README.md) | VoiceOver as a `ReaderSession`, in process, and its doctor. An optional peer of the Playwright package: only a VoiceOver project installs it. | The Mac you develop on |
-| [`@sr-receipts/daemon`](packages/daemon/README.md) | The daemon that serves NVDA and launches the browser server, the guards, the Smoke, the Bootstrap and the Provisioner for the Windows Guest Rig | The guest |
+| [`@sr-receipts/daemon`](packages/daemon/README.md) | The daemon that serves NVDA and the guest's Edge, the guards, the Smoke, the Bootstrap and the Provisioner for the Windows Guest Rig | The guest |
 
 The daemon and VoiceOver depend on the host for the protocol, never the other
 way round. All four are published on npm under the MIT license, at one

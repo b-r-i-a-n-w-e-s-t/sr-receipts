@@ -3,6 +3,19 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
+## Unreleased
+
+- **An NVDA project's `browser` is the guest's Edge over CDP**, connected by
+  this package's `browser` fixture to the daemon's `/browser` with the
+  `url` and `token` already in `readerOptions`. Delete `connectOptions` from
+  the NVDA project and `RIG_BROWSER` from `.env.rig`. A VoiceOver project's
+  browser is launched as Playwright's own `browser` would launch it.
+- **`@playwright/test` from 1.61 on**, rather than the guest's major.minor:
+  no Playwright on the guest has to match the consumer's (ADR 0004). The
+  preflight checks the wire protocol and that the guest's Edge is running.
+- **An NVDA environment stamp ends with `playwright: <version> over CDP`**,
+  the run's Playwright, beside the guest's `edge:` line.
+
 ## 0.5.0
 
 - **The Playwright preflight asks the host**, through

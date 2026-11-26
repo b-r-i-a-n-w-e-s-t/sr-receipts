@@ -57,7 +57,7 @@ signed-out one is not.
    installs, is `provisioning\provision.ps1` in the daemon directory. The
    details, including what its health report checks, are in
    [`packages/daemon/provisioning/README.md`](../packages/daemon/provisioning/README.md).
-3. **Open the two ports**, once, from an elevated PowerShell in the daemon
+3. **Open the daemon's port**, once, from an elevated PowerShell in the daemon
    directory:
 
    ```powershell
@@ -66,7 +66,7 @@ signed-out one is not.
 
    Without the rule, Windows raises its own "Allow access?" dialog the first
    time the daemon binds, and that dialog takes the foreground. Registration
-   prints the `RIG_URL`, `RIG_BROWSER` and `RIG_TOKEN` to use from the Mac.
+   prints the `RIG_URL` and `RIG_TOKEN` to use from the Mac.
 
    If that dialog was ever dismissed, Windows has already added inbound
    **Block** rules named `node.exe`, and a block rule beats this allow rule.
@@ -83,13 +83,12 @@ signed-out one is not.
 
 ## Pointing tests at it
 
-In the consuming repo, put the three values in a gitignored `.env.rig` and
+In the consuming repo, put the two values in a gitignored `.env.rig` and
 load it before `playwright test`. Never commit or paste the token: anything
-that can reach the ports with it drives the guest's reader and browser.
+that can reach the port with it drives the guest's reader and browser.
 
 ```bash
 RIG_URL=http://<guest address>:8765
-RIG_BROWSER=ws://<guest address>:8766/<token>
 RIG_TOKEN=<the token>
 ```
 
@@ -100,11 +99,11 @@ set -a; . ./.env.rig; set +a
 curl -s -H "Authorization: Bearer $RIG_TOKEN" "$RIG_URL/health"
 ```
 
-`/health` answers with whether NVDA is up, where the browser server is, and
-the guest's environment stamp. The `nvda` project's config then uses
-`connectOptions: { wsEndpoint: RIG_BROWSER }` for `page` and
-`readerOptions: { reader: 'nvda', url: RIG_URL, token: RIG_TOKEN }` for the
-reader; see [`packages/playwright/README.md`](../packages/playwright/README.md).
+`/health` answers with whether NVDA is up, whether the guest's Edge is
+running, and the guest's environment stamp. The `nvda` project's config then
+sets `readerOptions: { reader: 'nvda', url: RIG_URL, token: RIG_TOKEN }`, and
+the fixture uses it for both the reader and `page`, which it connects to the
+guest's Edge over CDP at `RIG_URL`'s `/browser`; see [`packages/playwright/README.md`](../packages/playwright/README.md).
 
 **The dev server must listen on every interface.** The guest's browser
 reaches the Mac at `192.168.64.1`, never `localhost`, so `vite dev --host
@@ -114,11 +113,12 @@ reaches the Mac at `192.168.64.1`, never `localhost`, so `vite dev --host
 two dev servers on one port, one on IPv6 loopback and one on all interfaces,
 once served different code to the Mac and to the guest.
 
-**Playwright versions must match.** A Playwright client connects only to a
-browser server of the same major.minor. The guest's `playwright-core` is
-pinned in the Runtime Manifest and reported as `playwright` in `/health`;
-the consumer's `@playwright/test` has to match it. An NVDA project checks
-this before its browser connects, and names both versions and both fixes.
+**Playwright versions do not have to match.** The consumer's Playwright
+drives the guest's Edge over CDP, so it needs no Playwright on the guest of
+its own version; `@sr-receipts/playwright` accepts `@playwright/test`
+1.61 and later. What remains coupled is that Playwright and the Edge build,
+which updates itself on the guest, and the environment stamp names both. See
+ADR 0004.
 
 **The wire's protocol versions must match.** The daemon reports the protocol
 version it was built against in `/health`, and the Mac refuses any other,
@@ -129,7 +129,7 @@ together; when they differ, upgrade whichever side is older.
 
 | Task | Runs | Output |
 |---|---|---|
-| `nvda-daemon` | The daemon, at logon: NVDA behind a port, and an Edge browser server beside it. | `%LOCALAPPDATA%\nvda-rig\artifacts\daemon.out` |
+| `nvda-daemon` | The daemon, at logon: NVDA behind a port, and the guest's Edge, which it launches and owns, behind the same port's `/browser`. | `%LOCALAPPDATA%\nvda-rig\artifacts\daemon.out` |
 
 Start it from a PowerShell on the guest, or from SSH:
 
@@ -149,7 +149,7 @@ daemon\run-node.cmd daemon\dist\smoke.js
 
 A client of the daemon, from any shell on the guest, SSH included: it starts
 NVDA through the daemon's routes, opens `fixtures/control.html` in the
-daemon's browser server, runs the Focus Guard and four commands through the
+daemon's Edge through `/browser`, as a test does, runs the Focus Guard and four commands through the
 same `ReaderSession` a test on the Mac has, and stops. It needs `RIG_TOKEN`,
 which `tasks\register.ps1` set for the user. The transcript is written to
 `artifacts\smoke-transcript.txt` in the directory it is run from, and the
@@ -162,7 +162,10 @@ The daemon loads its code once, when it starts. To move the guest to another
 release, run the Bootstrap again, from the guest desktop, with that version
 (see first-time setup). It stops the daemon, replaces the package whole,
 installs its Node and dependencies, re-registers the task, restarts the
-daemon, and proves it with the Smoke. It does not touch the firewall.
+daemon, and proves it with the Smoke. It does not touch the firewall: a
+guest upgraded from before 0.6.0 still has TCP 8766 open for the retired
+browser server, with nothing listening, until `tasks\register.ps1 -Firewall`
+is run once more from an elevated PowerShell.
 
 To try a change before it is published, pack the daemon on the Mac and give
 the Bootstrap the tarball instead of a version. Only a release carries a
@@ -194,10 +197,13 @@ Stop-ScheduledTask nvda-daemon; Start-Sleep 3; Start-ScheduledTask nvda-daemon
 ```
 
 Task Scheduler ends only the task's own `cmd.exe`; the daemon's node process
-would survive and keep the ports. So the daemon records its PID in
+would survive and keep the port. So the daemon records its PID in
 `artifacts\daemon.pid` under the state directory, and `run-daemon.cmd` ends
 that process before starting the next one, as the Bootstrap does before an
-upgrade. A daemon that will not come back is diagnosed with
+upgrade. The daemon's Edge can outlive it too, and the next daemon finds that
+Edge through its profile, `%LOCALAPPDATA%\nvda-rig\edge-profile`, and uses
+it rather than starting another. A daemon that will not come back is
+diagnosed with
 `netstat -ano | findstr :8765` and `artifacts\daemon.out`.
 
 ## Before a run
@@ -228,13 +234,14 @@ problem with the page if you do not know it:
 | `FOCUS GUARD FAILED: the browser is not in front`, with a window list | Something elevated is in front, or Edge has no window yet. Minimize elevated windows and run again. |
 | `focus never reached the document` | Focus stuck outside the content; F6 did not recover it. Look at the window list in the same message. |
 | `browse mode could not be proved` | The page has no table, heading or landmark for the default probes; pass `modeProbes` to `enter`. |
-| `the guest daemon ... is not reachable` | The VM is not booted or signed in, the daemon task is not running, or the ports are closed. |
-| `/health` answers 403, `token not accepted` | The consumer's token is stale: `register.ps1` generates a new one when none is stored for the user. Read the stored one on the guest with `[Environment]::GetEnvironmentVariable('RIG_TOKEN','User')`, and update both `RIG_TOKEN` and `RIG_BROWSER` in `.env.rig`, since the browser endpoint's path is the token. |
-| The daemon's ports are `LISTENING` in `netstat` on the guest, but closed from the Mac | Inbound Block rules named `node.exe`, left by a dismissed "Allow access?" dialog. See step 3 of first-time setup. |
+| `the guest daemon ... is not reachable` | The VM is not booted or signed in, the daemon task is not running, or the port is closed. |
+| `/health` answers 403, `token not accepted` | The consumer's token is stale: `register.ps1` generates a new one when none is stored for the user. Read the stored one on the guest with `[Environment]::GetEnvironmentVariable('RIG_TOKEN','User')`, and update `RIG_TOKEN` in `.env.rig`. |
+| The daemon's port is `LISTENING` in `netstat` on the guest, but closed from the Mac | Inbound Block rules named `node.exe`, left by a dismissed "Allow access?" dialog. See step 3 of first-time setup. |
 | `artifacts\daemon.out` ends with `ERR_MODULE_NOT_FOUND` | The daemon's dependencies are missing or partial. Run the Bootstrap again for the same version; see "Upgrading the guest". |
 | `the guest daemon ... speaks wire protocol N, and this host speaks M` | The Mac's packages and the guest's daemon are from releases with different wire protocols. Upgrade the older side: the Bootstrap on the guest, npm on the Mac. A daemon from before protocol versions reports `none`. |
-| `Test timeout ... while setting up "reader"`, then `fetch failed` with `HeadersTimeoutError` about five minutes in, and `/health` never answers although the ports accept connections | NVDA did not quit. Guidepup runs `nvda.exe --quit` synchronously with no timeout, in both start and stop, so one stuck quit freezes every route. Confirm over SSH: the daemon's node process has a `cmd.exe` child running `nvda.exe --quit`. End NVDA and that `cmd.exe`, then restart the daemon task. On 2026-09-30 the whole VM froze with it and had to be restarted. |
-| `the guest's Edge is served by Playwright X and this run is Playwright Y` | The consumer's `@playwright/test` and the guest's `playwright-core` differ in major.minor. Install the guest's minor in the consumer, or Bootstrap the guest to a daemon on the consumer's. |
+| `Test timeout ... while setting up "reader"`, then `fetch failed` with `HeadersTimeoutError` about five minutes in, and `/health` never answers although the port accepts connections | NVDA did not quit. Guidepup runs `nvda.exe --quit` synchronously with no timeout, in both start and stop, so one stuck quit freezes every route. Confirm over SSH: the daemon's node process has a `cmd.exe` child running `nvda.exe --quit`. End NVDA and that `cmd.exe`, then restart the daemon task. On 2026-09-30 the whole VM froze with it and had to be restarted. |
+| `the guest's Edge is not running: ...` | The daemon could not start Edge, or start it again after it went. The reason follows the colon. Restart the `nvda-daemon` task; if it stays down, run the Smoke on the guest and read `artifacts\daemon.out`. |
+| `browserType.connectOverCDP` fails with a protocol error, where the last run on this guest passed | Edge updated itself on the guest and this run's Playwright is too old for it, or the reverse. Compare the `edge:` and `playwright:` lines of the two runs' environment stamps, and move `@playwright/test` to a release from around that Edge's. |
 | `NVDA is not started; the test's reader never started` | A reader call came after a start that failed. The start line above it in the Transcript says why. |
 | `abandoned capture window: closed, and what it heard discarded` at the top of a Transcript | An earlier test died between a capture's begin and end, so its window was still open on the guest. The start closed it; this test is unaffected. |
 | The transcript has plausible silences | Read the entry lines at its top first: they are the only uncontaminated measurement of where the reader was. |

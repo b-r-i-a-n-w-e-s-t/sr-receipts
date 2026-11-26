@@ -5,23 +5,26 @@ screen reader beside Playwright's own `page` from its own `playwright test`.
 
 Playwright drives the browser. For a VoiceOver project that is the browser
 Playwright launched on this Mac; for an NVDA project it is the guest's Edge,
-reached through Playwright's own `connectOptions`. The reader comes from the
+which the fixture's `browser` connects to over CDP through the guest daemon.
+The reader comes from the
 fixture: VoiceOver in process, NVDA through the guest daemon. Both are the
 same `ReaderSession`, so a spec never says which one it has. Why, and what was
 given up for it, is in
-[ADR 0002](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md).
+[ADR 0002](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0002-playwright-drives-the-browser-and-a-reader-is-a-session.md)
+and, for how the guest's Edge is reached,
+[ADR 0004](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/adr/0004-nvda-edge-is-reached-over-cdp-through-the-daemon.md).
 
 ## Installing it in a consumer
 
 ```bash
-npm install --save-dev @sr-receipts/playwright @playwright/test@1.63
+npm install --save-dev @sr-receipts/playwright @playwright/test
 npm install --save-dev @sr-receipts/voiceover    # only for a voiceover project
 ```
 
-The consumer's `@playwright/test` must share the guest's major.minor, which is
-the Runtime Manifest's Playwright version. An NVDA project checks this before
-its browser connects, and names both versions when they differ: an `npm up`
-that moves Playwright's minor is the usual cause. An NVDA project also needs a
+Any `@playwright/test` from 1.61 on works: an NVDA project drives the guest's
+Edge over CDP, so no Playwright on the guest has to match it. The fixture
+overrides Playwright's `browser` for that, and launches a VoiceOver project's
+browser the way Playwright's own `browser` would. An NVDA project also needs a
 Windows Guest Rig on the same release of sr-receipts; see
 [`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md). A VoiceOver
 project needs the macOS grants in
@@ -56,7 +59,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { defineConfig } from '@playwright/test'
 import type { ReaderOptions } from '@sr-receipts/playwright'
 
-// RIG_URL, RIG_BROWSER and RIG_TOKEN from a gitignored .env.rig, unless the
+// RIG_URL and RIG_TOKEN from a gitignored .env.rig, unless the
 // shell already set them.
 const envFile = new URL('.env.rig', import.meta.url)
 if (existsSync(envFile)) {
@@ -88,7 +91,6 @@ export default defineConfig<{}, { readerOptions: ReaderOptions }>({
   }, {
     name: 'nvda',
     use: {
-      connectOptions: { wsEndpoint: process.env.RIG_BROWSER ?? 'ws://unset' },
       baseURL: 'http://192.168.64.1:5176',
       readerOptions: { reader: 'nvda', url: process.env.RIG_URL ?? '', token: process.env.RIG_TOKEN ?? '' },
     },
@@ -107,8 +109,10 @@ export default defineConfig<{}, { readerOptions: ReaderOptions }>({
   that interface (`--host 0.0.0.0` for Vite, or your server's equivalent),
   not only on `localhost`. For VoiceOver the browser runs on the Mac, so it
   is `localhost`.
-- **`RIG_URL`, `RIG_BROWSER` and `RIG_TOKEN`** are the guest daemon's, for the
-  NVDA project only; see
+- **`RIG_URL` and `RIG_TOKEN`** are the guest daemon's, for the NVDA project
+  only, and are all its `page` needs too: the fixture connects it to the
+  guest's Edge at `RIG_URL`'s `/browser`, with the token as a header. There is
+  no `connectOptions` to set; see
   [`docs/operating-the-rig.md`](https://github.com/b-r-i-a-n-w-e-s-t/sr-receipts/blob/main/docs/operating-the-rig.md). The config
   above reads them from `.env.rig`; sourcing that file in the shell works too.
 - **`webServer` listens on every interface** for the NVDA project's sake, and

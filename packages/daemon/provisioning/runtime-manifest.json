@@ -13,7 +13,7 @@
   },
   "playwright": {
     "version": "1.63.0",
-    "note": "playwright-core on the guest. A consumer's @playwright/test must share this major.minor to connect to the browser server."
+    "note": "playwright-core on the guest, which the Smoke drives the guest's Edge with over CDP. A consumer's @playwright/test does not have to match it (ADR 0004)."
   },
   "guidepup": {
     "version": "0.34.0",

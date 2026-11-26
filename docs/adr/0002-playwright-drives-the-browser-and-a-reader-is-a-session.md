@@ -49,6 +49,8 @@ in the consuming repository's scratch space.
    branded Chrome. An NVDA project's browser is the guest's Edge, launched by
    the daemon as a Playwright browser server and reached with Playwright's own
    `connectOptions`. Safari and release Firefox are no longer under test.
+   _Amended 2026-11-25:_ the guest's Edge is now launched by the daemon and
+   reached over CDP through its `/browser` endpoint (ADR 0004).
 2. **A reader is a session.** `ReaderSession`, in `@sr-receipts/host`, is
    the one interface a test sees: `start`, `stop`, `enter(page)`, `perform`,
    `press`, `next`, `previous`, `capture(action)`, the speech log, and the
@@ -79,6 +81,8 @@ in the consuming repository's scratch space.
    for a browser server is a secret path; using the daemon's bearer token
    keeps one secret, and the consumer's `wsEndpoint` is derivable from what
    the daemon prints.
+   _Superseded 2026-11-25 by ADR 0004:_ the token is a bearer header on the
+   daemon's `/browser` endpoint, and is in no URL.
 8. **Versions are coupled across the wire.** A Playwright client connects
    only to a browser server of the same major.minor. The Runtime Manifest
    pins the guest's `playwright-core`, and a consumer's `@playwright/test`
@@ -87,6 +91,9 @@ in the consuming repository's scratch space.
    from `/health`'s `playwright` field (wire protocol 3), with the protocol
    check beside it. Reading it from the Environment Stamp's prose, as 0.4.0
    did, let a reworded stamp turn the check off.
+   _Superseded 2026-11-25 by ADR 0004:_ there is no Playwright on the guest
+   for a consumer to match; the protocol is checked, and the consumer's
+   Playwright and Edge's build are stamped.
 9. **What retires.** The scenario language and its compiler, the step
    runner, expectations and checks, the runner's snapshots, the run, queue,
    probe and smoke-by-scenario entry points, the daemon's run routes and

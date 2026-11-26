@@ -123,7 +123,7 @@ function Write-FallbackReport {
     schemaVersion = 5
     ok = $false
     fixture = 'control.html'
-    execution = "the logon daemon, as a test uses it: real NVDA and headed Edge through the daemon's routes and browser server"
+    execution = "the logon daemon, as a test uses it: real NVDA and headed Edge through the daemon's routes and its /browser"
     checks = [ordered]@{
       runtimeInstalled = $runtimeInstalled; daemonAnswered = $false; smokePassed = $false
       speechCaptured = $false; transcriptArtifact = $false
@@ -195,9 +195,9 @@ try {
     # bootstrap.ps1 installed the package's dependencies from its shrinkwrap
     # before this ran. What is checked is what Node will load, not the fact
     # that a command ran: these are the reviewed components the shrinkwrap
-    # exists to pin. playwright-core is the browser server a
-    # Mac's Playwright connects to, which only works between the same
-    # major.minor, so its version is what consumers match.
+    # exists to pin. playwright-core is what the Smoke drives the guest's
+    # Edge with; a consumer's Playwright connects over CDP and does not have
+    # to match it.
     $guidepup = Resolve-FromRig "require('@guidepup/guidepup/package.json').version"
     if ($guidepup -ne $manifest.guidepup.version) {
       throw "the daemon resolves @guidepup/guidepup $guidepup, not the reviewed $($manifest.guidepup.version)."
@@ -265,7 +265,6 @@ try {
     if ($task.State -ne 'Running') { throw "nvda-daemon is $($task.State) after Start-ScheduledTask; a stopped daemon cannot be proved." }
     $env:RIG_TOKEN = [Environment]::GetEnvironmentVariable('RIG_TOKEN', 'User')
     $env:RIG_PORT = [Environment]::GetEnvironmentVariable('RIG_PORT', 'User')
-    $env:RIG_BROWSER_PORT = [Environment]::GetEnvironmentVariable('RIG_BROWSER_PORT', 'User')
     if (-not $env:RIG_TOKEN) { throw 'RIG_TOKEN is not set for this user; tasks\register.ps1 sets it, and the Smoke cannot reach the daemon without it.' }
     Set-StageDetail "nvda-daemon $($task.State) on port $($env:RIG_PORT), RIG_TOKEN in the reporter's environment"
   }

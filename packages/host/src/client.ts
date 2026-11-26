@@ -114,8 +114,7 @@ function caller({ url, token }: ClientOptions) {
 }
 
 /**
- * The daemon's `/health`: its wire protocol, the browser server's Playwright
- * and path, and
+ * The daemon's `/health`: its wire protocol, whether its Edge is running, and
  * the guest's Environment Stamp. A daemon that does not answer is named with
  * what usually causes that.
  */
@@ -139,26 +138,32 @@ function protocolMismatch(url: string, daemon: DaemonHealth): string | undefined
   );
 }
 
-/** A Playwright version's major.minor: the part a browser server's client has to match. */
-const minor = (version: string): string => /^\d+\.\d+/.exec(version)?.[0] ?? version;
-
 /**
  * Whether a guest will serve this run: its daemon speaks this host's wire
- * protocol, and its browser server runs the Playwright major.minor that the
- * consumer's `@playwright/test`, given as `playwright`, is on. Throws with
- * the cause and the fix named when either differs, and when the daemon does
- * not answer. Playwright refuses a client of another major.minor at connect,
- * as a WebSocket error that names neither fix, so this is asked first.
+ * protocol, and its Edge is running. Throws with the cause and the fix named
+ * when either is not so, and when the daemon does not answer. A test's
+ * browser connects after this, and its own failure would be a bare WebSocket
+ * status that names neither.
  */
-export async function checkGuestCompatibility(options: ClientOptions, playwright: string): Promise<void> {
+export async function checkGuestCompatibility(options: ClientOptions): Promise<void> {
   const daemon = await daemonHealth(options);
   const mismatch = protocolMismatch(options.url, daemon);
   if (mismatch) throw new Error(mismatch);
-  const guest = minor(daemon.playwright);
-  const ours = minor(playwright);
-  if (guest === ours) return;
+  if (daemon.browser.running) return;
   throw new Error(
-    `the guest's Edge is served by Playwright ${guest} and this run is Playwright ${ours}, and Playwright refuses a client of another minor version: ` +
-      `install @playwright/test@${guest} here, or bring the guest to a daemon built on Playwright ${ours}`,
+    `the guest's Edge is not running: ${daemon.browser.error ?? "the daemon gave no reason"}; ` +
+      "restart the nvda-daemon task on the guest, and if it stays down, run the Smoke there for the whole story",
   );
+}
+
+/**
+ * Where a test's browser connects to the guest's Edge: the daemon's
+ * `/browser`, over the scheme the daemon is reached with, and the token as a
+ * header so that no URL, and so no connect error, carries it.
+ */
+export function browserEndpoint({ url, token }: ClientOptions): { url: string; headers: Record<string, string> } {
+  return {
+    url: `${url.replace(/\/+$/, "").replace(/^http/, "ws")}/browser`,
+    headers: { authorization: `Bearer ${token}` },
+  };
 }

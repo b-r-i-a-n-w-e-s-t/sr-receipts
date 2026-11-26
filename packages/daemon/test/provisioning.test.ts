@@ -315,8 +315,8 @@ test("runtime manifest agrees with the locked packages and Guidepup NVDA manifes
   // Edge is the one browser Windows on ARM64 ships and Playwright can drive
   // natively; it is verified present, never downloaded.
   assert.equal(runtime.edge.source, "preinstalled with Windows 11");
-  // A Playwright client can only connect to a browser server of the same
-  // major.minor, so the guest's version is what every consumer must match.
+  // The Smoke's Playwright is reviewed code on the guest, so the package
+  // installs exactly the version the manifest pins.
   assert.equal(pkg.dependencies["playwright-core"], runtime.playwright.version);
   assert.equal(pkg.dependencies["@guidepup/guidepup"], runtime.guidepup.version);
   assert.equal(pkg.dependencies["@guidepup/setup"], runtime.guidepup.setupVersion);

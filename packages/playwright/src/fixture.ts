@@ -3,7 +3,8 @@
  *
  * Playwright drives the browser. For a VoiceOver project that is the browser
  * Playwright launched on this Mac; for an NVDA project it is the guest's Edge,
- * reached through Playwright's own `connectOptions`. The reader comes from
+ * which this package's `browser` reaches over CDP through the guest daemon's
+ * `/browser` (ADR 0004). The reader comes from
  * here: VoiceOver in process through `@sr-receipts/voiceover`, NVDA through the
  * guest daemon's routes in `@sr-receipts/host`. Both are the same
  * `ReaderSession`, so a spec never says which one it has. See ADR 0002.
@@ -13,8 +14,8 @@
  * of itself, and a linked package resolves its imports from where it really
  * lives, which is not the consumer's `node_modules`.
  */
-import type { Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from "@playwright/test";
-import { checkGuestCompatibility, createNvdaSession, type Reader, type ReaderSession, type SessionOptions } from "@sr-receipts/host";
+import type { Browser, Fixtures, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from "@playwright/test";
+import { browserEndpoint, checkGuestCompatibility, createNvdaSession, type Reader, type ReaderSession, type SessionOptions } from "@sr-receipts/host";
 
 import { writeReceiptFile, type ReceiptTestInfo } from "./receipt-file.ts";
 
@@ -95,29 +96,59 @@ export async function createSession(
 
 /**
  * What produced the speech. NVDA's browser is the guest's Edge, which the
- * guest's own stamp names with its version; the project's `browserName` there
- * is only the protocol Playwright connected with. VoiceOver's browser is the
+ * guest's own stamp names with its version, driven over CDP by this run's
+ * Playwright, `playwright`, which is the half of that pairing the guest
+ * cannot see; the project's `browserName` there is only the protocol
+ * Playwright connected with. VoiceOver's browser is the
  * one Playwright launched on this Mac, which the Mac's stamp cannot name.
  */
-export function environmentStamp(reader: Reader, readerStamp: string[], browser: { name: string; version: string }): string[] {
-  return reader === "nvda" ? readerStamp : [...readerStamp, `browser: ${browser.name} ${browser.version}`];
+export function environmentStamp(reader: Reader, readerStamp: string[], browser: { name: string; version: string }, playwright: string): string[] {
+  return [...readerStamp, reader === "nvda" ? `playwright: ${playwright} over CDP` : `browser: ${browser.name} ${browser.version}`];
 }
 
 /**
- * The preflight's body, given the host's check of a guest against this run's
- * Playwright. Automatic and worker-scoped, so it runs before Playwright's
- * `browser` connects to the guest: a guest Playwright would refuse, or an
- * unreachable daemon, fails here, named, rather than as that connect's
- * WebSocket error.
+ * The preflight's body, given the host's check of a guest. Automatic and
+ * worker-scoped, so it runs before `browser` connects to the guest: a daemon
+ * on another wire protocol, an Edge that is not running, or an unreachable
+ * daemon fails here, named, rather than as that connect's WebSocket error.
  */
 export function readerPreflight(check: typeof checkGuestCompatibility = checkGuestCompatibility) {
-  return async (
-    { readerOptions }: { readerOptions: ReaderOptions | undefined },
-    use: () => Promise<void>,
-    workerInfo: { config: { version: string } },
-  ): Promise<void> => {
-    if (readerOptions?.reader === "nvda") await check(readerOptions, workerInfo.config.version);
+  return async ({ readerOptions }: { readerOptions: ReaderOptions | undefined }, use: () => Promise<void>): Promise<void> => {
+    if (readerOptions?.reader === "nvda") await check(readerOptions);
     await use();
+  };
+}
+
+type BrowserName = "chromium" | "firefox" | "webkit";
+/** What `browser` needs of Playwright's browser types. */
+type BrowserTypes<B> = Record<BrowserName, { launch(): Promise<B>; connectOverCDP(url: string, options: { headers: Record<string, string> }): Promise<B> }>;
+
+/**
+ * The `browser` fixture's body. An NVDA worker's browser is the guest's Edge,
+ * connected over CDP through the daemon's `/browser`, so no Playwright on the
+ * guest has to match this run's. Any other worker's is launched here as
+ * Playwright's own `browser` launches one: with no arguments, because
+ * Playwright's `_browserOptions` fixture has already made the project's
+ * `headless`, `channel` and `launchOptions` the defaults. Overriding
+ * `browser` replaces Playwright's for every project, so this is both halves.
+ * It asks for `readerPreflight`, so a guest that will not serve this run is
+ * named before its Edge is asked for.
+ */
+export function readerBrowser() {
+  return async <B extends Pick<Browser, "close">>(
+    // `readerPreflight` is asked for only so that it runs first.
+    { playwright, browserName, readerOptions, readerPreflight }: { playwright: BrowserTypes<B>; browserName: BrowserName; readerOptions: ReaderOptions | undefined; readerPreflight?: void },
+    use: (browser: B) => Promise<void>,
+  ): Promise<void> => {
+    let browser: B;
+    if (readerOptions?.reader === "nvda") {
+      const { url, headers } = browserEndpoint(readerOptions);
+      browser = await playwright.chromium.connectOverCDP(url, { headers });
+    } else {
+      browser = await playwright[browserName].launch();
+    }
+    await use(browser);
+    await browser.close();
   };
 }
 
@@ -135,7 +166,7 @@ export interface ReceiptOptions {
 }
 
 type ReaderTestFixtures = { reader: ReaderSession; receipt: ReceiptOptions | undefined };
-type ReaderWorkerFixtures = { readerOptions: ReaderOptions | undefined; readerPreflight: void };
+type ReaderWorkerFixtures = { readerOptions: ReaderOptions | undefined; readerPreflight: void; browser: Browser };
 type BaseTestArgs = PlaywrightTestArgs & PlaywrightTestOptions;
 type BaseWorkerArgs = PlaywrightWorkerArgs & PlaywrightWorkerOptions;
 
@@ -151,6 +182,7 @@ interface ReaderFixtureArgs {
   receipt: ReceiptOptions | undefined;
 }
 interface ReaderTestInfo extends ReceiptTestInfo {
+  config: ReceiptTestInfo["config"] & { version: string };
   attach(name: string, options: { body: string; contentType: string }): Promise<void>;
   status?: string | undefined;
 }
@@ -190,7 +222,7 @@ export function readerFixture(create: typeof createSession = createSession) {
       // it. Attached whatever the outcome, and kept by Playwright on failure.
       await testInfo.attach("reader-transcript", { body: session.transcript.join("\n"), contentType: "text/markdown" });
       const environment = await session.environment().catch((error: Error) => [`environment unavailable: ${error.message}`]);
-      const stamp = environmentStamp(readerOptions.reader, environment, { name: channel ?? browserName, version: browser.version() });
+      const stamp = environmentStamp(readerOptions.reader, environment, { name: channel ?? browserName, version: browser.version() }, testInfo.config.version);
       await testInfo.attach("environment", { body: stamp.join("\n"), contentType: "text/plain" });
       // A skipped test keeps the last run's file: it asked nothing this time.
       const outcome = failure === undefined ? testInfo.status : "failed";
@@ -205,6 +237,9 @@ export function readerFixture(create: typeof createSession = createSession) {
 export const readerFixtures: ReaderFixtures = {
   readerOptions: [undefined, { option: true, scope: "worker" }],
   readerPreflight: [readerPreflight(), { scope: "worker", auto: true }],
+  // No timeout, as Playwright's own `browser` has none: a cold Edge on the
+  // guest is slow to start.
+  browser: [readerBrowser(), { scope: "worker", timeout: 0 }],
   receipt: [undefined, { option: true }],
   reader: readerFixture(),
 };

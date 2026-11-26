@@ -98,9 +98,9 @@ application data so it needs no machine-wide MSI or elevation, with its
 SHA-256 verified before installation. Edge is the browser
 Windows 11 ships and the one native browser Playwright can drive on ARM64; it
 is verified present, never downloaded, and its version is recorded in every
-Environment Stamp rather than pinned. `playwright-core` 1.63.0 is the browser
-server a Mac's Playwright connects to, which only works between the same
-major.minor, so its version here is what every consumer must match. The exact
+Environment Stamp rather than pinned. `playwright-core` 1.63.0 is what the
+Smoke drives that Edge with over CDP; a Mac's Playwright connects the same
+way and does not have to match it (ADR 0004). The exact
 locked `@guidepup/setup` 0.25.3 installs assets selected from
 `@guidepup/guidepup` 0.34.0's own manifest; the NVDA asset facts in this
 manifest are a reviewed copy of that source, and the pure test asserts their

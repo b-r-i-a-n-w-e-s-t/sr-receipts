@@ -18,7 +18,7 @@ test("every line is collected, and a query that fails reads as unknown", async (
   });
   assert.equal(lines.length, 6);
   assert.match(lines[0] ?? "", /^windows: 24H2 build 26100\.unknown /);
-  assert.match(lines[1] ?? "", /^edge: 153\.0\.4234\.48 at .*msedge\.exe, driven by playwright-core \d+\.\d+\.\d+$/);
+  assert.match(lines[1] ?? "", /^edge: 153\.0\.4234\.48 at .*msedge\.exe$/);
   assert.match(lines[3] ?? "", /^guidepup: \d+\.\d+\.\d+$/);
   assert.equal(lines[4], `node: ${process.version}`);
 });

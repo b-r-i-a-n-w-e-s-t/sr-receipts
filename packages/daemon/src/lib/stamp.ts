@@ -28,7 +28,7 @@ export async function stamp(ask: (script: string) => Promise<string> = powershel
   ]);
   return [
     `windows: ${release} build ${build}.${revision} ${process.env.PROCESSOR_ARCHITECTURE}`,
-    `edge: ${edge} at ${EDGE}, driven by playwright-core ${packageVersion("playwright-core")}`,
+    `edge: ${edge} at ${EDGE}`,
     `nvda asset: ${existsSync(cache) ? readdirSync(cache).join(", ") : "unknown"}`,
     `guidepup: ${packageVersion("@guidepup/guidepup")}`,
     `node: ${process.version}`,

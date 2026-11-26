@@ -10,9 +10,9 @@
  *
  * Routes, all JSON, all needing `Authorization: Bearer <token>`:
  *
- *   GET  /health                 DaemonHealth: the wire's version, the
- *                                browser server's Playwright and endpoint,
- *                                and the Environment Stamp
+ *   GET  /health                 DaemonHealth: the wire's version, whether
+ *                                the guest's Edge is running, and the
+ *                                Environment Stamp
  *   POST /reader/start           Recorded: start NVDA; a started reader is
  *                                restarted, and a capture window left open
  *                                is closed
@@ -32,9 +32,10 @@
  *                                once the speech listener is attached
  *   POST /reader/capture/end     Spoken: closes it and returns what was said
  *
- * The browser itself is not on these routes. The daemon launches a Playwright
- * browser server, and a test reaches it with Playwright's own `connectOptions`
- * at `ws://<guest>:<browser.port><browser.path>`.
+ * The browser is not a JSON route. The daemon launches the guest's Edge and
+ * pipes a WebSocket upgrade on `/browser`, with the same bearer token, to
+ * Edge's DevTools endpoint, where a test's Playwright connects over CDP. See
+ * ADR 0004.
  */
 
 /** Each reader a project can run. */
@@ -173,7 +174,13 @@ export interface ReaderSession {
  * preflight or at start with both named, rather than later on whichever route
  * changed. See ADR 0003.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
+
+export interface BrowserHealth {
+  running: boolean;
+  /** Why Edge is not running, as the daemon last saw it. */
+  error?: string;
+}
 
 export interface DaemonHealth {
   ok: true;
@@ -183,17 +190,10 @@ export interface DaemonHealth {
    * to say so rather than assume it.
    */
   protocol?: number;
-  /**
-   * The exact version of the `playwright-core` the daemon's browser server
-   * runs, e.g. "1.63.0". Playwright connects a client only to a server of its
-   * own major.minor, so the host compares it with the consumer's before any
-   * browser connects. See ADR 0002.
-   */
-  playwright: string;
   /** Whether NVDA is up. */
   started: boolean;
-  /** Where Playwright's `connectOptions.wsEndpoint` points on the guest. */
-  browser: { port: number; path: string };
+  /** Whether the guest's Edge is up for a test to connect to, and if not, why. */
+  browser: BrowserHealth;
   /** The Environment Stamp of the reader this daemon serves. */
   rig: string[];
 }

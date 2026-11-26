@@ -99,7 +99,7 @@ interleave two callers' keystrokes.
 
 | | |
 |---|---|
-| `GET /health` | `{ ok, protocol, playwright, started, browser: { port, path }, rig }`, where `protocol` is the host's `PROTOCOL_VERSION` this daemon was built against, `playwright` is the exact `playwright-core` its browser server runs, and `rig` is the environment stamp, taken once when the daemon starts. Not serialized, so it answers while a reader call is running. |
+| `GET /health` | `{ ok, protocol, started, browser: { running, error? }, rig }`, where `protocol` is the host's `PROTOCOL_VERSION` this daemon was built against, `browser` says whether the guest's Edge is up, starting it if it is not, and why not when it cannot, and `rig` is the environment stamp, taken once when the daemon starts. Not serialized, so it answers while a reader call is running. |
 | `POST /reader/start` | Start NVDA. A reader that is already up is restarted, so a test that never stopped its reader cannot hold it for the next, and a capture window an earlier test left open is closed. Answers `{ ok, lines }`, a line for each of those it had to do. |
 | `POST /reader/stop` | Stop NVDA, closing a capture window left open. Answers `{ ok, lines }`. |
 | `POST /reader/enter` | `{ pageTitle, modeProbes? }`. The guards. `{ ok: true, arrivedOn, lines }`, or `{ ok: false, lines, error }` where `lines` is what the guards recorded, ending with the windows on screen, and `error` is the cause chain. |
@@ -111,11 +111,14 @@ interleave two callers' keystrokes.
 | `POST /reader/capture/begin` | Open the speech window. Answers once Guidepup's listener is attached, so a page action sent next is inside it, or fails with Guidepup's error if it refuses first, as it does when NVDA is not running. |
 | `POST /reader/capture/end` | Close it. `{ spoken }`: what was said inside it. |
 
-The browser is not on these routes. The daemon launches a Playwright browser
-server on the installed Edge at `ws://<guest>:8766/<token>`, and a test
-reaches it with Playwright's own `connectOptions`. The token is the path:
-Playwright's own protection for a browser server is a secret path, and this
-keeps one secret rather than two.
+The browser is not a JSON route. The daemon launches the installed Edge
+itself, headed, with its own profile in `%LOCALAPPDATA%\nvda-rig\edge-profile`
+and its DevTools endpoint on loopback only, and a WebSocket upgrade on
+`/browser` with the same bearer token is piped to that endpoint, where a
+test's Playwright connects with `connectOverCDP`. CDP has no authentication
+of its own, so `/browser` is the only way in, and the token stops at the
+daemon: Edge never sees it, and no URL carries it. An Edge that has gone is
+started again by the next connection or `/health`. See ADR 0004.
 
 ## The Smoke
 
@@ -126,7 +129,7 @@ daemon\run-node.cmd daemon\dist\smoke.js
 
 A client of the daemon, from any shell on the guest, SSH included. It starts
 NVDA through the daemon's routes, opens `fixtures/control.html` in the
-daemon's browser server, runs the guards and asks four commands through the
+daemon's Edge through `/browser`, as a test does, runs the guards and asks four commands through the
 same `ReaderSession` a test on the Mac has, and stops. It asserts only that
 the rig works: the daemon answered, the page was reached in browse mode, and
 quick navigation spoke. Needs `RIG_TOKEN`, which `tasks/register.ps1` set for

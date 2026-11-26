@@ -75,7 +75,7 @@ if (failedStage) {
   failure = `runtime stage "${failedStage.name}" failed: ${failedStage.detail}`;
 } else {
   // The same Node as this reporter, which is the provisioned one, and the
-  // environment the provisioner set: RIG_TOKEN, RIG_PORT, RIG_BROWSER_PORT.
+  // environment the provisioner set: RIG_TOKEN and RIG_PORT.
   run = spawnSync(process.execPath, [smokeScript, "--transcript", artifacts.transcript], { encoding: "utf8" });
   smoke = readSmokeResult(run.stdout as string | undefined);
   if (run.error) failure = run.error.message;

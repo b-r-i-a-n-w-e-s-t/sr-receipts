@@ -14,9 +14,8 @@ The consuming repo's receipts setup is its Playwright config whose projects set 
 
 ## Steps
 
-1. **Preflight.** Done when all three hold:
-   - The rig answers: `set -a; . ./.env.rig; set +a; curl -s -H "Authorization: Bearer $RIG_TOKEN" "$RIG_URL/health"` (NVDA only).
-   - `npx playwright --version` shares its major.minor with that answer's `playwright` field (NVDA only). The fixture's preflight refuses a mismatch with both fixes named, so this check only saves a run.
+1. **Preflight.** Done when both hold:
+   - The rig answers, with `"browser":{"running":true}`: `set -a; . ./.env.rig; set +a; curl -s -H "Authorization: Bearer $RIG_TOKEN" "$RIG_URL/health"` (NVDA only). The fixture's preflight refuses a daemon on another wire protocol, or an Edge that is not running, with the fix named, so this check only saves a run.
    - Exactly one process listens on the dev server's port: `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
 
    A mismatch is the user's to resolve: installing on the guest is a remote write and needs their go-ahead each time.

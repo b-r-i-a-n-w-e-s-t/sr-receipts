@@ -3,6 +3,17 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
+## Unreleased
+
+- **Wire protocol 4.** `/health`'s `browser` is `{ running, error? }`, whether
+  the guest's Edge is up and why not, and `playwright` is gone. A 0.5.0 or
+  older daemon is refused at start and in the preflight, with the fix named.
+- **`checkGuestCompatibility(options)`** checks the protocol and that the
+  guest's Edge is running. It takes no Playwright version: none on the guest
+  has to match the consumer's (ADR 0004).
+- **`browserEndpoint(options)`**: where a test's browser connects, the
+  daemon's `/browser` over `ws` or `wss`, with the token as a header.
+
 ## 0.5.0
 
 - **Wire protocol 3.** A 0.4.0 or older daemon is refused at start, and in

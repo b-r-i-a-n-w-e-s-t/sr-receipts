@@ -3,6 +3,25 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
+## Unreleased
+
+- **Built against wire protocol 4.** A Mac on 0.5.0 or older refuses this
+  daemon, and a Mac on this release refuses an older daemon, each naming the
+  fix.
+- **The daemon launches and owns the guest's Edge**, with its own profile in
+  `%LOCALAPPDATA%\nvda-rig\edge-profile` and DevTools on loopback only, and
+  starts it again when it has gone. A test reaches it over CDP through a
+  WebSocket upgrade on the daemon's own port at `/browser`, with the bearer
+  token as a header. The token never reaches Edge and is in no URL (ADR 0004).
+- **The browser server is gone**, and with it port 8766, `RIG_BROWSER_PORT`
+  and `RIG_BROWSER`. `register.ps1 -Firewall` opens 8765 only and closes
+  8766, and `register.ps1` clears `RIG_BROWSER_PORT`.
+- **`/health`'s `browser` is `{ running, error? }`**, starting Edge if it is
+  not up; `playwright` is gone.
+- **The Environment Stamp's `edge:` line no longer names `playwright-core`.**
+  The consumer's Playwright drives Edge, and the host stamps it.
+- **The Smoke connects through `/browser`**, the way a test does.
+
 ## 0.5.0
 
 - **Built against wire protocol 3.** A Mac on 0.4.0 or older refuses this

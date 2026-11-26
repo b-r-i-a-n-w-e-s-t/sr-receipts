@@ -22,9 +22,9 @@
 
   The daemon's bearer token is stored as a user environment variable so the
   logon task inherits it; it is generated if absent and printed, with the URL
-  and browser endpoint to use from the Mac.
+  to use from the Mac.
 
-    -Firewall   open the daemon's two ports, so the Mac can reach them without
+    -Firewall   open the daemon's port, so the Mac can reach them without
                 Windows raising its own "Allow access?" dialog the first time
                 node binds, which takes the foreground, and this rig has strong
                 opinions about windows that take the foreground. Needs
@@ -35,14 +35,15 @@
   fail, which is the trap docs/operating-the-rig.md opens with.
 
 .PARAMETER Port
-  The daemon's port. Default 8765. The browser server takes the next one.
+  The daemon's port. Default 8765. A test's browser connects on it too, at
+  /browser.
 
 .PARAMETER Token
   The bearer token the daemon requires. Generated and printed if omitted, and
   reused from the user environment if one was set before.
 
 .PARAMETER Firewall
-  Open both ports inbound. Needs an elevated session.
+  Open the daemon's port inbound. Needs an elevated session.
 #>
 [CmdletBinding()]
 param(
@@ -57,7 +58,6 @@ $rig = Split-Path -Parent $PSScriptRoot
 # Asked of Windows rather than built from USERDOMAIN, which is empty over SSH
 # and then fails with "No mapping between account names and security IDs".
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$browserPort = $Port + 1
 
 Write-Host "Registering nvda-rig tasks from $rig as $user" -ForegroundColor Cyan
 
@@ -81,7 +81,8 @@ if (-not $Token) {
 # having to sit in the repo where a commit could take it with it.
 [Environment]::SetEnvironmentVariable('RIG_TOKEN', $Token, 'User')
 [Environment]::SetEnvironmentVariable('RIG_PORT', "$Port", 'User')
-[Environment]::SetEnvironmentVariable('RIG_BROWSER_PORT', "$browserPort", 'User')
+# The browser server's port, from daemons before 0.6.0; nothing reads it now.
+[Environment]::SetEnvironmentVariable('RIG_BROWSER_PORT', $null, 'User')
 
 # ----------------------------------------------------------------- the tasks
 
@@ -137,10 +138,12 @@ Register-RigTask -Name 'nvda-daemon' -Script 'run-daemon.cmd' -AtLogon `
 
 if ($Firewall) {
   $rule = 'nvda-rig daemon'
+  # Replaced whole, so a port the daemon no longer listens on, such as the
+  # browser server's 8766 before 0.6.0, is closed by the same run.
   Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
   New-NetFirewallRule -DisplayName $rule -Direction Inbound -Action Allow `
-    -Protocol TCP -LocalPort $Port, $browserPort -Profile Any | Out-Null
-  Write-Host "  firewall: TCP $Port and $browserPort open inbound"
+    -Protocol TCP -LocalPort $Port -Profile Any | Out-Null
+  Write-Host "  firewall: TCP $Port open inbound"
 }
 
 # ------------------------------------------------------------------ the recap
@@ -157,7 +160,6 @@ Write-Host ''
 Write-Host 'From the Mac:'
 foreach ($address in $addresses) {
   Write-Host "  RIG_URL=http://${address}:$Port"
-  Write-Host "  RIG_BROWSER=ws://${address}:$browserPort/$Token"
 }
 Write-Host "  RIG_TOKEN=$Token"
 Write-Host ''
@@ -165,8 +167,8 @@ Write-Host 'Start the daemon now without logging out:'
 Write-Host '  Start-ScheduledTask nvda-daemon'
 if (-not $Firewall) {
   Write-Host ''
-  Write-Host "Re-run with -Firewall from an elevated PowerShell to open TCP $Port and $browserPort,"
-  Write-Host 'so the Mac can reach them without Windows raising its own prompt when node binds.'
+  Write-Host "Re-run with -Firewall from an elevated PowerShell to open TCP $Port,"
+  Write-Host 'so the Mac can reach it without Windows raising its own prompt when node binds.'
 }
 Write-Host ''
 Write-Host 'Nothing here works from SSH. NVDA needs the console desktop: a locked'

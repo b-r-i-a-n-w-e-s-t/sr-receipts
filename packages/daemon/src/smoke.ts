@@ -2,7 +2,7 @@
  * The Smoke: does the rig work right now, the way a test uses it?
  *
  * A client of the daemon, and nothing else. It starts NVDA through the
- * daemon's routes, connects to the browser server the daemon launched, opens
+ * daemon's routes, connects to the daemon's Edge through `/browser`, opens
  * the control Fixture in it, runs the Focus Guard and four commands through
  * the same `ReaderSession` a test on the Mac has, and stops. What it proves is
  * the posture the product uses: the logon task's daemon, on the interactive
@@ -13,7 +13,6 @@
  *
  *   RIG_TOKEN     required; the daemon's bearer token
  *   RIG_URL       default http://127.0.0.1:<RIG_PORT or 8765>
- *   RIG_BROWSER   default ws://127.0.0.1:<RIG_BROWSER_PORT or 8766>/<token>
  *
  * Runs from any shell on the guest, SSH included: the desktop is the daemon's,
  * not this process's. The Provisioner runs it as its proof and reads the
@@ -23,12 +22,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
-import { createNvdaSession, errorChain, type EntryPage, type ReaderSession } from "@sr-receipts/host";
-import { DEFAULT_BROWSER_PORT, DEFAULT_PORT } from "./lib/daemon.ts";
+import { browserEndpoint, createNvdaSession, errorChain, type EntryPage, type ReaderSession } from "@sr-receipts/host";
+import { DEFAULT_PORT } from "./lib/daemon.ts";
 import { SMOKE_COMMANDS, SMOKE_CONTROL_FIXTURE, type SmokeResult } from "./lib/smoke-result.ts";
 import { delay as wait } from "./lib/system.ts";
 
-/** A daemon the Provisioner just restarted takes a few seconds to launch its browser server and listen. */
+/** A daemon the Provisioner just restarted takes a few seconds to launch Edge and listen. */
 export const DAEMON_WAIT_MS = 60_000;
 
 export interface SmokeDependencies {
@@ -90,7 +89,6 @@ if (process.argv[1] === import.meta.filename) {
     process.exit(2);
   }
   const url = process.env.RIG_URL ?? `http://127.0.0.1:${process.env.RIG_PORT ?? DEFAULT_PORT}`;
-  const wsEndpoint = process.env.RIG_BROWSER ?? `ws://127.0.0.1:${process.env.RIG_BROWSER_PORT ?? DEFAULT_BROWSER_PORT}/${token}`;
   const at = process.argv.indexOf("--transcript");
   const transcriptPath = resolve(at === -1 ? "artifacts/smoke-transcript.txt" : (process.argv[at + 1] ?? "artifacts/smoke-transcript.txt"));
   // fixtures/ sits beside src/ and dist/, so this holds for the source and the build.
@@ -100,7 +98,9 @@ if (process.argv[1] === import.meta.filename) {
   const result = await runSmoke({
     session,
     async open() {
-      const browser = await chromium.connect(wsEndpoint);
+      // The way a test on the Mac connects, proxy and token included.
+      const endpoint = browserEndpoint({ url, token });
+      const browser = await chromium.connectOverCDP(endpoint.url, { headers: endpoint.headers });
       const page = await browser.newPage();
       await page.goto(fixture, { waitUntil: "load" });
       return { page, close: () => browser.close() };

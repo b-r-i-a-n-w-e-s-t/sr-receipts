@@ -20,6 +20,7 @@ import {
   environmentStamp,
   loadVoiceOver,
   readerFixture,
+  readerBrowser,
   readerFixtures,
   readerPreflight,
   withReader,
@@ -74,39 +75,70 @@ test("a VoiceOver project without VoiceOver installed says what to install", asy
   );
 });
 
-test("the environment stamp names the browser once: the guest's for NVDA, Playwright's for VoiceOver", () => {
-  const guest = ["windows: 24H2", "edge: 153.0.4234.48 at msedge.exe, driven by playwright-core 1.63.0"];
-  assert.deepEqual(environmentStamp("nvda", guest, { name: "chromium", version: "153.0.4234.48" }), guest);
+test("the environment stamp names the browser once: the guest's for NVDA with this run's Playwright driving it, Playwright's for VoiceOver", () => {
+  const guest = ["windows: 24H2", "edge: 153.0.4234.48 at msedge.exe"];
+  assert.deepEqual(environmentStamp("nvda", guest, { name: "chromium", version: "153.0.4234.48" }, "1.65.1"), [...guest, "playwright: 1.65.1 over CDP"]);
   const mac = ["macos: 26.6.2", "voiceover: bundled with macOS"];
-  assert.deepEqual(environmentStamp("voiceover", mac, { name: "webkit", version: "26.4" }), [...mac, "browser: webkit 26.4"]);
+  assert.deepEqual(environmentStamp("voiceover", mac, { name: "webkit", version: "26.4" }, "1.65.1"), [...mac, "browser: webkit 26.4"]);
+});
+
+/** Playwright's browser types, recording how each was asked for a browser. */
+function fakePlaywright(calls: string[]) {
+  const browser = { close: async () => void calls.push("close") };
+  const type = (name: string) => ({
+    launch: async (...args: unknown[]) => (calls.push(`${name} launch ${JSON.stringify(args)}`), browser),
+    connectOverCDP: async (url: string, options: unknown) => (calls.push(`${name} connectOverCDP ${url} ${JSON.stringify(options)}`), browser),
+  });
+  return { browser, playwright: { chromium: type("chromium"), firefox: type("firefox"), webkit: type("webkit") } };
+}
+
+test("an NVDA worker's browser is the guest's Edge over CDP at the daemon's /browser, with the token as a header, and is let go after", async () => {
+  const calls: string[] = [];
+  const { browser, playwright } = fakePlaywright(calls);
+  await readerBrowser()({ playwright, browserName: "chromium", readerOptions: { reader: "nvda", url: "http://guest:8765", token: "t" } }, async (given) => {
+    assert.equal(given, browser);
+    calls.push("use");
+  });
+  assert.deepEqual(calls, ['chromium connectOverCDP ws://guest:8765/browser {"headers":{"authorization":"Bearer t"}}', "use", "close"]);
+});
+
+test("any other worker's browser is launched here as Playwright's own would be, with the project's launch options", async () => {
+  for (const readerOptions of [{ reader: "voiceover" } as const, undefined]) {
+    const calls: string[] = [];
+    const { playwright } = fakePlaywright(calls);
+    await readerBrowser()({ playwright, browserName: "webkit", readerOptions }, async () => void calls.push("use"));
+    // No arguments: Playwright's `_browserOptions` fixture has already made
+    // the project's headless, channel and launchOptions the defaults.
+    assert.deepEqual(calls, ["webkit launch []", "use", "close"]);
+  }
 });
 
 const NVDA = { reader: "nvda", url: "http://guest:8765", token: "t" } as const;
 
-test("the preflight asks the host's check for an NVDA worker, with its Playwright, and never for VoiceOver or a project without a reader", async () => {
+test("the preflight asks the host's check for an NVDA worker, and never for VoiceOver or a project without a reader", async () => {
   const asked: string[] = [];
   const used: string[] = [];
   const use = async () => void used.push("use");
-  const preflight = readerPreflight(async ({ url }, playwright) => void asked.push(`${url} ${playwright}`));
-  await preflight({ readerOptions: NVDA }, use, { config: { version: "1.63.0" } });
-  await preflight({ readerOptions: { reader: "voiceover" } }, use, { config: { version: "1.64.0" } });
-  await preflight({ readerOptions: undefined }, use, { config: { version: "1.64.0" } });
-  assert.deepEqual(asked, ["http://guest:8765 1.63.0"]);
+  const preflight = readerPreflight(async ({ url }) => void asked.push(url));
+  await preflight({ readerOptions: NVDA }, use);
+  await preflight({ readerOptions: { reader: "voiceover" } }, use);
+  await preflight({ readerOptions: undefined }, use);
+  assert.deepEqual(asked, ["http://guest:8765"]);
   assert.deepEqual(used, ["use", "use", "use"]);
 });
 
 test("a check that refuses the guest fails the preflight, before any browser connects", async () => {
   const used: string[] = [];
   const preflight = readerPreflight(async () => {
-    throw new Error("the guest's Edge is served by Playwright 1.63");
+    throw new Error("the guest's Edge is not running");
   });
-  await assert.rejects(preflight({ readerOptions: NVDA }, async () => void used.push("use"), { config: { version: "1.64.0" } }), /served by Playwright 1\.63/);
+  await assert.rejects(preflight({ readerOptions: NVDA }, async () => void used.push("use")), /Edge is not running/);
   assert.deepEqual(used, []);
 });
 
 test("an unreachable daemon fails the preflight, named", async () => {
   await assert.rejects(
-    readerPreflight()({ readerOptions: { reader: "nvda", url: "http://127.0.0.1:1", token: "t" } }, async () => undefined, { config: { version: "1.63.0" } }),
+    readerPreflight()({ readerOptions: { reader: "nvda", url: "http://127.0.0.1:1", token: "t" } }, async () => undefined),
     /the guest daemon at http:\/\/127\.0\.0\.1:1 is not reachable/,
   );
 });
@@ -169,7 +201,7 @@ function run(session: ReaderSession, calls: string[], options: RunOptions = {}) 
       project: { name: "voiceover" },
       status,
       retry,
-      config: { rootDir: root },
+      config: { rootDir: root, version: "1.65.1" },
     },
   );
   return { done, attached, receiptFile: join(root, "receipts", "action-set.spec.ts-receipts", "ActionSet-basic-walk--voiceover.md") };
@@ -346,7 +378,7 @@ test("a project with no readerOptions fails before any reader is built", async (
     fixture(
       { readerOptions: undefined, browser: { version: () => "" }, browserName: "webkit", channel: undefined, page: { evaluate: async () => undefined as never }, receipt: undefined },
       async () => undefined,
-      { attach: async () => undefined, file: "/x.spec.ts", line: 1, titlePath: [], project: { name: "" }, status: "passed", retry: 0, config: { rootDir: "/" } },
+      { attach: async () => undefined, file: "/x.spec.ts", line: 1, titlePath: [], project: { name: "" }, status: "passed", retry: 0, config: { rootDir: "/", version: "1.65.1" } },
     ),
     /this project has no readerOptions/,
   );

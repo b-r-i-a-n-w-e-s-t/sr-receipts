@@ -37,7 +37,7 @@
     "@sr-receipts/host": "0.5.0"
   },
   "peerDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.61.0",
     "@sr-receipts/voiceover": "0.5.0"
   },
   "peerDependenciesMeta": {

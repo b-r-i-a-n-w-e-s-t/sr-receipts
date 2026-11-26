@@ -13,13 +13,13 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
+import type { AddressInfo, Socket } from "node:net";
+import { createServer, request, type IncomingHttpHeaders, type Server } from "node:http";
 
 import { PROTOCOL_VERSION, type DaemonHealth } from "@sr-receipts/host";
 import { createRigServer, resolveToken } from "../src/lib/daemon.ts";
+import type { Edge } from "../src/lib/edge.ts";
 import type { NvdaDesktop } from "../src/lib/nvda.ts";
-import { packageVersion } from "../src/lib/system.ts";
 
 const TOKEN = "test-token";
 
@@ -29,11 +29,38 @@ interface Harness {
   calls: string[];
   /** Resolves the `next()` in flight, for the serialization test. */
   release: (() => void) | null;
+  /** The upgrade requests that reached the stand-in Edge. */
+  edgeRequests: { path: string; headers: IncomingHttpHeaders }[];
+  /** Why the stand-in Edge cannot start, when it cannot. */
+  edgeDown: string | null;
+}
+
+/**
+ * A stand-in for Edge's DevTools endpoint: it accepts any WebSocket upgrade
+ * and echoes what it is sent. The pipe is what is under test, not CDP.
+ */
+async function standInEdge(t: test.TestContext, state: Harness): Promise<Pick<Edge, "endpoint" | "health">> {
+  const server = createServer();
+  server.on("upgrade", (req, socket: Socket) => {
+    state.edgeRequests.push({ path: req.url ?? "", headers: req.headers });
+    socket.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n");
+    socket.pipe(socket);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const endpoint = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/devtools/browser/abc`;
+  return {
+    async endpoint() {
+      if (state.edgeDown) throw new Error(state.edgeDown);
+      return endpoint;
+    },
+    health: async () => (state.edgeDown ? { running: false, error: state.edgeDown } : { running: true }),
+  };
 }
 
 async function harness(t: test.TestContext): Promise<Harness> {
   const calls: string[] = [];
-  const state: Harness = { url: "", calls, release: null, server: undefined as unknown as Server };
+  const state: Harness = { url: "", calls, release: null, server: undefined as unknown as Server, edgeRequests: [], edgeDown: null };
   let up = false;
   const desktop: NvdaDesktop = {
     async start() {
@@ -90,7 +117,7 @@ async function harness(t: test.TestContext): Promise<Harness> {
     },
     environment: async () => ["windows: test", "nvda: test"],
   };
-  state.server = createRigServer({ token: TOKEN, desktop, browser: { port: 8766, path: "/tok" } });
+  state.server = createRigServer({ token: TOKEN, desktop, edge: await standInEdge(t, state) });
   await new Promise<void>((resolve) => state.server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise<void>((resolve) => state.server.close(() => resolve())));
   state.url = `http://127.0.0.1:${(state.server.address() as AddressInfo).port}`;
@@ -102,6 +129,57 @@ const post = (url: string, path: string, body?: unknown) =>
   fetch(`${url}${path}`, { method: "POST", headers: { ...auth, "content-type": "application/json" }, ...(body !== undefined && { body: JSON.stringify(body) }) });
 const get = (url: string, path: string) => fetch(`${url}${path}`, { headers: auth });
 
+type Upgraded = { status: 101; socket: Socket } | { status: number; body: string };
+
+/** A WebSocket upgrade, as a CDP client opens one, answered either way. */
+function upgrade(url: string, path: string, headers: Record<string, string> = {}): Promise<Upgraded> {
+  return new Promise((resolve, reject) => {
+    const req = request(`${url}${path}`, {
+      headers: { connection: "Upgrade", upgrade: "websocket", "sec-websocket-version": "13", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==", ...headers },
+    });
+    req.on("upgrade", (_res, socket: Socket) => resolve({ status: 101, socket }));
+    req.on("response", (res) => {
+      let body = "";
+      res.on("data", (chunk: Buffer) => (body += chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+test("an upgrade on /browser with the token is piped both ways to Edge's endpoint, and the token stops at the daemon", async (t) => {
+  const { url, edgeRequests } = await harness(t);
+  const upgraded = await upgrade(url, "/browser", auth);
+  assert.equal(upgraded.status, 101);
+  const { socket } = upgraded as { socket: Socket };
+  socket.write("ping");
+  const echoed = await new Promise<string>((resolve) => socket.once("data", (chunk: Buffer) => resolve(chunk.toString())));
+  // Before the servers close, which wait for every connection still open.
+  socket.destroy();
+  assert.equal(echoed, "ping");
+  assert.equal(edgeRequests.length, 1);
+  assert.equal(edgeRequests[0]?.path, "/devtools/browser/abc");
+  assert.equal(edgeRequests[0]?.headers.authorization, undefined);
+  assert.match(edgeRequests[0]?.headers.host ?? "", /^127\.0\.0\.1:\d+$/);
+});
+
+test("an upgrade on /browser with no token, or a wrong one, is refused before Edge is reached", async (t) => {
+  const { url, edgeRequests } = await harness(t);
+  assert.equal((await upgrade(url, "/browser")).status, 401);
+  assert.equal((await upgrade(url, "/browser", { authorization: "Bearer nope" })).status, 403);
+  assert.equal(edgeRequests.length, 0);
+});
+
+test("an upgrade anywhere but /browser is not found, and an Edge that cannot start is a 503 that says why", async (t) => {
+  const state = await harness(t);
+  assert.equal((await upgrade(state.url, "/devtools/browser/abc", auth)).status, 404);
+  state.edgeDown = "Edge did not start from msedge.exe: ENOENT";
+  const refused = await upgrade(state.url, "/browser", auth);
+  assert.equal(refused.status, 503);
+  assert.match((refused as { body: string }).body, /Edge did not start from msedge\.exe: ENOENT/);
+});
+
 test("a request with no token is refused, and a wrong one is told apart from a missing one", async (t) => {
   const { url } = await harness(t);
   assert.equal((await fetch(`${url}/health`)).status, 401);
@@ -111,18 +189,19 @@ test("a request with no token is refused, and a wrong one is told apart from a m
   assert.equal((await fetch(`${url}/health`, { headers: { authorization: "Bearer x" } })).status, 403);
 });
 
-test("health reports the wire's version, the browser server's Playwright and endpoint, the stamp and whether the reader is up", async (t) => {
-  const { url } = await harness(t);
+test("health reports the wire's version, whether Edge is up and why not, the stamp and whether the reader is up", async (t) => {
+  const state = await harness(t);
+  const { url } = state;
   const before = (await (await get(url, "/health")).json()) as DaemonHealth;
-  assert.match(before.playwright, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(before, {
     ok: true,
     protocol: PROTOCOL_VERSION,
-    playwright: packageVersion("playwright-core"),
     started: false,
-    browser: { port: 8766, path: "/tok" },
+    browser: { running: true },
     rig: ["windows: test", "nvda: test"],
   });
+  state.edgeDown = "Edge did not start from msedge.exe: ENOENT";
+  assert.deepEqual(((await (await get(url, "/health")).json()) as DaemonHealth).browser, { running: false, error: "Edge did not start from msedge.exe: ENOENT" });
   await post(url, "/reader/start");
   assert.equal(((await (await get(url, "/health")).json()) as { started: boolean }).started, true);
   await post(url, "/reader/stop");
@@ -238,5 +317,5 @@ test("started with no terminal and no token, it refuses rather than generating",
 });
 
 test("a daemon cannot be created without a token", () => {
-  assert.throws(() => createRigServer({ token: "", desktop: {} as NvdaDesktop, browser: { port: 1, path: "/" } }), /RIG_TOKEN/);
+  assert.throws(() => createRigServer({ token: "", desktop: {} as NvdaDesktop, edge: {} as Edge }), /RIG_TOKEN/);
 });

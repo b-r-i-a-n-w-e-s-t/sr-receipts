@@ -24,7 +24,7 @@ _Avoid_: VM (for the Guest as a whole)
 
 **Daemon**:
 The authenticated process on a Windows Guest Rig that serves NVDA as routes
-and launches the Browser Server beside it, started at logon. Also the
+and the Browser Endpoint beside it, started at logon. Also the
 `@sr-receipts/daemon` package, which carries it with the Focus Guard, the
 Smoke and the Provisioner.
 _Avoid_: guest (for the package), server
@@ -45,7 +45,7 @@ Daemon, first install or upgrade alike, and hands it to the Provisioner.
 
 **Runtime Manifest**:
 The reviewed compatibility record of the exact runtime components installed
-by the Provisioner, including the Playwright version a consumer must match.
+by the Provisioner, including the Playwright the Smoke drives the Guest's Edge with.
 
 ### Asking a question
 
@@ -58,9 +58,10 @@ VoiceOver in process on a Mac and NVDA through the Guest's Daemon are the two
 adapters.
 _Avoid_: Execution Target (retired), driver, target
 
-**Browser Server**:
-The Playwright browser server the Guest's Daemon launches beside NVDA, which a
-test's `page` drives through Playwright's own `connectOptions`.
+**Browser Endpoint**:
+Where a test's `page` reaches the Guest's Edge: the Daemon launches and owns
+that Edge, and lets a connection through to it only with the Daemon's token.
+_Avoid_: Browser Server (retired)
 
 **Entry**:
 Putting a Reader Session on a page's content and proving it, before a test

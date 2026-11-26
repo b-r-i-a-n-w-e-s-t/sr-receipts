@@ -191,8 +191,11 @@ file is the working list and changes as items land.
   a Playwright 1.65 consumer drove the 0.5.0 guest's Edge over CDP, through
   an SSH forward standing in for the proxy, and its Receipt File matched a
   1.63 browser-server run byte for byte, four runs of four. Chosen as the
-  way forward the same day; the proxy, the daemon owning Edge, and the ADR
-  amendment are what is left.
+  way forward the same day and built as [ADR 0004](adr/0004-nvda-edge-is-reached-over-cdp-through-the-daemon.md):
+  the daemon owns Edge, `/browser` on its port checks the token and pipes to
+  Edge's loopback DevTools, and the fixture connects with `connectOverCDP`.
+  Wire protocol 4, for 0.6.0; this item closes when 0.6.0 is on the guest
+  and carbon-svelte runs on its own Playwright.
 - **Edge only on the guest.** Playwright ships no Windows ARM64 browsers.
   NVDA plus Firefox evidence would need Playwright to change, or the guest to
   be x64.

@@ -79,16 +79,14 @@ if (Test-Path $pidFile) {
   Remove-Item -Force $pidFile
 }
 # A daemon whose pid file is somewhere else, such as one running from a git
-# checkout of the repository, would keep the ports the new one needs, so
-# whatever is listening on them is ended too.
+# checkout of the repository, would keep the port the new one needs, so
+# whatever is listening on it is ended too.
 $port = [Environment]::GetEnvironmentVariable('RIG_PORT', 'User')
 if (-not $port) { $port = 8765 }
-$browserPort = [Environment]::GetEnvironmentVariable('RIG_BROWSER_PORT', 'User')
-if (-not $browserPort) { $browserPort = [int]$port + 1 }
-$holders = Get-NetTCPConnection -State Listen -LocalPort ([int]$port), ([int]$browserPort) -ErrorAction SilentlyContinue |
+$holders = Get-NetTCPConnection -State Listen -LocalPort ([int]$port) -ErrorAction SilentlyContinue |
   Select-Object -ExpandProperty OwningProcess -Unique
 foreach ($holder in $holders) {
-  Write-Host "Ending $((Get-Process -Id $holder -ErrorAction SilentlyContinue).ProcessName) ($holder), which holds the daemon's ports." -ForegroundColor Yellow
+  Write-Host "Ending $((Get-Process -Id $holder -ErrorAction SilentlyContinue).ProcessName) ($holder), which holds the daemon's port." -ForegroundColor Yellow
   Stop-Process -Id $holder -Force -ErrorAction SilentlyContinue
   Wait-Process -Id $holder -Timeout 10 -ErrorAction SilentlyContinue
 }

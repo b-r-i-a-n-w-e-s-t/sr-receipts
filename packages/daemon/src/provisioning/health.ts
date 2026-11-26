@@ -2,7 +2,7 @@ import { SMOKE_CONTROL_FIXTURE, type SmokeResult } from "../lib/smoke-result.ts"
 
 export const HEALTH_REPORT_SCHEMA_VERSION = 5;
 export const PROVISION_EXECUTION =
-  "the logon daemon, as a test uses it: real NVDA and headed Edge through the daemon's routes and browser server";
+  "the logon daemon, as a test uses it: real NVDA and headed Edge through the daemon's routes and its /browser";
 
 /**
  * One reviewed Runtime Manifest step. The PowerShell provisioner records each

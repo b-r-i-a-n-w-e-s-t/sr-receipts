@@ -3,9 +3,9 @@
  *
  * The Mac's Playwright is the runner. What it needs from the guest is a reader
  * it can start, ask, and stop, and a browser it can drive: this serves the
- * reader as JSON routes, and `daemon.ts` puts a Playwright browser server
- * beside it. Three things about the shape, each a constraint rather than a
- * preference:
+ * reader as JSON routes, and lets a test's Playwright through to the guest's
+ * Edge on `/browser`. Four things about the shape, each a constraint rather
+ * than a preference:
  *
  * - **One reader, one desktop, so calls are serialized.** Two requests
  *   interleaving keystrokes on one NVDA would produce two transcripts of
@@ -21,19 +21,23 @@
  *   opens the window here and answers once the listener is attached; `end`
  *   closes it and returns what was said.
  *
- * The server is a factory taking its desktop, so everything here except NVDA
- * itself is testable on a machine with no NVDA and no desktop.
+ * - **Nothing reaches Edge without the token.** CDP has no authentication of
+ *   its own, and whoever drives the browser has the guest's file system, so
+ *   Edge listens on loopback only and `/browser` is the one way in. The
+ *   token stops here: Edge never sees it, and no URL carries it. See ADR 0004.
+ *
+ * The server is a factory taking its desktop and its Edge, so everything here
+ * except NVDA itself is testable on a machine with no NVDA and no desktop.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { STATUS_CODES, createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { connect, type Socket } from "node:net";
 import { PROTOCOL_VERSION, errorChain, type DaemonHealth, type EnterBody, type EntryResult, type Recorded } from "@sr-receipts/host";
+import type { Edge } from "./edge.ts";
 import { enterDocument } from "./guard.ts";
 import type { NvdaDesktop } from "./nvda.ts";
-import { packageVersion } from "./system.ts";
 
 export const DEFAULT_PORT = 8765;
-/** Where the Playwright browser server listens; the daemon's port plus one. */
-export const DEFAULT_BROWSER_PORT = 8766;
 
 /** The longest pause between typed keys a request may ask for. */
 const MAX_TYPE_DELAY = 10_000;
@@ -72,8 +76,8 @@ export interface RigServerOptions {
   /** Required. Anything that can reach this port drives the guest's reader and browser. */
   token: string;
   desktop: NvdaDesktop;
-  /** Where the browser server is, for `/health`. */
-  browser: { port: number; path: string };
+  /** The guest's Edge, which `/browser` reaches and `/health` reports on. */
+  edge: Pick<Edge, "endpoint" | "health">;
 }
 
 const json = (res: ServerResponse, status: number, body: unknown): void => {
@@ -91,6 +95,54 @@ function tokenMatches(presented: string, expected: string): boolean {
   const a = Buffer.from(presented);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Why a request's token is refused, or `null` when it is accepted. */
+function refusal(authorization: string | undefined, token: string): { status: 401 | 403; error: string } | null {
+  const presented = /^Bearer (.+)$/.exec(authorization ?? "")?.[1];
+  if (!presented) return { status: 401, error: "Authorization: Bearer <token> required" };
+  if (!tokenMatches(presented, token)) return { status: 403, error: "token not accepted" };
+  return null;
+}
+
+/** An HTTP answer on a socket that asked to upgrade, which has no `ServerResponse`. */
+function refuseUpgrade(socket: Socket, status: number, error: string): void {
+  const payload = JSON.stringify({ error });
+  socket.end(
+    `HTTP/1.1 ${status} ${STATUS_CODES[status]}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(payload)}\r\nconnection: close\r\n\r\n${payload}`,
+  );
+}
+
+/**
+ * `/browser`: the upgrade a test's `connectOverCDP` opens, checked for the
+ * token and then replayed to Edge's own DevTools endpoint on loopback, after
+ * which the bytes are piped both ways untouched. The request is rewritten
+ * only where Edge would refuse it or should not see it: its path, its `Host`,
+ * which Chromium checks against DNS rebinding, and the token.
+ */
+async function proxyToEdge(req: IncomingMessage, socket: Socket, head: Buffer, edge: RigServerOptions["edge"]): Promise<void> {
+  let target: URL;
+  try {
+    target = new URL(await edge.endpoint());
+  } catch (error) {
+    return refuseUpgrade(socket, 503, errorChain(error).join(" <- "));
+  }
+  const upstream = connect(Number(target.port), target.hostname);
+  const lines = [`GET ${target.pathname} HTTP/1.1`, `host: ${target.host}`];
+  for (let i = 0; i < req.rawHeaders.length; i += 2) {
+    const name = req.rawHeaders[i] as string;
+    if (!/^(host|authorization)$/i.test(name)) lines.push(`${name}: ${req.rawHeaders[i + 1]}`);
+  }
+  upstream.once("connect", () => {
+    upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
+    if (head.length) upstream.write(head);
+    upstream.pipe(socket);
+    socket.pipe(upstream);
+  });
+  upstream.once("error", (error) => (upstream.readyState === "opening" ? refuseUpgrade(socket, 502, `Edge's DevTools endpoint refused: ${error.message}`) : socket.destroy()));
+  socket.once("error", () => upstream.destroy());
+  socket.once("close", () => upstream.destroy());
+  upstream.once("close", () => socket.destroy());
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -120,13 +172,9 @@ const requireString = (body: Record<string, unknown>, field: string): string => 
   return value;
 };
 
-export function createRigServer({ token, desktop, browser }: RigServerOptions): Server {
+export function createRigServer({ token, desktop, edge }: RigServerOptions): Server {
   if (!token) throw new Error("a daemon with no token would expose the guest; set RIG_TOKEN");
 
-  // The `playwright-core` the browser server beside this daemon runs: the one
-  // `daemon.ts` imports, resolved from this package. The host compares its
-  // major.minor with the consumer's before any browser connects.
-  const playwright = packageVersion("playwright-core");
   // The mutex: every reader route runs after the one before it.
   let turn: Promise<unknown> = Promise.resolve();
   const serialized = <T>(work: () => Promise<T>): Promise<T> => {
@@ -191,20 +239,20 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
     }
   }
 
-  return createHttpServer((req, res) => {
+  const server = createHttpServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://rig.invalid");
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = req.method ?? "GET";
 
-    const presented = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
-    if (!presented) return json(res, 401, { error: "Authorization: Bearer <token> required" });
-    if (!tokenMatches(presented, token)) return json(res, 403, { error: "token not accepted" });
+    const refused = refusal(req.headers.authorization, token);
+    if (refused) return json(res, refused.status, { error: refused.error });
 
     void (async () => {
       // Not serialized: health must answer while a reader call is running.
       if (method === "GET" && path === "/health") {
         try {
-          const health: DaemonHealth = { ok: true, protocol: PROTOCOL_VERSION, playwright, started: desktop.started(), browser, rig: await desktop.environment() };
+          const [browser, rig] = await Promise.all([edge.health(), desktop.environment()]);
+          const health: DaemonHealth = { ok: true, protocol: PROTOCOL_VERSION, started: desktop.started(), browser, rig };
           return json(res, 200, health);
         } catch (error) {
           return json(res, 500, { error: errorChain(error) });
@@ -227,4 +275,16 @@ export function createRigServer({ token, desktop, browser }: RigServerOptions): 
       }
     })();
   });
+
+  // Not serialized either: the browser is driven while a reader call waits
+  // on a page action, which is what a capture window is.
+  server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
+    socket.on("error", () => socket.destroy());
+    const path = new URL(req.url ?? "/", "http://rig.invalid").pathname.replace(/\/+$/, "");
+    const refused = refusal(req.headers.authorization, token);
+    if (refused) return refuseUpgrade(socket, refused.status, refused.error);
+    if (path !== "/browser") return refuseUpgrade(socket, 404, `no upgrade for ${path || "/"}; a test's browser connects to /browser`);
+    void proxyToEdge(req, socket, head, edge);
+  });
+  return server;
 }

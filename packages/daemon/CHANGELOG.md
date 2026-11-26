@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/daemon`, formerly `@sr-receipts/guest`.
 Pre-1.0: a minor version may break the contract.
 
-## Unreleased
+## 0.6.0
 
 - **Built against wire protocol 4.** A Mac on 0.5.0 or older refuses this
   daemon, and a Mac on this release refuses an older daemon, each naming the

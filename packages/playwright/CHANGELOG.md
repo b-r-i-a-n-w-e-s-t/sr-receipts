@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/playwright`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.6.0
 
 - **An NVDA project's `browser` is the guest's Edge over CDP**, connected by
   this package's `browser` fixture to the daemon's `/browser` with the

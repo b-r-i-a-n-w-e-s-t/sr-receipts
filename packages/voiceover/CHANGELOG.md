@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/voiceover`. Pre-1.0: a minor version may
 break the contract.
 
-## Unreleased
+## 0.6.0
 
 - No changes of its own; released with the other packages at one version.
 

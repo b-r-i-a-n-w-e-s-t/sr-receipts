@@ -3,7 +3,7 @@
 All notable changes to `@sr-receipts/host`. Pre-1.0: a minor version may break
 the contract.
 
-## Unreleased
+## 0.6.0
 
 - **Wire protocol 4.** `/health`'s `browser` is `{ running, error? }`, whether
   the guest's Edge is up and why not, and `playwright` is gone. A 0.5.0 or
